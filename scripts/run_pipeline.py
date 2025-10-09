@@ -138,6 +138,8 @@ def main():
             chunk_chars=cfg.get("txt_chunk_chars", 6500),
             overlap_chars=cfg.get("txt_overlap_chars", 500),
         )
+    total_chunks = len(chunks)
+    print(f"Prepared {total_chunks} chunk(s). Starting processing…")
 
     # Load prompts
     system_prompt = (base / "prompts" / "system.md").read_text(encoding="utf-8")
@@ -150,19 +152,30 @@ def main():
     # Process chunks
     cleaned_blocks = []
     qc_rows = []
+    ok_count = 0
+    fail_count = 0
     for idx, ch in enumerate(chunks, 1):
+        print(f"[{idx}/{total_chunks}] Processing…", end="", flush=True)
         original_text = ch["text"]
-        cleaned = call_openai(
-            client=client,
-            model=model,
-            system_prompt=system_prompt,
-            user_prompt="",  # not used directly
-            chunk_text=original_text,
-            lang=lang,
-            parasites=parasites,
-            aside_style=aside_style,
-            glossary=glossary,
-        )
+        try:
+            cleaned = call_openai(
+                client=client,
+                model=model,
+                system_prompt=system_prompt,
+                user_prompt="",  # not used directly
+                chunk_text=original_text,
+                lang=lang,
+                parasites=parasites,
+                aside_style=aside_style,
+                glossary=glossary,
+            )
+        except Exception as e:
+            cleaned = ""
+        status = "OK" if cleaned and cleaned.strip() else "FAILED"
+        if status == "OK":
+            ok_count += 1
+        else:
+            fail_count += 1
         # Optionally add timecodes to headings for SRT
         if fmt == "srt" and include_timecodes:
             cleaned = add_timecodes_to_headings(cleaned, ch["start"])
@@ -177,16 +190,21 @@ def main():
             "similarity": round(sim, 4),
             "change_ratio": round(1.0 - sim, 4),
         })
+        remaining = total_chunks - idx
+        print(f" {status} | done: {ok_count}, failed: {fail_count}, left: {remaining}")
 
     # Merge
     full_markdown = "\n\n".join(cleaned_blocks)
 
     # Append summary
     if cfg.get("append_summary", True):
+        print("Generating summary…")
         summary = call_openai_summary(client, model, system_prompt, full_markdown)
         if summary.strip():
             summary_heading = cfg.get("summary_heading", "## Підсумок (не авторський)")
             full_markdown = full_markdown.rstrip() + "\n\n" + summary_heading + "\n\n" + summary + "\n"
+        else:
+            print("Summary generation returned empty output.")
 
     # Write outputs
     (outdir / "lecture.md").write_text(full_markdown, encoding="utf-8")
@@ -197,6 +215,10 @@ def main():
         for r in qc_rows:
             w.writerow(r)
 
+    if fail_count == 0:
+        print("All chunks processed successfully.")
+    else:
+        print(f"Completed with {fail_count} failure(s) out of {total_chunks} chunk(s).")
     print(f"Done. Markdown: {outdir/'lecture.md'}")
     print(f"QC report: {outdir/'qc_report.csv'}")
 
