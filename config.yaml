@@ -1,0 +1,29 @@
+# Global configuration for the lecture cleanup pipeline
+# You can override most of these via CLI flags in run_pipeline.py
+
+language: ru            # one of: ru, uk, en
+model: gpt-5.1          # choose your model, e.g., gpt-5.1 / gpt-4.1 / o4-mini
+temperature: 0.0
+top_p: 1.0
+
+# Chunking (for SRT input these are seconds; for TXT they approximate characters per chunk)
+chunk_seconds: 240      # ~4 minutes per block (SRT)
+overlap_seconds: 8      # overlap between consecutive blocks (SRT)
+txt_chunk_chars: 6500   # chunk size for plain text (TXT)
+txt_overlap_chars: 500  # overlap for plain text (TXT)
+
+# Output / behavior
+include_timecodes_in_headings: true   # only applied when input is SRT
+allow_minor_reordering: true          # permit small word-order adjustments if meaning unchanged
+highlight_asides_style: italic        # italic | blockquote
+append_summary: true
+summary_heading: "## Підсумок (не авторський)"
+
+# QC thresholds
+max_allowed_change_ratio: 0.35        # flag chunk if (1 - similarity) > this value
+
+# Paths to stopword lists (one per language)
+parasites:
+  ru: data/parasites_ru.txt
+  uk: data/parasites_uk.txt
+  en: data/parasites_en.txt
