@@ -25,6 +25,40 @@ def read_config(cfg_path: str) -> dict:
     with open(cfg_path, "r", encoding="utf-8") as f:
         return yaml.safe_load(f)
 
+def load_api_key_from_env_file(root: Path) -> bool:
+    """Load OPENAI_API_KEY from a .env file at project root.
+
+    Prefers .env over existing environment variable. Returns True if a key
+    was found in .env and set into os.environ, else False.
+    """
+    env_path = root / ".env"
+    if not env_path.exists():
+        return False
+    try:
+        with open(env_path, "r", encoding="utf-8", errors="ignore") as f:
+            for raw in f:
+                line = raw.strip()
+                if not line or line.startswith("#"):
+                    continue
+                # support optional 'export ' prefix
+                if line.lower().startswith("export "):
+                    line = line[7:].lstrip()
+                if "=" not in line:
+                    continue
+                k, v = line.split("=", 1)
+                k = k.strip()
+                if k != "OPENAI_API_KEY":
+                    continue
+                v = v.strip().strip('"').strip("'")
+                if v:
+                    os.environ["OPENAI_API_KEY"] = v
+                    print("Loaded OPENAI_API_KEY from .env")
+                    return True
+    except Exception:
+        # Fail silent, fallback to environment
+        pass
+    return False
+
 def build_user_prompt(lang: str, parasites: List[str], aside_style: str, glossary_terms: List[str]) -> str:
     from pathlib import Path
     # load template
@@ -96,6 +130,19 @@ def main():
 
     base = Path(__file__).parent.parent
     cfg = read_config(str(base / "config.yaml"))
+
+    # API key resolution: prefer .env, else CLI environment
+    has_dotenv_key = load_api_key_from_env_file(base)
+    if not has_dotenv_key:
+        # Try existing env (e.g., provided via CLI: OPENAI_API_KEY=... python ...)
+        if os.environ.get("OPENAI_API_KEY"):
+            print("Using OPENAI_API_KEY from environment")
+        else:
+            print(
+                "ERROR: OPENAI_API_KEY not found. Provide it in .env or as an environment variable before the command.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
 
     # override config
     if args.chunk_seconds: cfg["chunk_seconds"] = args.chunk_seconds
