@@ -1,5 +1,5 @@
 \
-import os, argparse, json, yaml, sys, csv
+import os, argparse, json, yaml, sys, csv, traceback
 from typing import List, Dict
 from openai import OpenAI
 from pathlib import Path
@@ -67,7 +67,7 @@ def build_user_prompt(lang: str, parasites: List[str], aside_style: str, glossar
         tmpl = f.read()
     return tmpl
 
-def call_openai(client: OpenAI, model: str, system_prompt: str, user_prompt: str, chunk_text: str, lang: str, parasites: List[str], aside_style: str, glossary: List[str], temperature: float = 1.0, top_p: float = None) -> str:
+def call_openai(client: OpenAI, model: str, system_prompt: str, user_prompt: str, chunk_text: str, lang: str, parasites: List[str], aside_style: str, glossary: List[str], temperature: float = 1.0, top_p: float = None, debug: bool = False, label: str = None) -> str:
     # fill template
     template = build_user_prompt(lang, parasites, aside_style, glossary)
     prompt = template.format(
@@ -89,19 +89,32 @@ def call_openai(client: OpenAI, model: str, system_prompt: str, user_prompt: str
     }
     if top_p is not None:
         params["top_p"] = top_p
+    if debug:
+        print("===== DEBUG: OpenAI request BEGIN" + (f" [{label}]" if label else "") + " =====")
+        print(f"Model: {model} | temperature: {temperature} | top_p: {top_p}")
+        print("-- System prompt --\n" + system_prompt)
+        print("-- User prompt --\n" + prompt)
+        print("===== DEBUG: OpenAI request END =====")
     resp = client.responses.create(**params)
-    # Support text output from Responses API
-    if resp.output and len(resp.output) and resp.output[0].content and len(resp.output[0].content):
-        return resp.output_text
-    # Fallbacks:
+    # Decide output text once to allow logging
+    out_text = None
     try:
-        return resp.output_text
+        if resp.output and len(resp.output) and resp.output[0].content and len(resp.output[0].content):
+            out_text = resp.output_text
     except Exception:
-        pass
-    # Last resort
-    return ""
+        out_text = None
+    if out_text is None:
+        try:
+            out_text = resp.output_text
+        except Exception:
+            out_text = ""
+    if debug:
+        print("===== DEBUG: OpenAI response BEGIN" + (f" [{label}]" if label else "") + " =====")
+        print(out_text)
+        print("===== DEBUG: OpenAI response END =====")
+    return out_text
 
-def call_openai_summary(client: OpenAI, model: str, system_prompt: str, full_markdown: str, temperature: float = 1.0, top_p: float = None) -> str:
+def call_openai_summary(client: OpenAI, model: str, system_prompt: str, full_markdown: str, temperature: float = 1.0, top_p: float = None, debug: bool = False, label: str = None) -> str:
     from pathlib import Path
     summary_tmpl_path = Path(__file__).parent.parent / "prompts" / "summary_prompt.md"
     with open(summary_tmpl_path, "r", encoding="utf-8") as f:
@@ -116,11 +129,26 @@ def call_openai_summary(client: OpenAI, model: str, system_prompt: str, full_mar
     }
     if top_p is not None:
         params["top_p"] = top_p
+    if debug:
+        print("===== DEBUG: OpenAI request BEGIN" + (f" [{label}]" if label else "") + " =====")
+        print(f"Model: {model} | temperature: {temperature} | top_p: {top_p}")
+        print("-- System prompt --\n" + system_prompt)
+        # Show entire request for transparency (can be large)
+        from pathlib import Path as _Path
+        print("-- User prompt (summary) --\n" + (open((_Path(__file__).parent.parent / "prompts" / "summary_prompt.md"), "r", encoding="utf-8").read()))
+        print("-- Document (full markdown) --\n" + full_markdown)
+        print("===== DEBUG: OpenAI request END =====")
     resp = client.responses.create(**params)
+    out_text = ""
     try:
-        return resp.output_text
+        out_text = resp.output_text
     except Exception:
-        return ""
+        out_text = ""
+    if debug:
+        print("===== DEBUG: OpenAI response BEGIN" + (f" [{label}]" if label else "") + " =====")
+        print(out_text)
+        print("===== DEBUG: OpenAI response END =====")
+    return out_text
 
 def main():
     ap = argparse.ArgumentParser()
@@ -133,10 +161,14 @@ def main():
     ap.add_argument("--overlap-seconds", type=int, default=None)
     ap.add_argument("--txt-chunk-chars", type=int, default=None)
     ap.add_argument("--txt-overlap-chars", type=int, default=None)
+    ap.add_argument("--debug", action="store_true", help="Enable verbose logging and print all OpenAI requests/responses")
     args = ap.parse_args()
 
     base = Path(__file__).parent.parent
     cfg = read_config(str(base / "config.yaml"))
+    debug = bool(args.debug)
+    if debug:
+        print("Debug mode enabled")
 
     # API key resolution: prefer .env, else CLI environment
     has_dotenv_key = load_api_key_from_env_file(base)
@@ -164,6 +196,9 @@ def main():
     include_timecodes = bool(cfg.get("include_timecodes_in_headings", True))
     aside_style = cfg.get("highlight_asides_style", "italic")
     allow_minor_reordering = bool(cfg.get("allow_minor_reordering", True))
+    if debug:
+        print(f"[DEBUG] Settings -> model={model}, temperature={temperature}, top_p={top_p}, lang={lang}")
+        print(f"[DEBUG] Options -> include_timecodes={include_timecodes}, aside_style={aside_style}, reordering={allow_minor_reordering}")
 
     # Load parasites for the language
     parasites_map = cfg.get("parasites", {})
@@ -178,6 +213,8 @@ def main():
     else:
         ext = in_path.suffix.lower()
         fmt = "srt" if ext == ".srt" else "txt"
+    if debug:
+        print(f"[DEBUG] Input: {in_path} | format={fmt} | outdir={outdir if 'outdir' in locals() else args.outdir}")
 
     # Prepare chunks
     if fmt == "srt":
@@ -196,6 +233,15 @@ def main():
         )
     total_chunks = len(chunks)
     print(f"Prepared {total_chunks} chunk(s). Starting processing…")
+    if debug and fmt == "srt":
+        if len(chunks):
+            first = chunks[0]
+            last = chunks[-1]
+            print(f"[DEBUG] First chunk: start={first.get('start')} end={first.get('end')} len={len(first.get('text',''))}")
+            print(f"[DEBUG] Last  chunk: start={last.get('start')} end={last.get('end')} len={len(last.get('text',''))}")
+    if debug and fmt == "txt":
+        if len(chunks):
+            print(f"[DEBUG] First chunk length={len(chunks[0].get('text',''))}; last chunk length={len(chunks[-1].get('text',''))}")
 
     # Load prompts
     system_prompt = (base / "prompts" / "system.md").read_text(encoding="utf-8")
@@ -226,8 +272,13 @@ def main():
                 glossary=glossary,
                 temperature=temperature,
                 top_p=top_p,
+                debug=debug,
+                label=f"chunk {idx}/{total_chunks}"
             )
         except Exception as e:
+            if debug:
+                print(f"[DEBUG] Exception during OpenAI call for chunk {idx}: {e}")
+                traceback.print_exc()
             cleaned = ""
         status = "OK" if cleaned and cleaned.strip() else "FAILED"
         if status == "OK":
@@ -257,7 +308,11 @@ def main():
     # Append summary
     if cfg.get("append_summary", True):
         print("Generating summary…")
-        summary = call_openai_summary(client, model, system_prompt, full_markdown, temperature=temperature, top_p=top_p)
+        summary = call_openai_summary(
+            client, model, system_prompt, full_markdown,
+            temperature=temperature, top_p=top_p,
+            debug=debug, label="summary"
+        )
         if summary.strip():
             summary_heading = cfg.get("summary_heading", "## Підсумок (не авторський)")
             full_markdown = full_markdown.rstrip() + "\n\n" + summary_heading + "\n\n" + summary + "\n"
