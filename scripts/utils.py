@@ -1,9 +1,13 @@
 \
 import re
-from typing import List, Dict, Tuple, Iterable
+from typing import List, Dict, Tuple, Iterable, Optional
 
 TIME_PATTERN = re.compile(r"(\d{2}):(\d{2}):(\d{2}),(\d{3})")
 ARROW = "-->"
+TIMESTAMPED_TXT_LINE = re.compile(
+    r"^\s*\[(\d{2}):(\d{2}):(\d{2})(?:[\.,](\d{3}))?\]\s*(.*)$",
+    re.UNICODE,
+)
 
 def parse_srt_time(s: str) -> float:
     """
@@ -111,13 +115,50 @@ def chunk_text(txt: str, chunk_chars=6500, overlap_chars=500) -> List[Dict]:
         start = max(0, end - overlap_chars)
     return chunks
 
-def add_timecodes_to_headings(markdown: str, chunk_start_seconds: float) -> str:
+def chunk_text_with_offsets(txt: str, chunk_chars=6500, overlap_chars=500) -> List[Dict]:
+    """
+    Chunk plain text by characters with overlap and include start/end offsets.
+    Returns: [{"text": piece, "start_offset": start, "end_offset": end}]
+    """
+    if not txt:
+        return []
+    chunks: List[Dict] = []
+    start = 0
+    n = len(txt)
+    while start < n:
+        end = min(n, start + chunk_chars)
+        piece = txt[start:end]
+        chunks.append({"text": piece, "start_offset": start, "end_offset": end})
+        if end >= n:
+            break
+        start = max(0, end - overlap_chars)
+    return chunks
+
+def parse_timestamped_txt_lines(txt: str) -> List[Dict]:
+    """
+    Parse TXT lines that may start with a timestamp like [HH:MM:SS,mmm].
+    Returns a list of {"time": Optional[float], "text": str} per input line.
+    """
+    out: List[Dict] = []
+    for raw in txt.splitlines():
+        m = TIMESTAMPED_TXT_LINE.match(raw)
+        if m:
+            hh, mm, ss, ms, rest = m.groups()
+            hh = int(hh); mm = int(mm); ss = int(ss); ms = int(ms or 0)
+            t = hh*3600 + mm*60 + ss + ms/1000.0
+            out.append({"time": t, "text": rest})
+        else:
+            out.append({"time": None, "text": raw})
+    return out
+
+def add_timecodes_to_headings(markdown: str, chunk_start_seconds: float, as_link: bool = False) -> str:
     """
     Append [HH:MM:SS] to the end of each top-level and second-level heading line in the given markdown.
     """
     if chunk_start_seconds is None:
         return markdown
     stamp = format_hms(chunk_start_seconds)
+    link_text = f"[{stamp}]" if not as_link else f"[{stamp}](#t={stamp})"
     out_lines = []
     for line in markdown.splitlines():
         if line.startswith("# " ) or line.startswith("## "):
@@ -125,7 +166,7 @@ def add_timecodes_to_headings(markdown: str, chunk_start_seconds: float) -> str:
             if re.search(r"\[\d{2}:\d{2}:\d{2}\]\s*$", line):
                 out_lines.append(line)
             else:
-                out_lines.append(f"{line} — [{stamp}]")
+                out_lines.append(f"{line} — {link_text}")
         else:
             out_lines.append(line)
     return "\n".join(out_lines)

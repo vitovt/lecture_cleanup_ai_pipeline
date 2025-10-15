@@ -4,7 +4,15 @@ from typing import List, Dict
 from openai import OpenAI
 from pathlib import Path
 
-from utils import parse_srt, chunk_segments_by_time, chunk_text, add_timecodes_to_headings, similarity_ratio
+from utils import (
+    parse_srt,
+    chunk_segments_by_time,
+    chunk_text,
+    add_timecodes_to_headings,
+    similarity_ratio,
+    parse_timestamped_txt_lines,
+    chunk_text_with_offsets,
+)
 
 def load_text(path: str) -> str:
     with open(path, "r", encoding="utf-8", errors="ignore") as f:
@@ -217,6 +225,7 @@ def main():
         print(f"[DEBUG] Input: {in_path} | format={fmt} | outdir={outdir if 'outdir' in locals() else args.outdir}")
 
     # Prepare chunks
+    has_line_timestamps = False
     if fmt == "srt":
         segments = parse_srt(str(in_path))
         chunks = chunk_segments_by_time(
@@ -225,12 +234,60 @@ def main():
             overlap_seconds=cfg.get("overlap_seconds", 8),
         )
     else:
-        txt = load_text(str(in_path))
-        chunks = chunk_text(
-            txt,
-            chunk_chars=cfg.get("txt_chunk_chars", 6500),
-            overlap_chars=cfg.get("txt_overlap_chars", 500),
-        )
+        txt_raw = load_text(str(in_path))
+        # Detect and strip per-line timestamps like [HH:MM:SS,mmm] if present
+        parsed_lines = parse_timestamped_txt_lines(txt_raw)
+        has_line_timestamps = any(item["time"] is not None for item in parsed_lines)
+        if has_line_timestamps:
+            # Build plain text without timestamps and track offsets per line
+            clean_lines = [item["text"] for item in parsed_lines]
+            plain_txt = "\n".join(clean_lines)
+            # Map each line to char spans in the plain text
+            line_spans = []
+            pos = 0
+            for i, line in enumerate(clean_lines):
+                length = len(line)
+                start_off = pos
+                end_off = start_off + length
+                # account for newline except after last line
+                if i < len(clean_lines) - 1:
+                    end_off += 1
+                line_spans.append({
+                    "start": start_off,
+                    "end": end_off,
+                    "time": parsed_lines[i]["time"],
+                })
+                pos = end_off
+            # Chunk with offsets
+            base_chunks = chunk_text_with_offsets(
+                plain_txt,
+                chunk_chars=cfg.get("txt_chunk_chars", 6500),
+                overlap_chars=cfg.get("txt_overlap_chars", 500),
+            )
+            chunks = []
+            for bc in base_chunks:
+                # find earliest timestamp within or after chunk start boundary
+                chunk_start_off = bc["start_offset"]
+                chunk_time = None
+                for span in line_spans:
+                    if span["end"] > chunk_start_off:
+                        if span["time"] is not None:
+                            chunk_time = span["time"]
+                            break
+                chunks.append({
+                    "start": chunk_time,
+                    "end": None,
+                    "text": bc["text"],
+                })
+            if debug:
+                print(f"[DEBUG] Detected timestamped TXT. Will remove stamps and add links to headings.")
+        else:
+            # No timestamps: fallback to simple character chunking
+            chunks = chunk_text(
+                txt_raw,
+                chunk_chars=cfg.get("txt_chunk_chars", 6500),
+                overlap_chars=cfg.get("txt_overlap_chars", 500),
+            )
     total_chunks = len(chunks)
     print(f"Prepared {total_chunks} chunk(s). Starting processing…")
     if debug and fmt == "srt":
@@ -285,9 +342,12 @@ def main():
             ok_count += 1
         else:
             fail_count += 1
-        # Optionally add timecodes to headings for SRT
+        # Optionally add timecodes to headings
         if fmt == "srt" and include_timecodes:
-            cleaned = add_timecodes_to_headings(cleaned, ch["start"])
+            cleaned = add_timecodes_to_headings(cleaned, ch["start"])  # legacy: plain stamp
+        # For TXT inputs that had per-line timestamps, add link-style stamp
+        if fmt == "txt" and has_line_timestamps and ch.get("start") is not None:
+            cleaned = add_timecodes_to_headings(cleaned, ch["start"], as_link=True)
         cleaned_blocks.append(cleaned)
         sim = similarity_ratio(original_text, cleaned)
         qc_rows.append({
