@@ -67,7 +67,7 @@ def build_user_prompt(lang: str, parasites: List[str], aside_style: str, glossar
         tmpl = f.read()
     return tmpl
 
-def call_openai(client: OpenAI, model: str, system_prompt: str, user_prompt: str, chunk_text: str, lang: str, parasites: List[str], aside_style: str, glossary: List[str]) -> str:
+def call_openai(client: OpenAI, model: str, system_prompt: str, user_prompt: str, chunk_text: str, lang: str, parasites: List[str], aside_style: str, glossary: List[str], temperature: float = 1.0, top_p: float = None) -> str:
     # fill template
     template = build_user_prompt(lang, parasites, aside_style, glossary)
     prompt = template.format(
@@ -78,14 +78,18 @@ def call_openai(client: OpenAI, model: str, system_prompt: str, user_prompt: str
         CHUNK_TEXT=chunk_text,
     )
 
-    resp = client.responses.create(
-        model=model,
-        temperature=0,
-        input=[
+    # Build request parameters, honoring config temperature/top_p when provided
+    params = {
+        "model": model,
+        "temperature": temperature,
+        "input": [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": prompt},
         ],
-    )
+    }
+    if top_p is not None:
+        params["top_p"] = top_p
+    resp = client.responses.create(**params)
     # Support text output from Responses API
     if resp.output and len(resp.output) and resp.output[0].content and len(resp.output[0].content):
         return resp.output_text
@@ -97,19 +101,22 @@ def call_openai(client: OpenAI, model: str, system_prompt: str, user_prompt: str
     # Last resort
     return ""
 
-def call_openai_summary(client: OpenAI, model: str, system_prompt: str, full_markdown: str) -> str:
+def call_openai_summary(client: OpenAI, model: str, system_prompt: str, full_markdown: str, temperature: float = 1.0, top_p: float = None) -> str:
     from pathlib import Path
     summary_tmpl_path = Path(__file__).parent.parent / "prompts" / "summary_prompt.md"
     with open(summary_tmpl_path, "r", encoding="utf-8") as f:
         sum_prompt = f.read()
-    resp = client.responses.create(
-        model=model,
-        temperature=0,
-        input=[
+    params = {
+        "model": model,
+        "temperature": temperature,
+        "input": [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": sum_prompt + "\n\n<<<\n" + full_markdown + "\n>>>"},
         ],
-    )
+    }
+    if top_p is not None:
+        params["top_p"] = top_p
+    resp = client.responses.create(**params)
     try:
         return resp.output_text
     except Exception:
@@ -152,6 +159,8 @@ def main():
 
     lang = args.lang
     model = cfg.get("model", "gpt-5.1")
+    temperature = cfg.get("temperature", 1)
+    top_p = cfg.get("top_p", None)
     include_timecodes = bool(cfg.get("include_timecodes_in_headings", True))
     aside_style = cfg.get("highlight_asides_style", "italic")
     allow_minor_reordering = bool(cfg.get("allow_minor_reordering", True))
@@ -215,6 +224,8 @@ def main():
                 parasites=parasites,
                 aside_style=aside_style,
                 glossary=glossary,
+                temperature=temperature,
+                top_p=top_p,
             )
         except Exception as e:
             cleaned = ""
@@ -246,7 +257,7 @@ def main():
     # Append summary
     if cfg.get("append_summary", True):
         print("Generating summary…")
-        summary = call_openai_summary(client, model, system_prompt, full_markdown)
+        summary = call_openai_summary(client, model, system_prompt, full_markdown, temperature=temperature, top_p=top_p)
         if summary.strip():
             summary_heading = cfg.get("summary_heading", "## Підсумок (не авторський)")
             full_markdown = full_markdown.rstrip() + "\n\n" + summary_heading + "\n\n" + summary + "\n"
