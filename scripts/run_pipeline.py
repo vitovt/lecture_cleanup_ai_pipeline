@@ -126,7 +126,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--input", required=True, help="Path to .srt or .txt")
     ap.add_argument("--format", choices=["srt", "txt"], help="Force input format (otherwise inferred)")
-    ap.add_argument("--outdir", default="out/session1", help="Output directory")
+    ap.add_argument("--outdir", default="output", help="Output directory")
     ap.add_argument("--lang", required=True, choices=["ru", "uk", "en"], help="Language of the lecture")
     ap.add_argument("--glossary", default=None, help="Path to glossary terms (one per line)")
     ap.add_argument("--chunk-seconds", type=int, default=None)
@@ -265,9 +265,11 @@ def main():
             print("Summary generation returned empty output.")
 
     # Write outputs
-    (outdir / "lecture.md").write_text(full_markdown, encoding="utf-8")
+    outfile_md = outdir / f"{in_path.stem}.md"
+    outfile_md.write_text(full_markdown, encoding="utf-8")
     # QC report
-    with open(outdir / "qc_report.csv", "w", newline="", encoding="utf-8") as f:
+    qc_path = outdir / f"{in_path.stem}_qc_report.csv"
+    with open(qc_path, "w", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(f, fieldnames=["chunk_id","start","end","orig_len","cleaned_len","similarity","change_ratio"])
         w.writeheader()
         for r in qc_rows:
@@ -277,8 +279,8 @@ def main():
         print("All chunks processed successfully.")
     else:
         print(f"Completed with {fail_count} failure(s) out of {total_chunks} chunk(s).")
-    print(f"Done. Markdown: {outdir/'lecture.md'}")
-    print(f"QC report: {outdir/'qc_report.csv'}")
+    print(f"Done. Markdown: {outfile_md}")
+    print(f"QC report: {qc_path}")
 
 if __name__ == "__main__":
     main()
