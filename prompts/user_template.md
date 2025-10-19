@@ -13,13 +13,25 @@ Tasks (Light cleanup + Reader-friendly structuring):
 4) Markdown formatting only: suitable headings, bullet/numbered lists, **bold**/**italics** where helpful for readability.
 5) No additions. Minimal word-reordering is allowed if and only if meaning remains 1:1. When unsure about a term, keep the original spelling.
 
-Timecodes for SRT input:
-- If this fragment originates from SRT and you produce any Markdown headings (# … ######), append the fragment’s starting timecode to **every** heading in the form: " — [HH:MM:SS]".
+Important continuity policy:
+- You may be given a read-only CONTEXT to ensure continuity. It is glue only.
+- The model MUST NOT repeat or output the CONTEXT. Do not paraphrase or restate it.
+- The output must contain ONLY the cleaned FRAGMENT (Markdown), nothing else.
+- Do not re-emit any headings or timecodes that appear only in CONTEXT.
+
+Timecodes policy (if applicable by instructions):
+- Only add timecodes to headings generated from the FRAGMENT.
+- Never add or duplicate timecodes for headings that exist only in CONTEXT.
 - Do not put timecodes anywhere else.
 
-Output: Markdown ONLY (no prefixes, no explanations).
+Output: Markdown ONLY (no prefixes, no explanations, no context echoes).
 
-Fragment:
+CONTEXT (DO NOT OUTPUT):
+<<<
+{CONTEXT_TEXT}
+>>>
+
+FRAGMENT (EDIT AND OUTPUT ONLY):
 <<<
 {CHUNK_TEXT}
 >>>

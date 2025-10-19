@@ -1,4 +1,4 @@
-\
+#!/usr/bin/env python3
 import os, argparse, json, yaml, sys, csv, traceback
 from typing import List, Optional
 from openai import OpenAI
@@ -9,6 +9,7 @@ from utils import (
     similarity_ratio,
     parse_timestamped_txt_lines,
     chunk_text_line_preserving,
+    dedup_overlapping_boundary,
 )
 
 def load_text(path: str) -> str:
@@ -72,7 +73,23 @@ def build_user_prompt(lang: str, parasites: List[str], aside_style: str, glossar
         tmpl = f.read()
     return tmpl
 
-def call_openai(client: OpenAI, model: str, system_prompt: str, user_prompt: str, chunk_text: str, lang: str, parasites: List[str], aside_style: str, glossary: List[str], temperature: float = 1.0, top_p: float = None, debug: bool = False, label: str = None, strict_mode: bool = False) -> str:
+def call_openai(
+    client: OpenAI,
+    model: str,
+    system_prompt: str,
+    user_prompt: str,
+    chunk_text: str,
+    lang: str,
+    parasites: List[str],
+    aside_style: str,
+    glossary: List[str],
+    temperature: float = 1.0,
+    top_p: float = None,
+    debug: bool = False,
+    label: str = None,
+    strict_mode: bool = False,
+    context_text: str = "",
+) -> str:
     # fill template
     template = build_user_prompt(lang, parasites, aside_style, glossary)
 
@@ -95,6 +112,7 @@ def call_openai(client: OpenAI, model: str, system_prompt: str, user_prompt: str
         GLOSSARY_OR_DASH=glossary_str,   # << matches EN template
         ASIDE_STYLE=aside_style_en,
         CHUNK_TEXT=chunk_text,
+        CONTEXT_TEXT=(context_text or ""),
     )
 
     if strict_mode:
@@ -218,9 +236,12 @@ def main():
     include_timecodes = bool(cfg.get("include_timecodes_in_headings", True))
     aside_style = cfg.get("highlight_asides_style", "italic")
     allow_minor_reordering = bool(cfg.get("allow_minor_reordering", True))
+    use_context_overlap = bool(cfg.get("use_context_overlap", True))
+    stitch_dedup_window = int(cfg.get("stitch_dedup_window_chars", cfg.get("txt_overlap_chars", 500)) or 0)
     if debug:
         print(f"[DEBUG] Settings -> model={model}, temperature={temperature}, top_p={top_p}, lang={lang}")
         print(f"[DEBUG] Options -> include_timecodes={include_timecodes}, aside_style={aside_style}, reordering={allow_minor_reordering}")
+        print(f"[DEBUG] Overlap -> use_context_overlap={use_context_overlap}, stitch_dedup_window_chars={stitch_dedup_window}")
 
     # Load parasites for the language
     parasites_map = cfg.get("parasites", {})
@@ -320,7 +341,17 @@ def main():
     fail_count = 0
     for idx, ch in enumerate(chunks, 1):
         print(f"[{idx}/{total_chunks}] Processing…", end="", flush=True)
-        original_text = ch["text"]
+        # Prepare context/fragment for overlap handling
+        units = ch.get("_units", [])
+        overlap_n = int(ch.get("_overlap_units", 0))
+        context_text = "\n".join(u["text"] for u in units[:overlap_n]) if (use_context_overlap and overlap_n > 0) else ""
+        fragment_text = "\n".join(u["text"] for u in units[overlap_n:]) if use_context_overlap else ch["text"]
+        if debug and idx > 1:
+            if use_context_overlap:
+                print(f"\n[DEBUG] Chunk {idx}: CONTEXT chars={len(context_text)}; FRAGMENT chars={len(fragment_text)}")
+            else:
+                print(f"\n[DEBUG] Chunk {idx}: inline overlap present; chunk chars={len(ch.get('text',''))}")
+        original_text = fragment_text
         try:
             cleaned = call_openai(
                 client=client,
@@ -336,6 +367,7 @@ def main():
                 top_p=top_p,
                 debug=debug,
                 label=f"chunk {idx}/{total_chunks}",
+                context_text=context_text,
             )
         except Exception as e:
             if debug:
@@ -350,6 +382,13 @@ def main():
         # For TXT inputs that had per-line timestamps, add link-style stamp
         if fmt == "txt" and has_line_timestamps and ch.get("start") is not None:
             cleaned = add_timecodes_to_headings(cleaned, ch["start"], as_link=True)
+        # Stitch-time deduplication against previous output
+        if cleaned_blocks and stitch_dedup_window > 0:
+            prev = cleaned_blocks[-1]
+            deduped, removed, mode = dedup_overlapping_boundary(prev, cleaned, stitch_dedup_window)
+            if removed > 0 and debug:
+                print(f"[DEBUG] Dedup removed {removed} {('lines' if mode=='lines' else mode)} from start of chunk {idx} before stitching")
+            cleaned = deduped
         cleaned_blocks.append(cleaned)
         sim = similarity_ratio(original_text, cleaned)
         qc_rows.append({
@@ -376,7 +415,7 @@ def main():
             debug=debug, label="summary",
         )
         if summary.strip():
-            summary_heading = cfg.get("summary_heading", "## Підсумок (не авторський)")
+            summary_heading = cfg.get("summary_heading", "## Non-authorial AI generated summary")
             full_markdown = full_markdown.rstrip() + "\n\n" + summary_heading + "\n\n" + summary + "\n"
         else:
             print("Summary generation returned empty output.")

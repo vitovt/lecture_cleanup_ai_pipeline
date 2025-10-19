@@ -435,3 +435,117 @@ def chunk_text_line_preserving(lines: List[str], chunk_chars: int = 6500, overla
             break
 
     return chunks
+
+# -----------------------
+# Stitching deduplication helpers
+# -----------------------
+
+_TRAILING_TIMECODE_RE = re.compile(
+    r"\s+—\s+\[(\d{2}:\d{2}:\d{2})\](?:\(#t=\1\))?\s*$"
+)
+
+def _normalize_for_match(s: str) -> str:
+    """Normalize a line for boundary matching.
+    - trim
+    - collapse spaces
+    - normalize quotes/dashes
+    - strip trailing timecode markers like:  — [HH:MM:SS] or  — [HH:MM:SS](#t=HH:MM:SS)
+    """
+    if not s:
+        return ""
+    # unify unicode quotes and dashes
+    s2 = s.replace("“", '"').replace("”", '"').replace("„", '"').replace("«", '"').replace("»", '"')
+    s2 = s2.replace("–", "-").replace("—", "-").replace("−", "-")
+    s2 = _TRAILING_TIMECODE_RE.sub("", s2)
+    # collapse whitespace
+    s2 = re.sub(r"\s+", " ", s2.strip())
+    return s2
+
+def _window_lines_from_end(text: str, max_chars: int) -> List[str]:
+    lines = text.splitlines()
+    out: List[str] = []
+    total = 0
+    for ln in reversed(lines):
+        add = len(ln) + (1 if total > 0 else 0)
+        if total + add > max_chars and out:
+            break
+        out.append(ln)
+        total += add
+        if total >= max_chars:
+            break
+    return list(reversed(out))
+
+def _window_lines_from_start(text: str, max_chars: int) -> List[str]:
+    lines = text.splitlines()
+    out: List[str] = []
+    total = 0
+    for ln in lines:
+        add = len(ln) + (1 if total > 0 else 0)
+        if total + add > max_chars and out:
+            break
+        out.append(ln)
+        total += add
+        if total >= max_chars:
+            break
+    return out
+
+def _longest_common_prefix_len(a: List[str], b: List[str]) -> int:
+    n = min(len(a), len(b))
+    for i in range(n):
+        if a[i] != b[i]:
+            return i
+    return n
+
+def _dedup_try_lines(prev_text: str, cur_text: str, window_chars: int) -> Tuple[int, str]:
+    """Return (matched_count, mode) using line-based comparison.
+    mode is 'lines' when used.
+    """
+    prev_win = _window_lines_from_end(prev_text, window_chars)
+    cur_win = _window_lines_from_start(cur_text, window_chars)
+    # normalize for comparison
+    prev_norm = [_normalize_for_match(s) for s in prev_win]
+    cur_norm = [_normalize_for_match(s) for s in cur_win]
+    # find the longest k where last k of prev == first k of cur
+    max_k = min(len(prev_norm), len(cur_norm))
+    best = 0
+    for k in range(max_k, 0, -1):
+        if prev_norm[-k:] == cur_norm[:k]:
+            best = k
+            break
+    return best, 'lines'
+
+SENTENCE_RE = re.compile(r"(?<=[\.!?…])\s+")
+
+def _dedup_try_sentences(prev_text: str, cur_text: str, window_chars: int) -> Tuple[int, str]:
+    prev = "\n".join(_window_lines_from_end(prev_text, window_chars))
+    cur = "\n".join(_window_lines_from_start(cur_text, window_chars))
+    prev_sent = [s for s in SENTENCE_RE.split(prev) if s]
+    cur_sent = [s for s in SENTENCE_RE.split(cur) if s]
+    prev_norm = [_normalize_for_match(s) for s in prev_sent]
+    cur_norm = [_normalize_for_match(s) for s in cur_sent]
+    max_k = min(len(prev_norm), len(cur_norm))
+    best = 0
+    for k in range(max_k, 0, -1):
+        if prev_norm[-k:] == cur_norm[:k]:
+            best = k
+            break
+    return best, 'sentences'
+
+def dedup_overlapping_boundary(prev_text: str, cur_text: str, window_chars: int) -> Tuple[str, int, str]:
+    """
+    Compute and remove duplicated prefix in cur_text that overlaps with suffix in prev_text within a window.
+    Comparison is by lines first, then by sentences if line matching yields 0.
+    Returns: (new_cur_text, removed_count, mode)
+    - removed_count is the number of matched lines (or sentences) removed from the start of cur_text.
+    """
+    if not prev_text or not cur_text or window_chars <= 0:
+        return cur_text, 0, 'none'
+    # Try line-based first
+    match_count, mode = _dedup_try_lines(prev_text, cur_text, window_chars)
+    if match_count > 0:
+        lines = cur_text.splitlines()
+        new_text = "\n".join(lines[match_count:])
+        return new_text, match_count, mode
+    # Optional sentence-based fallback is disabled to avoid damaging Markdown structure.
+    # If needed in the future, implement a structure-preserving removal.
+    return cur_text, 0, 'none'
