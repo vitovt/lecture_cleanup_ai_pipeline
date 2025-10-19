@@ -1,28 +1,26 @@
-Context: This is a lecture fragment to be read in a knowledge base (Obsidian) and searched later for reference.
-Do NOT generalize, shorten, omit, or reinterpret.
+Context: This is a lecture fragment (ASR-recognized, may contain audio-specific errors) to be read in a knowledge base (Obsidian) and searched later. Follow the active System-mode rules (STRICT/NORMAL/CREATIVE) exactly.
 
 Language of this fragment: {LANG}
 Filler words for this language (remove only if safe): [{PARASITES}]
 Glossary (verbatim, may be empty): {GLOSSARY_OR_DASH}
 Asides style: {ASIDE_STYLE}
 
-Tasks (Light cleanup + Reader-friendly structuring):
-1) Restore correct punctuation and casing.
-2) Fix only obvious slips and duplicate words that carry no meaning.
-3) Keep jokes/asides; visually separate them using the specified style.
-4) Markdown formatting only: suitable headings, bullet/numbered lists, **bold**/**italics** where helpful for readability.
-5) No additions. Minimal word-reordering is allowed if and only if meaning remains 1:1. When unsure about a term, keep the original spelling.
+Tasks (ASR-aware cleanup + reader-friendly structure within mode limits):
+1) Restore correct punctuation and casing/diacritics; fix obvious transcription artifacts and duplicated words that carry no meaning.
+2) Correct unambiguous ASR mis-hearings and homophones by context; never normalize “by frequency”. If unsure, keep original.
+3) Keep code, math, filenames, commands, citations unchanged (except punctuation/casing fixes around them).
+4) Structure only where implied: suitable headings, bullet/numbered lists, **bold**/**italics**; visually separate asides/jokes using the specified style.
+5) Apply reordering/splitting/merging only if permitted by the active System mode. No additions; preserve meaning 1:1.
 
 Important continuity policy:
 - You may be given a read-only CONTEXT to ensure continuity. It is glue only.
-- The model MUST NOT repeat or output the CONTEXT. Do not paraphrase or restate it.
-- The output must contain ONLY the cleaned FRAGMENT (Markdown), nothing else.
-- Do not re-emit any headings or timecodes that appear only in CONTEXT.
+- Do NOT repeat, paraphrase, or output the CONTEXT.
+- Output must contain ONLY the cleaned FRAGMENT (Markdown), nothing else.
 
-Timecodes policy (if applicable by instructions):
-- Only add timecodes to headings generated from the FRAGMENT.
+Timecodes policy (if applicable):
+- Add timecodes only to headings generated from the FRAGMENT itself.
 - Never add or duplicate timecodes for headings that exist only in CONTEXT.
-- Do not put timecodes anywhere else.
+- Do not place timecodes elsewhere.
 
 Output: Markdown ONLY (no prefixes, no explanations, no context echoes).
 
@@ -36,9 +34,10 @@ FRAGMENT (EDIT AND OUTPUT ONLY):
 {CHUNK_TEXT}
 >>>
 
-After the fragment, append zero or more HTML comments documenting edits (comments only, no extra visible text):
+After the fragment, append zero or more HTML comments documenting edits (comments only; no visible text after them):
 - <!-- fixed: ... --> objective punctuation/casing/duplicate-word fixes.
-- <!-- filler_removed: ... --> fillers removed (language-dependent); only list if safe and clear.
-- <!-- merged_terms: "variant1, variant2" -> "normalized_term"; ... --> when you unify inconsistent spellings (creative mode only; optional in normal).
-- <!-- rephrased: ... --> where short/incomplete sentences were merged or simplified (creative mode only; optional in normal).
-- <!-- unsure: ... --> any ambiguities you preserved verbatim.
+- <!-- filler_removed: ... --> safely removed fillers (language-dependent).
+- <!-- merged_terms: "variant1, variant2" -> "normalized_term"; ... --> (normal/creative; optional in normal).
+- <!-- rephrased: ... --> (normal/creative).
+- <!-- unsure: ... --> ambiguities preserved verbatim.
+
