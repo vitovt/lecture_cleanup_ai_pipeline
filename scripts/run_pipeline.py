@@ -205,7 +205,7 @@ def main():
     ap.add_argument("--txt-chunk-chars", type=int, default=None)
     ap.add_argument("--txt-overlap-chars", type=int, default=None)
     ap.add_argument("--debug", action="store_true", help="Enable verbose logging and print all OpenAI requests/responses")
-    ap.add_argument("--include-timecodes", dest="include_timecodes", action="store_true", help="Append timecodes to headings when available")
+    ap.add_argument("--include-timecodes", dest="include_timecodes", action="store_true", default=None, help="Append timecodes to headings when available")
     args = ap.parse_args()
 
     base = Path(__file__).parent.parent
@@ -256,8 +256,11 @@ def main():
 
     # Decide format
     in_path = Path(args.input)
+    cfg_format = (cfg.get("format") or "").strip().lower() if isinstance(cfg.get("format"), str) else None
     if args.format:
         fmt = args.format
+    elif cfg_format in ("srt", "txt"):
+        fmt = cfg_format
     else:
         ext = in_path.suffix.lower()
         fmt = "srt" if ext == ".srt" else "txt"
@@ -395,6 +398,8 @@ def main():
             fail_count += 1
         # For TXT inputs that had per-line timestamps, add link-style stamp
         if include_timecodes and fmt == "txt" and has_line_timestamps and ch.get("start") is not None:
+            if debug:
+                print(f"[DEBUG] Adding timecodes to chunk`s headings; start: {ch['start']}")
             cleaned = add_timecodes_to_headings(cleaned, ch["start"], as_link=True)
         # Stitch-time deduplication against previous output
         if cleaned_blocks and stitch_dedup_window > 0:

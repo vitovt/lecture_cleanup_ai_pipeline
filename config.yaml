@@ -6,6 +6,10 @@ model: gpt-5-mini          # choose your model, e.g., gpt-5.1 / gpt-4.1 / o4-min
 temperature: 1
 top_p: 1.0
 
+# Input format control. When set, overrides auto-detection by file extension.
+# One of: srt(VIP), txt (CLI --format still overrides this if provided)
+format: txt
+
 # Chunking
 txt_chunk_chars: 6500   # chunk size for plain text (TXT)
 
