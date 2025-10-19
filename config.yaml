@@ -6,9 +6,7 @@ model: gpt-5-mini          # choose your model, e.g., gpt-5.1 / gpt-4.1 / o4-min
 temperature: 1
 top_p: 1.0
 
-# Chunking (for SRT input these are seconds; for TXT they approximate characters per chunk)
-chunk_seconds: 240      # ~4 minutes per block (SRT)
-overlap_seconds: 8      # overlap between consecutive blocks (SRT)
+# Chunking
 txt_chunk_chars: 6500   # chunk size for plain text (TXT)
 
 # Number of characters from the END of the previous chunk passed to the model as READ-ONLY CONTEXT.
@@ -24,8 +22,7 @@ use_context_overlap: true              # use read-only context in prompt; fragme
 stitch_dedup_window_chars: null        # if null, defaults to txt_overlap_chars
 
 # Output / behavior
-include_timecodes_in_headings: true   # only applied when input is SRT
-allow_minor_reordering: true          # permit small word-order adjustments if meaning unchanged
+include_timecodes_in_headings: true   # append timecodes to headings when available
 
 # Content optimization mode:
 # - normal   : balanced cleanup (default). Keeps meaning; light structure.
@@ -45,9 +42,6 @@ highlight_asides_style: italic
 
 append_summary: true
 summary_heading: "## Summary (не авторський)"
-
-# QC thresholds
-max_allowed_change_ratio: 0.35        # flag chunk if (1 - similarity) > this value
 
 # Paths to stopword lists (one per language)
 parasites:

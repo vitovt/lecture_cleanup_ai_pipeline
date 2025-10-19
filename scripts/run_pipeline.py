@@ -192,19 +192,23 @@ def call_openai_summary(client: OpenAI, model: str, system_prompt: str, full_mar
     return out_text
 
 def main():
-    ap = argparse.ArgumentParser()
+    ap = argparse.ArgumentParser(
+        description=(
+            "Turn long lecture transcripts into clean Markdown with CONTEXT-overlap, "
+            "mode-specific editing (normal/strict/creative), and stitching dedup. "
+            "All config.yaml options can be overridden via dedicated flags or --set KEY=VALUE (supports dotted keys)."
+        )
+    )
     ap.add_argument("--input", required=True, help="Path to .srt or .txt")
     ap.add_argument("--format", choices=["srt", "txt"], help="Force input format (otherwise inferred)")
     ap.add_argument("--outdir", default="output", help="Output directory")
     ap.add_argument("--lang", required=True, choices=["ru", "uk", "en"], help="Language of the lecture")
     ap.add_argument("--glossary", default=None, help="Path to glossary terms (one per line)")
-    # legacy flags (ignored):
-    ap.add_argument("--chunk-seconds", type=int, default=None)
-    ap.add_argument("--overlap-seconds", type=int, default=None)
     # effective chunking params
     ap.add_argument("--txt-chunk-chars", type=int, default=None)
     ap.add_argument("--txt-overlap-chars", type=int, default=None)
     ap.add_argument("--debug", action="store_true", help="Enable verbose logging and print all OpenAI requests/responses")
+    ap.add_argument("--include-timecodes", dest="include_timecodes", action="store_true", help="Append timecodes to headings when available")
     args = ap.parse_args()
 
     base = Path(__file__).parent.parent
@@ -229,6 +233,7 @@ def main():
     # override config
     if args.txt_chunk_chars: cfg["txt_chunk_chars"] = args.txt_chunk_chars
     if args.txt_overlap_chars: cfg["txt_overlap_chars"] = args.txt_overlap_chars
+    if args.include_timecodes is not None: cfg["include_timecodes_in_headings"] = bool(args.include_timecodes)
 
     lang = args.lang
     model = cfg.get("model", "gpt-5.1")
@@ -236,14 +241,13 @@ def main():
     top_p = cfg.get("top_p", None)
     include_timecodes = bool(cfg.get("include_timecodes_in_headings", True))
     aside_style = cfg.get("highlight_asides_style", "italic")
-    allow_minor_reordering = bool(cfg.get("allow_minor_reordering", True))
     use_context_overlap = bool(cfg.get("use_context_overlap", True))
     stitch_dedup_window = int(cfg.get("stitch_dedup_window_chars", cfg.get("txt_overlap_chars", 500)) or 0)
     content_mode = (cfg.get("content_mode", "normal") or "normal").strip().lower()
     suppress_edit_comments = bool(cfg.get("suppress_edit_comments", True))
     if debug:
         print(f"[DEBUG] Settings -> model={model}, temperature={temperature}, top_p={top_p}, lang={lang}")
-        print(f"[DEBUG] Options -> include_timecodes={include_timecodes}, aside_style={aside_style}, reordering={allow_minor_reordering}")
+        print(f"[DEBUG] Options -> include_timecodes={include_timecodes}, aside_style={aside_style}")
         print(f"[DEBUG] Overlap -> use_context_overlap={use_context_overlap}, stitch_dedup_window_chars={stitch_dedup_window}")
         print(f"[DEBUG] Content mode -> {content_mode}; suppress_edit_comments={suppress_edit_comments}")
 
@@ -393,7 +397,7 @@ def main():
         else:
             fail_count += 1
         # For TXT inputs that had per-line timestamps, add link-style stamp
-        if fmt == "txt" and has_line_timestamps and ch.get("start") is not None:
+        if include_timecodes and fmt == "txt" and has_line_timestamps and ch.get("start") is not None:
             cleaned = add_timecodes_to_headings(cleaned, ch["start"], as_link=True)
         # Stitch-time deduplication against previous output
         if cleaned_blocks and stitch_dedup_window > 0:
