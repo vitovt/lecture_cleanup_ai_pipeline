@@ -1,18 +1,25 @@
-Контекст: це фрагмент лекції. НЕ узагальнюй, НЕ скорочуй.
-Мова цього фрагмента: {LANG}
-Слова-паразити для цієї мови (видаляй лише якщо це не впливає на зміст): [{PARASITES}]
-Глосарій (не змінювати написання; може бути порожнім): {GLOSSARY}
+Context: This is a lecture fragment to be read in a knowledge base (Obsidian) and searched later for reference.
+Do NOT generalize, shorten, omit, or reinterpret.
 
-Завдання (Light cleanup + Structuring):
-1) Постав правильну пунктуацію та регістр.
-2) Виправ лише явні оговорки/повтори слів, що не несуть змісту.
-3) Залиши жарти та авторські відступи; **візуально виділи** їх у стилі: {ASIDE_STYLE}.
-4) Оформлення Markdown: доречні заголовки, списки, **жирний**/**курсив** для полегшення читання.
-5) Не додавай і не пояснюй нічого від себе. Дозволені тільки дрібні перестановки слів для кращої читабельності без зміни сенсу.
+Language of this fragment: {LANG}
+Filler words for this language (remove only if safe): [{PARASITES}]
+Glossary (verbatim, may be empty): {GLOSSARY_OR_DASH}
+Asides style: {ASIDE_STYLE}
 
-Вихід: ЛИШЕ Markdown текст без префіксів і коментарів.
+Tasks (Light cleanup + Reader-friendly structuring):
+1) Restore correct punctuation and casing.
+2) Fix only obvious slips and duplicate words that carry no meaning.
+3) Keep jokes/asides; visually separate them using the specified style.
+4) Markdown formatting only: suitable headings, bullet/numbered lists, **bold**/**italics** where helpful for readability.
+5) No additions. Minimal word-reordering is allowed if and only if meaning remains 1:1. When unsure about a term, keep the original spelling.
 
-Текст фрагмента:
+Timecodes for SRT input:
+- If this fragment originates from SRT and you produce any Markdown headings (# … ######), append the fragment’s starting timecode to **every** heading in the form: " — [HH:MM:SS]".
+- Do not put timecodes anywhere else.
+
+Output: Markdown ONLY (no prefixes, no explanations).
+
+Fragment:
 <<<
 {CHUNK_TEXT}
 >>>

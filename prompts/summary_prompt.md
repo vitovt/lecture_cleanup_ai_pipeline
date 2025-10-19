@@ -1,4 +1,5 @@
-Зроби короткий підсумок у 5–10 маркованих пунктів **БЕЗ додавання фактів**, лише з того, що явно міститься в лекції. 
-Це **не авторський текст** лектора — просто стислий конспект для читача.
-Мова підсумку має збігатися з мовою лекції.
-Вихід: лише Markdown-список.
+Create an end section titled exactly: "## Summary (non-authorial)"
+Provide 5–10 concise bullet points reflecting ONLY statements explicitly present in the cleaned lecture content above.
+No new facts, no interpretations, no external context.
+Keep the language consistent with the lecture.
+Output: the heading and the bullet list in Markdown.

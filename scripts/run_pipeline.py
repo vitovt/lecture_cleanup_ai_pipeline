@@ -75,16 +75,33 @@ def build_user_prompt(lang: str, parasites: List[str], aside_style: str, glossar
         tmpl = f.read()
     return tmpl
 
-def call_openai(client: OpenAI, model: str, system_prompt: str, user_prompt: str, chunk_text: str, lang: str, parasites: List[str], aside_style: str, glossary: List[str], temperature: float = 1.0, top_p: float = None, debug: bool = False, label: str = None) -> str:
+def call_openai(client: OpenAI, model: str, system_prompt: str, user_prompt: str, chunk_text: str, lang: str, parasites: List[str], aside_style: str, glossary: List[str], temperature: float = 1.0, top_p: float = None, debug: bool = False, label: str = None, strict_mode: bool = False) -> str:
     # fill template
     template = build_user_prompt(lang, parasites, aside_style, glossary)
+
+    # Map aside style to EN variants from the prompt
+    aside_map = {
+        "italic": "italics (*...*)",
+        "italics": "italics (*...*)",
+        "blockquote": "blockquote (> ...)",
+        "quote": "blockquote (> ...)",
+    }
+    aside_style_en = aside_map.get(aside_style, "italics (*...*)")
+
+    # Join lists for prompt
+    parasites_str = ", ".join(parasites) if parasites else ""
+    glossary_str = "—" if not glossary else ", ".join(glossary)
+
     prompt = template.format(
         LANG=lang,
-        PARASITES=", ".join(parasites),
-        GLOSSARY=glossary if glossary else "—",
-        ASIDE_STYLE=("курсив (*...*)" if aside_style == "italic" else "цитатний блок (> ...)"),
+        PARASITES=parasites_str,
+        GLOSSARY_OR_DASH=glossary_str,   # << matches EN template
+        ASIDE_STYLE=aside_style_en,
         CHUNK_TEXT=chunk_text,
     )
+
+    if strict_mode:
+        prompt += "\n\nSTRICT MODE: Do not reorder words. Only fix punctuation/casing and remove safe filler words. Do not change word order."
 
     # Build request parameters, honoring config temperature/top_p when provided
     params = {

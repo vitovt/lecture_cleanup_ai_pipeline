@@ -15,7 +15,13 @@ txt_overlap_chars: 500  # overlap for plain text (TXT)
 # Output / behavior
 include_timecodes_in_headings: true   # only applied when input is SRT
 allow_minor_reordering: true          # permit small word-order adjustments if meaning unchanged
-highlight_asides_style: italic        # italic | blockquote
+
+# Visual style for asides/jokes in the output.
+# Allowed values:
+# - italic      -> render as italics (*...*)
+# - blockquote  -> render as blockquote (> ...)
+highlight_asides_style: italic
+
 append_summary: true
 summary_heading: "## Підсумок (не авторський)"
 
