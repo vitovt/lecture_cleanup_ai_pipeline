@@ -116,9 +116,6 @@ def call_openai(
         CONTEXT_TEXT=(context_text or ""),
     )
 
-    if strict_mode:
-        prompt += "\n\nSTRICT MODE: Do not reorder words. Only fix punctuation/casing and remove safe filler words. Do not change word order."
-
     # Build request parameters, honoring config temperature/top_p when provided
     params = {
         "model": model,
