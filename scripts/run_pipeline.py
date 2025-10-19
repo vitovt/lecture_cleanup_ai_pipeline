@@ -1,17 +1,14 @@
 \
 import os, argparse, json, yaml, sys, csv, traceback
-from typing import List, Dict
+from typing import List, Optional
 from openai import OpenAI
 from pathlib import Path
 
 from utils import (
-    parse_srt,
-    chunk_segments_by_time,
-    chunk_text,
     add_timecodes_to_headings,
     similarity_ratio,
     parse_timestamped_txt_lines,
-    chunk_text_with_offsets,
+    chunk_text_line_preserving,
 )
 
 def load_text(path: str) -> str:
@@ -79,7 +76,7 @@ def call_openai(client: OpenAI, model: str, system_prompt: str, user_prompt: str
     # fill template
     template = build_user_prompt(lang, parasites, aside_style, glossary)
 
-    # Map aside style to EN variants from the prompt
+    # Map aside style to prompt-friendly label
     aside_map = {
         "italic": "italics (*...*)",
         "italics": "italics (*...*)",
@@ -182,8 +179,10 @@ def main():
     ap.add_argument("--outdir", default="output", help="Output directory")
     ap.add_argument("--lang", required=True, choices=["ru", "uk", "en"], help="Language of the lecture")
     ap.add_argument("--glossary", default=None, help="Path to glossary terms (one per line)")
+    # legacy flags (ignored):
     ap.add_argument("--chunk-seconds", type=int, default=None)
     ap.add_argument("--overlap-seconds", type=int, default=None)
+    # effective chunking params
     ap.add_argument("--txt-chunk-chars", type=int, default=None)
     ap.add_argument("--txt-overlap-chars", type=int, default=None)
     ap.add_argument("--debug", action="store_true", help="Enable verbose logging and print all OpenAI requests/responses")
@@ -209,8 +208,6 @@ def main():
             sys.exit(1)
 
     # override config
-    if args.chunk_seconds: cfg["chunk_seconds"] = args.chunk_seconds
-    if args.overlap_seconds: cfg["overlap_seconds"] = args.overlap_seconds
     if args.txt_chunk_chars: cfg["txt_chunk_chars"] = args.txt_chunk_chars
     if args.txt_overlap_chars: cfg["txt_overlap_chars"] = args.txt_overlap_chars
 
@@ -242,80 +239,71 @@ def main():
         print(f"[DEBUG] Input: {in_path} | format={fmt} | outdir={outdir if 'outdir' in locals() else args.outdir}")
 
     # Prepare chunks
+    input_text = load_text(str(in_path))
+    if not input_text.strip():
+        print("ERROR: input file is empty after trimming whitespace.", file=sys.stderr)
+        sys.exit(1)
+
+    src_lines: List[str] = []
+    per_line_time: List[Optional[float]] = []
     has_line_timestamps = False
-    if fmt == "srt":
-        segments = parse_srt(str(in_path))
-        chunks = chunk_segments_by_time(
-            segments,
-            chunk_seconds=cfg.get("chunk_seconds", 240),
-            overlap_seconds=cfg.get("overlap_seconds", 8),
-        )
-    else:
-        txt_raw = load_text(str(in_path))
-        # Detect and strip per-line timestamps like [HH:MM:SS,mmm] if present
-        parsed_lines = parse_timestamped_txt_lines(txt_raw)
+    if fmt == "txt":
+        parsed_lines = parse_timestamped_txt_lines(input_text)
         has_line_timestamps = any(item["time"] is not None for item in parsed_lines)
-        if has_line_timestamps:
-            # Build plain text without timestamps and track offsets per line
-            clean_lines = [item["text"] for item in parsed_lines]
-            plain_txt = "\n".join(clean_lines)
-            # Map each line to char spans in the plain text
-            line_spans = []
-            pos = 0
-            for i, line in enumerate(clean_lines):
-                length = len(line)
-                start_off = pos
-                end_off = start_off + length
-                # account for newline except after last line
-                if i < len(clean_lines) - 1:
-                    end_off += 1
-                line_spans.append({
-                    "start": start_off,
-                    "end": end_off,
-                    "time": parsed_lines[i]["time"],
-                })
-                pos = end_off
-            # Chunk with offsets
-            base_chunks = chunk_text_with_offsets(
-                plain_txt,
-                chunk_chars=cfg.get("txt_chunk_chars", 6500),
-                overlap_chars=cfg.get("txt_overlap_chars", 500),
-            )
-            chunks = []
-            for bc in base_chunks:
-                # find earliest timestamp within or after chunk start boundary
-                chunk_start_off = bc["start_offset"]
-                chunk_time = None
-                for span in line_spans:
-                    if span["end"] > chunk_start_off:
-                        if span["time"] is not None:
-                            chunk_time = span["time"]
-                            break
-                chunks.append({
-                    "start": chunk_time,
-                    "end": None,
-                    "text": bc["text"],
-                })
-            if debug:
-                print(f"[DEBUG] Detected timestamped TXT. Will remove stamps and add links to headings.")
-        else:
-            # No timestamps: fallback to simple character chunking
-            chunks = chunk_text(
-                txt_raw,
-                chunk_chars=cfg.get("txt_chunk_chars", 6500),
-                overlap_chars=cfg.get("txt_overlap_chars", 500),
-            )
+        src_lines = [item["text"] for item in parsed_lines]
+        per_line_time = [item["time"] for item in parsed_lines]
+        if debug:
+            print(f"[DEBUG] TXT lines: {len(src_lines)} | timestamped={has_line_timestamps}")
+    else:  # srt -> extract text lines only
+        for raw in input_text.splitlines():
+            ln = raw.strip("\ufeff")
+            if not ln:
+                src_lines.append("")
+                per_line_time.append(None)
+                continue
+            if ln.isdigit():
+                continue
+            if "-->" in ln:
+                continue
+            src_lines.append(ln)
+            per_line_time.append(None)
+        if debug:
+            print(f"[DEBUG] SRT content lines (without times): {len(src_lines)}")
+
+    if not any(l.strip() for l in src_lines):
+        print("ERROR: input contains no textual content after preprocessing.", file=sys.stderr)
+        sys.exit(1)
+
+    # Chunk (line-preserving)
+    chunks = chunk_text_line_preserving(
+        src_lines,
+        chunk_chars=cfg.get("txt_chunk_chars", 6500),
+        overlap_chars=cfg.get("txt_overlap_chars", 500),
+    )
+
+    # For timestamped TXT, set chunk 'start' based on first new line's timestamp
+    if fmt == "txt" and has_line_timestamps:
+        for ch in chunks:
+            start_time = None
+            overlap_n = int(ch.get("_overlap_units", 0))
+            units = ch.get("_units", [])
+            if overlap_n < len(units):
+                seq = units[overlap_n:]
+            else:
+                seq = []
+            for u in seq:
+                oi = u.get("orig")
+                if oi is not None and 0 <= oi < len(per_line_time):
+                    t = per_line_time[oi]
+                    if t is not None:
+                        start_time = t
+                        break
+            ch["start"] = start_time
+
     total_chunks = len(chunks)
     print(f"Prepared {total_chunks} chunk(s). Starting processing…")
-    if debug and fmt == "srt":
-        if len(chunks):
-            first = chunks[0]
-            last = chunks[-1]
-            print(f"[DEBUG] First chunk: start={first.get('start')} end={first.get('end')} len={len(first.get('text',''))}")
-            print(f"[DEBUG] Last  chunk: start={last.get('start')} end={last.get('end')} len={len(last.get('text',''))}")
-    if debug and fmt == "txt":
-        if len(chunks):
-            print(f"[DEBUG] First chunk length={len(chunks[0].get('text',''))}; last chunk length={len(chunks[-1].get('text',''))}")
+    if debug and total_chunks:
+        print(f"[DEBUG] First chunk length={len(chunks[0].get('text',''))}; last chunk length={len(chunks[-1].get('text',''))}; count={len(chunks)}")
 
     # Load prompts
     system_prompt = (base / "prompts" / "system.md").read_text(encoding="utf-8")
@@ -347,7 +335,7 @@ def main():
                 temperature=temperature,
                 top_p=top_p,
                 debug=debug,
-                label=f"chunk {idx}/{total_chunks}"
+                label=f"chunk {idx}/{total_chunks}",
             )
         except Exception as e:
             if debug:
@@ -359,9 +347,6 @@ def main():
             ok_count += 1
         else:
             fail_count += 1
-        # Optionally add timecodes to headings
-        if fmt == "srt" and include_timecodes:
-            cleaned = add_timecodes_to_headings(cleaned, ch["start"])  # legacy: plain stamp
         # For TXT inputs that had per-line timestamps, add link-style stamp
         if fmt == "txt" and has_line_timestamps and ch.get("start") is not None:
             cleaned = add_timecodes_to_headings(cleaned, ch["start"], as_link=True)
@@ -388,7 +373,7 @@ def main():
         summary = call_openai_summary(
             client, model, system_prompt, full_markdown,
             temperature=temperature, top_p=top_p,
-            debug=debug, label="summary"
+            debug=debug, label="summary",
         )
         if summary.strip():
             summary_heading = cfg.get("summary_heading", "## Підсумок (не авторський)")

@@ -1,5 +1,5 @@
 \
-import re
+import re, sys
 from typing import List, Dict, Tuple, Iterable, Optional
 
 TIME_PATTERN = re.compile(r"(\d{2}):(\d{2}):(\d{2}),(\d{3})")
@@ -184,3 +184,254 @@ def similarity_ratio(a: str, b: str) -> float:
     inter = len(ta & tb)
     union = len(ta | tb)
     return inter / union
+
+# -----------------------
+# Line-preserving chunking
+# -----------------------
+
+SENTENCE_SPLIT_RE = re.compile(r"(?<=[\.!?…])\s+")
+
+def _warn(msg: str) -> None:
+    try:
+        print(msg, file=sys.stderr)
+    except Exception:
+        pass
+
+def split_line_for_limit(line: str, limit: int) -> Tuple[List[str], List[str]]:
+    """
+    Split a single line into quasi-lines each <= limit.
+    Strategy: sentences -> words -> characters.
+    Returns (pieces, notes) where notes are warning strings to log.
+    """
+    notes: List[str] = []
+    if len(line) <= limit:
+        return [line], notes
+
+    notes.append(f"Long line split: original length {len(line)} > txt_chunk_chars {limit}")
+
+    # 1) Sentence-based packing
+    sentences = SENTENCE_SPLIT_RE.split(line)
+    # If no split occurred, fallback to word-split
+    if len(sentences) > 1:
+        pieces: List[str] = []
+        buf = ""
+        for s in sentences:
+            if not s:
+                continue
+            add_len = len(s) if not buf else (1 + len(s))  # assuming a space when gluing sentences
+            if (len(buf) + add_len) <= limit:
+                buf = (s if not buf else (buf + " " + s))
+            else:
+                if buf:
+                    pieces.append(buf)
+                # If a single sentence longer than limit: fallback to word split for this sentence
+                if len(s) > limit:
+                    ws_pieces, ws_notes = _split_by_words_with_char_fallback(s, limit)
+                    notes.extend(ws_notes)
+                    pieces.extend(ws_pieces)
+                    buf = ""
+                else:
+                    buf = s
+        if buf:
+            pieces.append(buf)
+        return pieces, notes
+
+    # 2) Word-based packing with char fallback for ultra-long tokens
+    pieces, ws_notes = _split_by_words_with_char_fallback(line, limit)
+    notes.extend(ws_notes)
+    return pieces, notes
+
+def _split_by_words_with_char_fallback(text: str, limit: int) -> Tuple[List[str], List[str]]:
+    notes: List[str] = []
+    tokens = re.findall(r"\S+|\s+", text)
+    pieces: List[str] = []
+    buf = ""
+    for tok in tokens:
+        # measure length if we append token
+        add_len = len(tok)
+        if len(buf) + add_len <= limit:
+            buf += tok
+            continue
+        # flush current buffer
+        if buf:
+            pieces.append(buf)
+            buf = ""
+        # token itself longer than limit -> char-split
+        if len(tok) > limit:
+            notes.append("Unusual: very long token without spaces; hard-splitting by characters to respect limit")
+            start = 0
+            n = len(tok)
+            while start < n:
+                end = min(n, start + limit)
+                pieces.append(tok[start:end])
+                start = end
+        else:
+            buf = tok
+    if buf:
+        pieces.append(buf)
+    return pieces, notes
+
+def _joined_len(lines: List[str]) -> int:
+    if not lines:
+        return 0
+    return sum(len(s) for s in lines) + (len(lines) - 1)
+
+def chunk_text_line_preserving(lines: List[str], chunk_chars: int = 6500, overlap_chars: int = 500) -> List[Dict]:
+    """
+    Build chunks preserving whole lines. Never split inside a line unless the line
+    alone exceeds chunk_chars. Enforce strict size limits and correct
+    continuation across chunks.
+
+    Returns: list of dicts with keys:
+      {"start": None, "end": None, "text": "...", "_units": [{"text": str, "orig": int, "split": bool}], "_overlap_units": int}
+    Only 'text' is intended for downstream consumption; meta keys are internal.
+    """
+    # Normalize None
+    lines = list(lines or [])
+    # Early exit
+    if not any(ln.strip() for ln in lines):
+        return []
+
+    chunks: List[Dict] = []
+    i = 0  # index over original lines
+    pending: Optional[Dict] = None  # {"pieces": [...], "cursor": int, "orig": int}
+    prev_units: Optional[List[Dict]] = None
+
+    # Bound overlap by chunk size - 1 to leave room for progress; will fall back if needed
+    hard_overlap_limit = max(0, min(overlap_chars, max(0, chunk_chars - 1)))
+
+    while True:
+        # termination: no more new content AND no pending continuation
+        if i >= len(lines) and (not pending):
+            break
+
+        # 1) Determine overlap from previous chunk
+        def compute_overlap(units: Optional[List[Dict]], limit: int) -> List[Dict]:
+            if not units or limit <= 0:
+                return []
+            # If the last unit is a split piece, prefer taking a tail of it that fits the limit
+            last = units[-1]
+            if last.get("split"):
+                # Split last unit text into sub-pieces and take from the end
+                sub_pieces, sub_notes = split_line_for_limit(last["text"], limit)
+                # choose minimal number from end that fit
+                out: List[str] = []
+                total = 0
+                for s in reversed(sub_pieces):
+                    add = len(s) if total == 0 else (1 + len(s))
+                    if total + add <= limit:
+                        out.append(s)
+                        total += add
+                    else:
+                        break
+                out.reverse()
+                return [{"text": t, "orig": last["orig"], "split": True} for t in out]
+            # Else, add whole lines from the end backwards
+            out_rev: List[Dict] = []
+            total = 0
+            for u in reversed(units):
+                # only take whole original lines for overlap
+                if u.get("split"):
+                    # stop at first split piece encountered from the end
+                    break
+                add = len(u["text"]) if total == 0 else (1 + len(u["text"]))
+                if total + add <= limit:
+                    out_rev.append(u)
+                    total += add
+                else:
+                    # If even the very last whole line doesn't fit, split it
+                    if not out_rev:  # no line has fit yet
+                        sub_pieces, sub_notes = split_line_for_limit(u["text"], limit)
+                        # take from the end minimal pieces that fit
+                        out: List[str] = []
+                        sub_total = 0
+                        for s in reversed(sub_pieces):
+                            add2 = len(s) if sub_total == 0 else (1 + len(s))
+                            if sub_total + add2 <= limit:
+                                out.append(s)
+                                sub_total += add2
+                            else:
+                                break
+                        out.reverse()
+                        return [{"text": t, "orig": u["orig"], "split": True} for t in out]
+                    break
+            out_rev.reverse()
+            return out_rev
+
+        attempt = 0
+        while True:
+            overlap_limit = hard_overlap_limit if attempt == 0 else 0
+            overlap_units = compute_overlap(prev_units, overlap_limit)
+            units: List[Dict] = list(overlap_units)
+            curr_len = _joined_len([u["text"] for u in units])
+            added_new = 0
+
+            # 2) Fill with new content
+            if pending:
+                piece = pending["pieces"][pending["cursor"]]
+                # ensure it fits; if not (overlap too big), we'll retry with no overlap
+                add_len = len(piece) if curr_len == 0 else (1 + len(piece))
+                if curr_len + add_len <= chunk_chars:
+                    units.append({"text": piece, "orig": pending["orig"], "split": True})
+                    added_new += 1
+                    curr_len += add_len
+                    pending["cursor"] += 1
+                    if pending["cursor"] >= len(pending["pieces"]):
+                        pending = None
+                        i += 1  # move past the original long line
+                # Regardless, only one split piece per chunk
+            else:
+                # add whole lines until next would overflow
+                while i < len(lines):
+                    line = lines[i]
+                    next_len = len(line) if curr_len == 0 else (1 + len(line))
+                    if curr_len + next_len <= chunk_chars:
+                        units.append({"text": line, "orig": i, "split": False})
+                        added_new += 1
+                        curr_len += next_len
+                        i += 1
+                    else:
+                        # current chunk already has some content -> finalize
+                        if added_new > 0:
+                            break
+                        # The single line doesn't fit an empty chunk -> split
+                        pieces, notes = split_line_for_limit(line, chunk_chars)
+                        for n in notes:
+                            _warn(n)
+                        pending = {"pieces": pieces, "cursor": 0, "orig": i}
+                        # place ONLY first piece into this chunk
+                        piece0 = pieces[pending["cursor"]]
+                        add_len0 = len(piece0) if curr_len == 0 else (1 + len(piece0))
+                        if curr_len + add_len0 <= chunk_chars:
+                            units.append({"text": piece0, "orig": i, "split": True})
+                            added_new += 1
+                            curr_len += add_len0
+                            pending["cursor"] += 1
+                            if pending["cursor"] >= len(pending["pieces"]):
+                                pending = None
+                                i += 1
+                        # finalize regardless
+                        break
+
+            # If this attempt added no new content (overlap consumed all room), retry without overlap once
+            if added_new == 0 and overlap_limit > 0:
+                attempt += 1
+                if attempt <= 1:
+                    continue
+            # finalize this chunk if it has any content at all (including overlap-only shouldn't happen after retry)
+            if added_new == 0:
+                # No progress and no overlap -> we're stuck; break to avoid infinite loop
+                break
+
+            chunk_text = "\n".join(u["text"] for u in units)
+            chunks.append({
+                "start": None,
+                "end": None,
+                "text": chunk_text,
+                "_units": units,
+                "_overlap_units": len(overlap_units),
+            })
+            prev_units = units
+            break
+
+    return chunks
