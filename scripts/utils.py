@@ -549,3 +549,35 @@ def dedup_overlapping_boundary(prev_text: str, cur_text: str, window_chars: int)
     # Optional sentence-based fallback is disabled to avoid damaging Markdown structure.
     # If needed in the future, implement a structure-preserving removal.
     return cur_text, 0, 'none'
+
+# -----------------------
+# Edit comment stripping
+# -----------------------
+
+_EDIT_COMMENT_TAGS = (
+    "fixed",
+    "filler_removed",
+    "merged_terms",
+    "rephrased",
+    "unsure",
+    "generalized",
+    "generalised",
+    "genearalised",
+    "structure_changed",
+    "typos_fixed",
+)
+
+_EDIT_COMMENT_RE = re.compile(
+    r"<!--\s*(?:" + "|".join(_EDIT_COMMENT_TAGS) + r")\s*:\s*(?:.|\n)*?-->", re.IGNORECASE
+)
+
+def strip_edit_comments(markdown: str) -> str:
+    """Remove known end-of-block HTML edit comments like <!-- fixed: ... --> from Markdown.
+    Conservative: removes only recognized tags to avoid deleting other HTML comments.
+    """
+    if not markdown:
+        return markdown
+    out = _EDIT_COMMENT_RE.sub("", markdown)
+    # collapse multiple consecutive blank lines created by removals
+    out = re.sub(r"\n{3,}", "\n\n", out)
+    return out

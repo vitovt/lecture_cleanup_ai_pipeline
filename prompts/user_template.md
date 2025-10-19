@@ -35,3 +35,10 @@ FRAGMENT (EDIT AND OUTPUT ONLY):
 <<<
 {CHUNK_TEXT}
 >>>
+
+After the fragment, append zero or more HTML comments documenting edits (comments only, no extra visible text):
+- <!-- fixed: ... --> objective punctuation/casing/duplicate-word fixes.
+- <!-- filler_removed: ... --> fillers removed (language-dependent); only list if safe and clear.
+- <!-- merged_terms: "variant1, variant2" -> "normalized_term"; ... --> when you unify inconsistent spellings (creative mode only; optional in normal).
+- <!-- rephrased: ... --> where short/incomplete sentences were merged or simplified (creative mode only; optional in normal).
+- <!-- unsure: ... --> any ambiguities you preserved verbatim.

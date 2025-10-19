@@ -10,6 +10,7 @@ from utils import (
     parse_timestamped_txt_lines,
     chunk_text_line_preserving,
     dedup_overlapping_boundary,
+    strip_edit_comments,
 )
 
 def load_text(path: str) -> str:
@@ -238,10 +239,13 @@ def main():
     allow_minor_reordering = bool(cfg.get("allow_minor_reordering", True))
     use_context_overlap = bool(cfg.get("use_context_overlap", True))
     stitch_dedup_window = int(cfg.get("stitch_dedup_window_chars", cfg.get("txt_overlap_chars", 500)) or 0)
+    content_mode = (cfg.get("content_mode", "normal") or "normal").strip().lower()
+    suppress_edit_comments = bool(cfg.get("suppress_edit_comments", True))
     if debug:
         print(f"[DEBUG] Settings -> model={model}, temperature={temperature}, top_p={top_p}, lang={lang}")
         print(f"[DEBUG] Options -> include_timecodes={include_timecodes}, aside_style={aside_style}, reordering={allow_minor_reordering}")
         print(f"[DEBUG] Overlap -> use_context_overlap={use_context_overlap}, stitch_dedup_window_chars={stitch_dedup_window}")
+        print(f"[DEBUG] Content mode -> {content_mode}; suppress_edit_comments={suppress_edit_comments}")
 
     # Load parasites for the language
     parasites_map = cfg.get("parasites", {})
@@ -326,8 +330,17 @@ def main():
     if debug and total_chunks:
         print(f"[DEBUG] First chunk length={len(chunks[0].get('text',''))}; last chunk length={len(chunks[-1].get('text',''))}; count={len(chunks)}")
 
-    # Load prompts
-    system_prompt = (base / "prompts" / "system.md").read_text(encoding="utf-8")
+    # Load system prompt according to mode
+    mode_to_file = {
+        "normal": base / "prompts" / "system_normal.md",
+        "strict": base / "prompts" / "system_strict.md",
+        "creative": base / "prompts" / "system_creative.md",
+    }
+    spath = mode_to_file.get(content_mode)
+    if spath is None or not spath.exists():
+        # Fallback to legacy system.md
+        spath = base / "prompts" / "system.md"
+    system_prompt = spath.read_text(encoding="utf-8")
 
     outdir = Path(args.outdir)
     outdir.mkdir(parents=True, exist_ok=True)
@@ -389,6 +402,9 @@ def main():
             if removed > 0 and debug:
                 print(f"[DEBUG] Dedup removed {removed} {('lines' if mode=='lines' else mode)} from start of chunk {idx} before stitching")
             cleaned = deduped
+        # Optionally strip edit comments in the final output
+        if suppress_edit_comments:
+            cleaned = strip_edit_comments(cleaned)
         cleaned_blocks.append(cleaned)
         sim = similarity_ratio(original_text, cleaned)
         qc_rows.append({

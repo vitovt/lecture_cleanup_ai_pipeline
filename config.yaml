@@ -27,6 +27,16 @@ stitch_dedup_window_chars: null        # if null, defaults to txt_overlap_chars
 include_timecodes_in_headings: true   # only applied when input is SRT
 allow_minor_reordering: true          # permit small word-order adjustments if meaning unchanged
 
+# Content optimization mode:
+# - normal   : balanced cleanup (default). Keeps meaning; light structure.
+# - strict   : no reordering; only punctuation/casing; remove safe fillers.
+# - creative : allows stronger rephrasing/merging short sentences; normalizes term variants.
+content_mode: creative
+
+# Edit comments emitted at end of each output block (HTML comments like <!-- fixed: ... -->, <!-- merged_terms: ... -->).
+# If true, these comments are removed from the final Markdown (still accounted internally by the model).
+suppress_edit_comments: false
+
 # Visual style for asides/jokes in the output.
 # Allowed values:
 # - italic      -> render as italics (*...*)
