@@ -126,9 +126,9 @@ echo
 
 # Run sequentially
 for f in "${FILES[@]}"; do
-  echo ">>> ./lecture_cleanup.sh --input \"$f\" --lang=\"${LANGUAGE}\" ${PASSTHRU[*]:-}"
+  echo ">>> ./lecture_cleanup.sh --input \"$f\" ${PASSTHRU[*]:-}"
   # shellcheck disable=SC2086 # we intentionally want word-splitting for PASSTHRU
-  ./lecture_cleanup.sh --input "$f" --lang="${LANGUAGE}" ${PASSTHRU[@]+"${PASSTHRU[@]}"} 
+  ./lecture_cleanup.sh --input "$f" ${PASSTHRU[@]+"${PASSTHRU[@]}"} 
   echo
 done
 
