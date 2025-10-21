@@ -13,12 +13,16 @@ format: txt
 # Chunking
 txt_chunk_chars: 6500   # chunk size for plain text (TXT)
 
-# Number of characters from the END of the previous chunk passed to the model as READ-ONLY CONTEXT.
-# Improves continuity; not included in output. Typical: 300–800 (0 = off).
+# Overlap-specific options (advanced)
+## Overlap typ
+use_context_overlap: cleaned              # one of: raw, cleaned, none (backward-compatible with true/false)
+
+## Number of characters from the END of the previous chunk passed to the model as READ-ONLY CONTEXT.
+## Improves continuity; not included in output. Typical: 300–800 (0 = off).
 txt_overlap_chars: 500  # overlap for plain text (TXT)
 
-# Overlap enable/disable
-use_context_overlap: true              # use read-only context in prompt; fragment-only editing
+## Overlap sentence delimiters
+overlap_sentence_delimiters: ".!?…"   # characters that mark end of sentences for tail selection
 
 # Join-time window (in characters) used to remove any DUPLICATED prefix from the next chunk’s output.
 # Usually set equal to txt_overlap_chars; increase if you still see duplicates.

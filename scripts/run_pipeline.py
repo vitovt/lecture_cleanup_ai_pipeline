@@ -16,6 +16,8 @@ from utils import (
     diff_term_maps,
     serialize_term_hints_json,
     rewrite_merged_terms_comments,
+    build_context_overlap,
+    strip_all_html_comments,
 )
 
 def load_text(path: str) -> str:
@@ -209,6 +211,7 @@ def main():
     ap.add_argument("--txt-chunk-chars", type=int, default=None)
     ap.add_argument("--txt-overlap-chars", type=int, default=None)
     ap.add_argument("--debug", action="store_true", help="Enable verbose logging and print all OpenAI requests/responses")
+    ap.add_argument("--use-context-overlap", dest="use_context_overlap", choices=["raw","cleaned","none"], help="Source of overlap: raw ASR tail, cleaned previous tail, or none")
     ap.add_argument("--include-timecodes", dest="include_timecodes", action="store_true", default=None, help="Append timecodes to headings when available")
     args = ap.parse_args()
 
@@ -242,14 +245,28 @@ def main():
     top_p = cfg.get("top_p", None)
     include_timecodes = bool(cfg.get("include_timecodes_in_headings", True))
     aside_style = cfg.get("highlight_asides_style", "italic")
-    use_context_overlap = bool(cfg.get("use_context_overlap", True))
+    # Overlap source (backward compatible)
+    cfg_overlap_source = cfg.get("use_context_overlap", None)
+    if isinstance(cfg_overlap_source, str) and cfg_overlap_source.lower() in ("raw","cleaned","none"):
+        overlap_source = cfg_overlap_source.lower()
+    elif isinstance(cfg_overlap_source, bool):
+        overlap_source = "raw" if cfg_overlap_source else "none"
+    else:
+        overlap_source = "raw"
+    if args.use_context_overlap:
+        overlap_source = args.use_context_overlap
+    # sentence delimiters for overlap selection
+    try:
+        sentence_delimiters = str(cfg.get("overlap_sentence_delimiters", ".!?…"))
+    except Exception:
+        sentence_delimiters = ".!?…"
     stitch_dedup_window = int(cfg.get("stitch_dedup_window_chars", cfg.get("txt_overlap_chars", 500)) or 0)
     content_mode = (cfg.get("content_mode", "normal") or "normal").strip().lower()
     suppress_edit_comments = bool(cfg.get("suppress_edit_comments", True))
     if debug:
         print(f"[DEBUG] Settings -> model={model}, temperature={temperature}, top_p={top_p}, lang={lang}")
         print(f"[DEBUG] Options -> include_timecodes={include_timecodes}, aside_style={aside_style}")
-        print(f"[DEBUG] Overlap -> use_context_overlap={use_context_overlap}, stitch_dedup_window_chars={stitch_dedup_window}")
+        print(f"[DEBUG] Overlap -> source={overlap_source}, sentence_delimiters={sentence_delimiters!r}, stitch_dedup_window_chars={stitch_dedup_window}")
         print(f"[DEBUG] Content mode -> {content_mode}; suppress_edit_comments={suppress_edit_comments}")
 
     # Load parasites for the language
@@ -364,22 +381,39 @@ def main():
     from copy import deepcopy
     from utils import coalesce_term_map, build_alias_index, remap_keys_to_canonical
     known_terms = {}
+    prev_raw_fragment = ""
+    last_cleaned_fragment = ""
     for idx, ch in enumerate(chunks, 1):
         print(f"[{idx}/{total_chunks}] Processing…", end="", flush=True)
-        # Prepare context/fragment for overlap handling
+        # Prepare raw fragment for this chunk and compute context from previous chunk based on configured source
         units = ch.get("_units", [])
         overlap_n = int(ch.get("_overlap_units", 0))
-        context_text = "\n".join(u["text"] for u in units[:overlap_n]) if (use_context_overlap and overlap_n > 0) else ""
-        fragment_text = "\n".join(u["text"] for u in units[overlap_n:]) if use_context_overlap else ch["text"]
+        fragment_text = "\n".join(u["text"] for u in units[overlap_n:])
+        # Build context from tail of previous fragment/output
+        if idx == 1:
+            context_text = ""
+            used_source = "none" if overlap_source == "none" else overlap_source
+        else:
+            used_source = overlap_source
+            cleaned_available = bool((last_cleaned_fragment or "").strip())
+            if used_source == "cleaned" and not cleaned_available:
+                # Check after stripping comments too
+                if not (strip_all_html_comments(last_cleaned_fragment or "").strip()):
+                    print("\n[WARN] cleaned overlap requested but empty; falling back to raw", file=sys.stderr)
+                    used_source = "raw"
+            context_text = build_context_overlap(
+                prev_raw_text=prev_raw_fragment or "",
+                prev_cleaned_text=last_cleaned_fragment or "",
+                source=used_source,
+                max_chars=int(cfg.get("txt_overlap_chars", 500) or 0),
+                sentence_delimiters=sentence_delimiters,
+            )
+        if debug and idx > 1:
+            print(f"\n[DEBUG] Chunk {idx}: overlap_source={used_source}; prev_raw_len={len(prev_raw_fragment)}; prev_cleaned_len={len(last_cleaned_fragment)}; CONTEXT chars={len(context_text)}; FRAGMENT chars={len(fragment_text)}")
         # Build term-hints block from previously observed merges
         # Present coalesced, single-canonical-per-cluster hints to the model
         coalesced_for_hints = coalesce_term_map(known_terms)
         term_hints_text = serialize_term_hints_json(coalesced_for_hints)
-        if debug and idx > 1:
-            if use_context_overlap:
-                print(f"\n[DEBUG] Chunk {idx}: CONTEXT chars={len(context_text)}; FRAGMENT chars={len(fragment_text)}")
-            else:
-                print(f"\n[DEBUG] Chunk {idx}: inline overlap present; chunk chars={len(ch.get('text',''))}")
         original_text = fragment_text
         try:
             cleaned = call_openai(
@@ -455,6 +489,10 @@ def main():
         })
         remaining = total_chunks - idx
         print(f" {status} | done: {ok_count}, failed: {fail_count}, left: {remaining}")
+        # Update previous fragments for next-iteration overlap
+        prev_raw_fragment = fragment_text
+        if status == "OK":
+            last_cleaned_fragment = cleaned
 
     # Merge
     full_markdown = "\n\n".join(cleaned_blocks)

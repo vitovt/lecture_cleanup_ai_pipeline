@@ -683,3 +683,109 @@ def remap_keys_to_canonical(only_new: Dict[str, List[str]], alias_index: Dict[st
         uniq = sorted(set(out[k]))
         out[k] = uniq
     return out
+
+# -----------------------
+# Overlap building (tail selection)
+# -----------------------
+
+_HTML_COMMENT_RE = re.compile(r"<!--(?:.|\n)*?-->")
+
+def strip_all_html_comments(s: str) -> str:
+    if not s:
+        return s
+    return _HTML_COMMENT_RE.sub("", s)
+
+def _tail_fit_by_sentences(line: str, limit: int, sentence_delimiters: str) -> str:
+    if limit <= 0 or not line:
+        return ""
+    # Split into sentences using delimiter chars; keep simple heuristic
+    # We split on whitespace after a delimiter char
+    delims = re.escape(sentence_delimiters or ".!?…")
+    parts = re.split(rf"(?<=[{delims}])\s+", line)
+    if len(parts) <= 1:
+        return ""  # no clear sentence boundary
+    out: List[str] = []
+    total = 0
+    for s in reversed(parts):
+        if not s:
+            continue
+        add = len(s) if total == 0 else (1 + len(s))
+        if total + add <= limit:
+            out.append(s)
+            total += add
+        else:
+            break
+    out.reverse()
+    return " ".join(out)
+
+def _tail_fit_by_words(text: str, limit: int) -> str:
+    if limit <= 0 or not text:
+        return ""
+    tokens = re.findall(r"\S+|\s+", text)
+    out: List[str] = []
+    total = 0
+    for tok in reversed(tokens):
+        if not tok:
+            continue
+        add = len(tok)
+        if total + add <= limit:
+            out.append(tok)
+            total += add
+        else:
+            if not out and add > limit:
+                # take suffix of a too-long token to fit the budget
+                out.append(tok[-limit:])
+                total = limit
+            break
+    out.reverse()
+    return "".join(out).strip()
+
+def build_context_overlap(prev_raw_text: str,
+                          prev_cleaned_text: Optional[str],
+                          source: str,
+                          max_chars: int,
+                          sentence_delimiters: str = ".!?…") -> str:
+    """
+    Select a tail overlap (<= max_chars) from previous fragment.
+    - source: 'raw' | 'cleaned' | 'none'
+    - prev_cleaned_text: if None/empty and source='cleaned', caller should fallback to raw.
+    - Algorithm: lines -> sentences -> words (from end), keeping natural order.
+    """
+    if max_chars is None or max_chars <= 0 or source == "none":
+        return ""
+    src_text = (prev_raw_text or "")
+    if source == "cleaned" and (prev_cleaned_text or "").strip():
+        # remove any HTML comments (including edit comments)
+        src_text = strip_all_html_comments(prev_cleaned_text or "")
+    elif source == "cleaned":
+        # cleaned missing -> caller should have warned and fallen back; still be safe
+        src_text = prev_raw_text or ""
+    # Work with the tail
+    if not src_text:
+        return ""
+    # Step 1: whole lines from the end
+    lines = src_text.splitlines()
+    acc_lines_rev: List[str] = []
+    total = 0
+    for ln in reversed(lines):
+        add = len(ln) if total == 0 else (1 + len(ln))  # account for newline when joining
+        if total + add <= max_chars:
+            acc_lines_rev.append(ln)
+            total += add
+        else:
+            # Need a partial of this last line via sentences, then words
+            remain = max_chars - total
+            # Tail sentences
+            part = _tail_fit_by_sentences(ln, remain, sentence_delimiters)
+            if not part:
+                # fallback to words
+                part = _tail_fit_by_words(ln, remain)
+            if part:
+                acc_lines_rev.append(part)
+            break
+    acc_lines = list(reversed(acc_lines_rev))
+    out = "\n".join(acc_lines).strip()
+    # Ensure not exceeding max_chars; trim hard if extreme edge-case
+    if len(out) > max_chars:
+        out = out[-max_chars:]
+    return out
