@@ -48,7 +48,12 @@ suppress_edit_comments: false
 # - blockquote  -> render as blockquote (> ...)
 highlight_asides_style: italic
 
-append_summary: true
+#############################
+# !!!      Warning      !!! #
+# High token usage          #
+############################# 
+# The full result Markdown is sent to the model to produce the summary. It can double your expences.
+append_summary: false
 summary_heading: "## Summary (не авторський)"
 
 # Paths to stopword lists (one per language)
