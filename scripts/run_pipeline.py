@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import os, argparse, json, yaml, sys, csv, traceback
+import os, argparse, yaml, sys, csv, traceback
 from typing import List, Optional
 from openai import OpenAI
 from pathlib import Path
@@ -71,8 +71,7 @@ def load_api_key_from_env_file(root: Path) -> bool:
         pass
     return False
 
-def build_user_prompt(lang: str, parasites: List[str], aside_style: str, glossary_terms: List[str]) -> str:
-    from pathlib import Path
+def build_user_prompt(lang: str, parasites: List[str], aside_style: str) -> str:
     # load template
     tmpl_path = Path(__file__).parent.parent / "prompts" / "user_template.md"
     with open(tmpl_path, "r", encoding="utf-8") as f:
@@ -83,7 +82,6 @@ def call_openai(
     client: OpenAI,
     model: str,
     system_prompt: str,
-    user_prompt: str,
     chunk_text: str,
     lang: str,
     parasites: List[str],
@@ -93,12 +91,11 @@ def call_openai(
     top_p: float = None,
     debug: bool = False,
     label: str = None,
-    strict_mode: bool = False,
     context_text: str = "",
     term_hints_text: str = "",
 ) -> str:
     # fill template
-    template = build_user_prompt(lang, parasites, aside_style, glossary)
+    template = build_user_prompt(lang, parasites, aside_style)
 
     # Map aside style to prompt-friendly label
     aside_map = {
@@ -389,7 +386,6 @@ def main():
                 client=client,
                 model=model,
                 system_prompt=system_prompt,
-                user_prompt="",  # not used directly
                 chunk_text=original_text,
                 lang=lang,
                 parasites=parasites,
