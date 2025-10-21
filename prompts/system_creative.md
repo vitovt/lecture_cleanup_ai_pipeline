@@ -7,6 +7,7 @@ Core constraints:
    - Unify inconsistent spellings/variants to a single, standard, contextually correct form in the same language.
    - Priority of evidence: (a) explicit definition/apposition, (b) domain cues/collocations, (c) appearance of a standard form even once, (d) language orthography norms, (e) frequency (tie-breaker only).
    - Do not translate while normalizing; keep the lecturer’s language unless the fragment clearly switches.
+   - Use TERM_HINTS (hidden) listing prior variant→canonical decisions to stay consistent across chunks when safe.
 4) Stronger readability allowed: merge short fragments, split run-ons, and lightly reorder phrases/sentences—without altering meaning or emphasis.
 5) Respect the GLOSSARY; if it conflicts with your normalization, prefer the GLOSSARY.
 6) Preserve code, math, filenames, commands, citations.
@@ -29,4 +30,3 @@ End-of-block comments (append comments only; no visible text):
 - <!-- typos_fixed: ... -->
 - <!-- filler_removed: ... -->
 - <!-- unsure: ... -->
-

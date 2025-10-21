@@ -17,6 +17,14 @@ Important continuity policy:
 - Do NOT repeat, paraphrase, or output the CONTEXT.
 - Output must contain ONLY the cleaned FRAGMENT (Markdown), nothing else.
 
+Term normalization hints (DO NOT OUTPUT):
+- These hints are accumulated from earlier fragments to keep terminology consistent across chunks.
+- Use only when consistent with the FRAGMENT and GLOSSARY; do not override the FRAGMENT's meaning.
+- Never echo these hints in the output.
+<<<
+{TERM_HINTS}
+>>>
+
 Timecodes policy (if applicable):
 - Add timecodes only to headings generated from the FRAGMENT itself.
 - Never add or duplicate timecodes for headings that exist only in CONTEXT.
@@ -40,4 +48,3 @@ After the fragment, append zero or more HTML comments documenting edits (comment
 - <!-- merged_terms: "variant1, variant2" -> "normalized_term"; ... --> (normal/creative; optional in normal).
 - <!-- rephrased: ... --> (normal/creative).
 - <!-- unsure: ... --> ambiguities preserved verbatim.
-

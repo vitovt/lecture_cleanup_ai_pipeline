@@ -11,6 +11,11 @@ from utils import (
     chunk_text_line_preserving,
     dedup_overlapping_boundary,
     strip_edit_comments,
+    extract_merged_terms_map,
+    merge_term_maps,
+    diff_term_maps,
+    serialize_term_hints_json,
+    rewrite_merged_terms_comments,
 )
 
 def load_text(path: str) -> str:
@@ -90,6 +95,7 @@ def call_openai(
     label: str = None,
     strict_mode: bool = False,
     context_text: str = "",
+    term_hints_text: str = "",
 ) -> str:
     # fill template
     template = build_user_prompt(lang, parasites, aside_style, glossary)
@@ -114,6 +120,7 @@ def call_openai(
         ASIDE_STYLE=aside_style_en,
         CHUNK_TEXT=chunk_text,
         CONTEXT_TEXT=(context_text or ""),
+        TERM_HINTS=(term_hints_text or ""),
     )
 
     # Build request parameters, honoring config temperature/top_p when provided
@@ -356,6 +363,10 @@ def main():
     qc_rows = []
     ok_count = 0
     fail_count = 0
+    # Accumulate normalized term variants across chunks
+    from copy import deepcopy
+    from utils import coalesce_term_map, build_alias_index, remap_keys_to_canonical
+    known_terms = {}
     for idx, ch in enumerate(chunks, 1):
         print(f"[{idx}/{total_chunks}] Processing…", end="", flush=True)
         # Prepare context/fragment for overlap handling
@@ -363,6 +374,10 @@ def main():
         overlap_n = int(ch.get("_overlap_units", 0))
         context_text = "\n".join(u["text"] for u in units[:overlap_n]) if (use_context_overlap and overlap_n > 0) else ""
         fragment_text = "\n".join(u["text"] for u in units[overlap_n:]) if use_context_overlap else ch["text"]
+        # Build term-hints block from previously observed merges
+        # Present coalesced, single-canonical-per-cluster hints to the model
+        coalesced_for_hints = coalesce_term_map(known_terms)
+        term_hints_text = serialize_term_hints_json(coalesced_for_hints)
         if debug and idx > 1:
             if use_context_overlap:
                 print(f"\n[DEBUG] Chunk {idx}: CONTEXT chars={len(context_text)}; FRAGMENT chars={len(fragment_text)}")
@@ -385,6 +400,7 @@ def main():
                 debug=debug,
                 label=f"chunk {idx}/{total_chunks}",
                 context_text=context_text,
+                term_hints_text=term_hints_text,
             )
         except Exception as e:
             if debug:
@@ -396,6 +412,25 @@ def main():
             ok_count += 1
         else:
             fail_count += 1
+        # Extract term merges; keep only per-chunk new ones in comments; accumulate for next chunks
+        if cleaned:
+            current_map = extract_merged_terms_map(cleaned)
+            if current_map:
+                # Compute only-new variants vs known_terms (before merging)
+                only_new = diff_term_maps(current_map, known_terms)
+                # Build combined map and coalesce to determine canonical keys
+                combined = {}
+                merge_term_maps(combined, known_terms)
+                merge_term_maps(combined, current_map)
+                combined = coalesce_term_map(combined)
+                alias_index = build_alias_index(combined)
+                # Remap per-chunk new items to canonical keys
+                only_new_rekeyed = remap_keys_to_canonical(only_new, alias_index)
+                # Rewrite comments to include only the per-chunk new items (canonicalized)
+                cleaned = rewrite_merged_terms_comments(cleaned, only_new_rekeyed, prefer_style="auto")
+                # Accumulate into known_terms and keep coalesced keys for future hints
+                merge_term_maps(known_terms, current_map)
+                known_terms = coalesce_term_map(known_terms)
         # For TXT inputs that had per-line timestamps, add link-style stamp
         if include_timecodes and fmt == "txt" and has_line_timestamps and ch.get("start") is not None:
             if debug:

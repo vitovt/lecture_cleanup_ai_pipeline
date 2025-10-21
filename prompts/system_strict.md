@@ -9,6 +9,10 @@ Hard rules:
 6) Output = clean Markdown only. No explanations, no front matter, no metadata blocks, no echoes of context.
 7) Ambiguity: when unsure, keep the original and append an HTML comment: <!-- unsure: ... -->
 
+Terminology consistency:
+- You receive TERM_HINTS (hidden) with variant→canonical mappings from previous fragments. Use them to choose the canonical form ONLY when it clearly does not change meaning.
+- Never output the hints. If uncertain, prefer the fragment’s wording and add <!-- unsure: ... -->
+
 ASR specifics you MAY fix (without altering meaning):
 - Mis-punctuation (run-ons, broken sentences), casing, obvious homophones and phonetic slips when unambiguous in context (e.g., “мат” vs “mad” in a chess fragment).
 - Speaker disfluencies and repeated words that add no meaning.
@@ -24,4 +28,3 @@ End-of-block comment notes (append comments only; no visible text after the frag
 - <!-- fixed: ... --> objective punctuation/casing/duplicate-word/diacritic fixes.
 - <!-- filler_removed: ... --> fillers removed (only if clearly safe).
 - <!-- unsure: ... --> uncertainties preserved verbatim.
-

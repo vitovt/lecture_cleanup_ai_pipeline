@@ -1,6 +1,6 @@
 \
-import re, sys
-from typing import List, Dict, Tuple, Iterable, Optional
+import re, sys, json
+from typing import List, Dict, Tuple, Iterable, Optional, Set
 
 TIME_PATTERN = re.compile(r"(\d{2}):(\d{2}):(\d{2}),(\d{3})")
 ARROW = "-->"
@@ -580,4 +580,249 @@ def strip_edit_comments(markdown: str) -> str:
     out = _EDIT_COMMENT_RE.sub("", markdown)
     # collapse multiple consecutive blank lines created by removals
     out = re.sub(r"\n{3,}", "\n\n", out)
+    return out
+
+# -----------------------
+# Merged-terms memory utils
+# -----------------------
+
+_MERGED_TERMS_COMMENT_RE = re.compile(r"<!--\s*merged_terms\s*:\s*(.*?)-->", re.IGNORECASE | re.DOTALL)
+
+def _normalize_text_token(s: str) -> str:
+    return re.sub(r"\s+", " ", (s or "").strip()).strip('"\'')
+
+def _parse_json_mterm_payload(payload: str) -> Dict[str, Set[str]]:
+    """Attempt to parse payload as JSON in multiple shapes.
+    Supported shapes:
+      - [{"canonical": "Term", "variants": ["v1","v2"], ...}, ...]
+      - {"Term": ["v1","v2"], "evidence": [...], "confidence": "high"}
+    Returns mapping canonical -> set(variants).
+    """
+    out: Dict[str, Set[str]] = {}
+    try:
+        data = json.loads(payload)
+    except Exception:
+        return out
+    # Array of objects
+    if isinstance(data, list):
+        for item in data:
+            if not isinstance(item, dict):
+                continue
+            # common fields
+            canon = item.get("canonical") or item.get("term") or None
+            variants = item.get("variants") or []
+            if isinstance(canon, str) and isinstance(variants, list):
+                c = _normalize_text_token(canon)
+                vs = {_normalize_text_token(v) for v in variants if isinstance(v, str) and _normalize_text_token(v)}
+                if c and vs:
+                    out.setdefault(c, set()).update(vs)
+    # Dict mapping
+    elif isinstance(data, dict):
+        for k, v in data.items():
+            if k in ("evidence", "confidence"):
+                continue
+            if not isinstance(k, str) or not isinstance(v, list):
+                continue
+            c = _normalize_text_token(k)
+            vs = {_normalize_text_token(x) for x in v if isinstance(x, str) and _normalize_text_token(x)}
+            if c and vs:
+                out.setdefault(c, set()).update(vs)
+    return out
+
+def _parse_pairs_mterm_payload(payload: str) -> Dict[str, Set[str]]:
+    """Parse semi-structured pairs: "v1, v2" -> "Canonical"; ...
+    Returns mapping canonical -> set(variants).
+    """
+    out: Dict[str, Set[str]] = {}
+    # split by semicolons or newlines
+    parts = [p for p in re.split(r"[;\n]", payload) if p.strip()]
+    for p in parts:
+        if "->" not in p:
+            continue
+        lhs, rhs = p.split("->", 1)
+        canon = _normalize_text_token(rhs)
+        lhs = lhs.strip()
+        # extract within quotes if present, else split by comma
+        m = re.findall(r"\"([^\"]+)\"|'([^']+)'", lhs)
+        variants: List[str] = []
+        if m:
+            # m is list of tuples; take whichever group matched
+            for a, b in m:
+                s = (a or b)
+                # a single quoted group may contain comma-separated variants
+                for part in s.split(','):
+                    part = part.strip()
+                    if part:
+                        variants.append(part)
+        else:
+            variants = [t.strip() for t in lhs.split(',') if t.strip()]
+        vs = {_normalize_text_token(v) for v in variants if _normalize_text_token(v)}
+        if canon and vs:
+            out.setdefault(canon, set()).update(vs)
+    return out
+
+def extract_merged_terms_map(markdown: str) -> Dict[str, Set[str]]:
+    """Extract mapping of canonical term -> set(variants) from all merged_terms comments.
+    Attempts JSON first, then pair-format parsing.
+    """
+    if not markdown:
+        return {}
+    out: Dict[str, Set[str]] = {}
+    for m in _MERGED_TERMS_COMMENT_RE.finditer(markdown):
+        payload = (m.group(1) or "").strip()
+        # try JSON
+        jmap = _parse_json_mterm_payload(payload)
+        if jmap:
+            for k, vs in jmap.items():
+                out.setdefault(k, set()).update(vs)
+            continue
+        # try pairs
+        pmap = _parse_pairs_mterm_payload(payload)
+        for k, vs in pmap.items():
+            out.setdefault(k, set()).update(vs)
+    return out
+
+def merge_term_maps(into: Dict[str, Set[str]], inc: Dict[str, Set[str]]) -> None:
+    for k, vs in (inc or {}).items():
+        into.setdefault(k, set()).update(vs)
+
+def diff_term_maps(cur: Dict[str, Set[str]], prev: Dict[str, Set[str]]) -> Dict[str, List[str]]:
+    """Return only the variants that are new compared to prev.
+    Output values are sorted lists for stable display.
+    """
+    diff: Dict[str, List[str]] = {}
+    for k, vs in (cur or {}).items():
+        old = prev.get(k, set()) if prev else set()
+        new = sorted([v for v in vs if v not in old])
+        if new:
+            diff[k] = new
+    return diff
+
+def serialize_term_hints_json(known: Dict[str, Set[str]]) -> str:
+    """Build a compact JSON string for TERM_HINTS block: {"Canonical": ["v1","v2"], ...}.
+    Returns empty string if no known terms.
+    """
+    if not known:
+        return ""
+    payload = {k: sorted(list(vs)) for k, vs in sorted(known.items(), key=lambda kv: kv[0].lower()) if vs}
+    try:
+        return json.dumps(payload, ensure_ascii=False)
+    except Exception:
+        # extremely unlikely; fallback to a naive text form
+        lines = []
+        for k, vs in payload.items():
+            lines.append(f"{k}: {', '.join(vs)}")
+        return "\n".join(lines)
+
+def _format_pairs_comment(payload_map: Dict[str, List[str]]) -> str:
+    parts = []
+    for canon, vs in sorted(payload_map.items(), key=lambda kv: kv[0].lower()):
+        if not vs:
+            continue
+        lhs = ", ".join(vs)
+        parts.append(f'"{lhs}" -> "{canon}"')
+    return "; ".join(parts)
+
+def _format_json_comment(payload_map: Dict[str, List[str]]) -> str:
+    arr = []
+    for canon, vs in sorted(payload_map.items(), key=lambda kv: kv[0].lower()):
+        if not vs:
+            continue
+        arr.append({"canonical": canon, "variants": vs})
+    try:
+        return json.dumps(arr, ensure_ascii=False)
+    except Exception:
+        # unlikely; fallback to pairs
+        return _format_pairs_comment(payload_map)
+
+def rewrite_merged_terms_comments(markdown: str, keep_map: Dict[str, List[str]], prefer_style: str = "auto") -> str:
+    """Rewrite all <!-- merged_terms: ... --> comments to only contain items in keep_map.
+    If keep_map is empty, remove the comments entirely.
+    prefer_style: 'json' | 'pairs' | 'auto'
+    """
+    if not markdown:
+        return markdown
+    def repl(m: re.Match) -> str:
+        if not keep_map:
+            return ""  # remove comment
+        # choose style
+        payload = (m.group(1) or "").strip()
+        style = prefer_style
+        if style == "auto":
+            style = "json" if (payload.startswith("[") or payload.startswith("{")) else "pairs"
+        if style == "json":
+            inner = _format_json_comment(keep_map)
+        else:
+            inner = _format_pairs_comment(keep_map)
+        return f"<!-- merged_terms: {inner} -->"
+    return _MERGED_TERMS_COMMENT_RE.sub(repl, markdown)
+
+# -----------------------
+# Coalescing and aliasing of term maps
+# -----------------------
+
+def coalesce_term_map(term_map: Dict[str, Set[str]]) -> Dict[str, Set[str]]:
+    """Collapse a mapping where canonicals may also appear as variants of other canonicals.
+    Mutates a shallow copy of input and returns it.
+    """
+    if not term_map:
+        return {}
+    m: Dict[str, Set[str]] = {k: set(vs) for k, vs in term_map.items()}
+    changed = True
+    # Iteratively merge clusters where a canonical appears in another's variants or vice versa
+    while changed:
+        changed = False
+        keys = list(m.keys())
+        for k in keys:
+            if k not in m:
+                continue
+            vs = m[k]
+            # Case A: k is variant of j
+            for j in list(m.keys()):
+                if j == k or j not in m:
+                    continue
+                if k in m[j]:
+                    # merge k into j
+                    m[j].update(vs)
+                    m[j].add(k)
+                    del m[k]
+                    changed = True
+                    break
+            if changed:
+                break
+            # Case B: some variant v is a canonical key
+            for v in list(vs):
+                if v in m and v != k:
+                    # merge v into k
+                    m[k].update(m[v])
+                    m[k].add(v)
+                    del m[v]
+                    changed = True
+                    break
+            if changed:
+                break
+    return m
+
+def build_alias_index(term_map: Dict[str, Set[str]]) -> Dict[str, str]:
+    """Return alias->canonical map for quick lookup (includes canonical names themselves)."""
+    alias: Dict[str, str] = {}
+    for c, vs in term_map.items():
+        alias.setdefault(c, c)
+        for v in vs:
+            alias[v] = c
+    return alias
+
+def remap_keys_to_canonical(only_new: Dict[str, List[str]], alias_index: Dict[str, str]) -> Dict[str, List[str]]:
+    """Re-key a per-chunk map to canonical keys using alias_index.
+    Keeps list values as-is.
+    """
+    out: Dict[str, List[str]] = {}
+    for k, vs in (only_new or {}).items():
+        root = alias_index.get(k, k)
+        out.setdefault(root, [])
+        out[root].extend(vs)
+    # deduplicate and sort
+    for k in list(out.keys()):
+        uniq = sorted(set(out[k]))
+        out[k] = uniq
     return out
