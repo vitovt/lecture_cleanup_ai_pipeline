@@ -62,3 +62,23 @@ parasites:
   uk: data/parasites_uk.txt
   en: data/parasites_en.txt
   de: data/parasites_de.txt
+
+# Deictic anchoring configuration (independent of regular aside styling)
+deictic:
+  enabled: true           # Master toggle. When false, prompts remain unchanged. CLI --deictic overrides this.
+  wrapper_open: "⟦"        # Default inline delimiter; safe in Markdown/Obsidian; rare in prose.
+  wrapper_close: "⟧"       # Matching close delimiter.
+  # Wrapper alternatives (choose ONE pair; prefer the default):
+  # - "⟪" / "⟫"  # Visually similar; some fonts render thinner.
+  # - "{|" / "|}" # ASCII fallback; less visually distinct; unlikely to collide with Markdown.
+  # - "[†" / "]"  # ASCII; can visually collide with Markdown links [..](..); use only if necessary.
+  # - "`" / "`"   # Inline-code look; NOT recommended (conflicts with code styling).
+  prefix: "anchor:"        # Fixed key to ease parsing/grepping, e.g., ⟦anchor: «Recall»⟧
+  name_quotes_open: "«"
+  name_quotes_close: "»"
+  decorate: "plain"        # One of: plain | italics | bold.
+  unknown_marker: "?"      # For unresolved referents, e.g., ⟦anchor: ?⟧
+  max_per_paragraph: 3     # Hard cap to avoid clutter.
+  max_per_fragment: 12     # Global cap per fragment.
+  window_sentences: 5      # Lookback within THIS FRAGMENT only; ignore CONTEXT for resolution.
+  data_dir: "./data"       # Directory with indicative, non-exhaustive deictic wordlists.

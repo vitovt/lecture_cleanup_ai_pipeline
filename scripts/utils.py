@@ -417,6 +417,7 @@ _EDIT_COMMENT_TAGS = (
     "merged_terms",
     "rephrased",
     "unsure",
+    "deictic_anchors",
     "generalized",
     "generalised",
     "genearalised",

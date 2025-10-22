@@ -171,6 +171,40 @@
 - Для перевірки змін залишайте `suppress_edit_comments: false` у `config.yaml`.
 - `--debug` допоможе у налаштуванні промптів та розборі відповідей.
 
+## Deictic anchoring (опційно)
+- Мета: позначати дейктичні посилання (цей/ця/це/ці; this/that; hier/dort) короткими видимими якорями, коли референт однозначно названий РАНІШЕ в цьому фрагменті.
+- Формат якоря: використовується налаштований обгортник і префікс, напр.: `⟦anchor: «Recall»⟧`.
+- Обмеження: ≤ `max_per_paragraph` на абзац і ≤ `max_per_fragment` на фрагмент. Не ставити в код/математику/цитати/посилання.
+- Якщо референт неясний без припущень — `⟦anchor: ?⟧` і наприкінці `<!-- unsure: deictic unresolved -->`.
+- Увімкнення: в `config.yaml` → `deictic.enabled: false|true` або CLI `--deictic=true|false`.
+- Підказкові списки в `data/deictic_words_*.txt` — індикативні; користуйтесь змістом і контекстом, а не лише ключовими словами.
+
+Налаштування у `config.yaml`:
+```yaml
+deictic:
+  enabled: false
+  wrapper_open: "⟦"
+  wrapper_close: "⟧"
+  prefix: "anchor:"
+  name_quotes_open: "«"
+  name_quotes_close: "»"
+  decorate: plain
+  unknown_marker: "?"
+  max_per_paragraph: 3
+  max_per_fragment: 12
+  window_sentences: 5
+  data_dir: "./data"
+```
+
+CLI приклад:
+```bash
+./lecture_cleanup.sh --input input/lec1.txt --lang=uk --deictic=true
+```
+
+Мінімальний приклад:
+- Було: "Ця метрика показує, що…" (раніше названо "Recall").
+- Стало: "Ця метрика ⟦anchor: «Recall»⟧ показує, що…"
+
 ## Обмеження
 - SRT ще в процесі розробки і тестування, бо є декілька форматів. 
     - Поки-що обробляється без прив’язки тайм-кодів до заголовків.

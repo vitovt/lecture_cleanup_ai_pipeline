@@ -1,0 +1,18 @@
+# Indicative, non-exhaustive list; rely on context first.
+this
+that
+these
+those
+here
+there
+such
+former
+latter
+this one
+that one
+this thing
+that thing
+above
+below
+following
+previous

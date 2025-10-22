@@ -73,11 +73,58 @@ def load_api_key_from_env_file(root: Path) -> bool:
         pass
     return False
 
-def build_user_prompt(lang: str, parasites: List[str], aside_style: str) -> str:
+def build_user_prompt(lang: str, parasites: List[str], aside_style: str, *, deictic_enabled: bool = False, deictic_vars: dict = None, deictic_words: List[str] = None) -> str:
     # load template
     tmpl_path = Path(__file__).parent.parent / "prompts" / "user_template.md"
     with open(tmpl_path, "r", encoding="utf-8") as f:
         tmpl = f.read()
+    if not deictic_enabled:
+        return tmpl
+    # inject deictic block into template under the config header and update tasks and comment notes
+    partial_path = Path(__file__).parent.parent / "prompts" / "partials" / "user_deictic_block.md"
+    try:
+        ptxt = partial_path.read_text(encoding="utf-8")
+    except Exception:
+        ptxt = ""
+    dv = deictic_vars or {}
+    # prepare hints string (one per line -> inline CSV)
+    hints_line = ", ".join([w for w in (deictic_words or []) if w and not str(w).strip().startswith('#')])
+    if ptxt:
+        ptxt = ptxt.format(
+            DEICTIC_MODE=("on" if dv.get("enabled") else "off"),
+            DEICTIC_MAX_PER_PARAGRAPH=dv.get("max_per_paragraph"),
+            DEICTIC_MAX_PER_FRAGMENT=dv.get("max_per_fragment"),
+            DEICTIC_UNKNOWN=dv.get("unknown_marker"),
+            DEICTIC_WINDOW_SENTENCES=dv.get("window_sentences"),
+            DEICTIC_WRAPPER_OPEN=dv.get("wrapper_open"),
+            DEICTIC_WRAPPER_CLOSE=dv.get("wrapper_close"),
+            DEICTIC_PREFIX=dv.get("prefix"),
+            DEICTIC_NAME_QUOTES_OPEN=dv.get("name_quotes_open"),
+            DEICTIC_NAME_QUOTES_CLOSE=dv.get("name_quotes_close"),
+            DEICTIC_DECORATE=dv.get("decorate"),
+            DEICTIC_HINTS=hints_line,
+        )
+        # Insert after the 'Asides style' line
+        anchor = "Asides style: {ASIDE_STYLE}"
+        if anchor in tmpl:
+            tmpl = tmpl.replace(anchor, anchor + "\n\n" + ptxt)
+        # Add a task item 6) before 'Important continuity policy'
+        task_insert = (
+            "If {DEICTIC_MODE}=on, add visible deictic anchors per the rules above. "
+            "When uncertain, insert ⟦anchor: {DEICTIC_UNKNOWN}⟧ and record an <!-- unsure: ... --> note at the end."
+        )
+        policy_hdr = "Important continuity policy:"
+        if policy_hdr in tmpl:
+            tmpl = tmpl.replace(
+                policy_hdr,
+                f"6) {task_insert}\n\n" + policy_hdr,
+            )
+        # Add optional end-of-block comment bullet
+        eob_hdr = "After the fragment, append zero or more HTML comments documenting edits (comments only; no visible text after them):"
+        if eob_hdr in tmpl:
+            # Escape braces for str.format by doubling {{ }} so the JSON example passes through literally
+            example = "- <!-- deictic_anchors: [{{\"deictic\":\"this\",\"anchor\":\"Precision\",\"confidence\":\"high\"}}, ...] -->"
+            tmpl = tmpl.replace(eob_hdr, eob_hdr + "\n" + example)
     return tmpl
 
 def call_openai(
@@ -95,9 +142,12 @@ def call_openai(
     label: str = None,
     context_text: str = "",
     term_hints_text: str = "",
+    deictic_enabled: bool = False,
+    deictic_vars: dict = None,
+    deictic_words: List[str] = None,
 ) -> str:
     # fill template
-    template = build_user_prompt(lang, parasites, aside_style)
+    template = build_user_prompt(lang, parasites, aside_style, deictic_enabled=deictic_enabled, deictic_vars=deictic_vars, deictic_words=deictic_words)
 
     # Map aside style to prompt-friendly label
     aside_map = {
@@ -120,6 +170,11 @@ def call_openai(
         CHUNK_TEXT=chunk_text,
         CONTEXT_TEXT=(context_text or ""),
         TERM_HINTS=(term_hints_text or ""),
+        DEICTIC_MODE=("on" if (deictic_vars or {}).get("enabled") else "off"),
+        DEICTIC_MAX_PER_PARAGRAPH=(deictic_vars or {}).get("max_per_paragraph", ""),
+        DEICTIC_MAX_PER_FRAGMENT=(deictic_vars or {}).get("max_per_fragment", ""),
+        DEICTIC_UNKNOWN=(deictic_vars or {}).get("unknown_marker", "?"),
+        DEICTIC_WINDOW_SENTENCES=(deictic_vars or {}).get("window_sentences", ""),
     )
 
     # Build request parameters, honoring config temperature/top_p when provided
@@ -213,6 +268,7 @@ def main():
     ap.add_argument("--debug", action="store_true", help="Enable verbose logging and print all OpenAI requests/responses")
     ap.add_argument("--use-context-overlap", dest="use_context_overlap", choices=["raw","cleaned","none"], help="Source of overlap: raw ASR tail, cleaned previous tail, or none")
     ap.add_argument("--include-timecodes", dest="include_timecodes", action="store_true", default=None, help="Append timecodes to headings when available")
+    ap.add_argument("--deictic", choices=["true","false"], help="Enable or disable visible deictic anchoring (overrides config.deictic.enabled)")
     args = ap.parse_args()
 
     base = Path(__file__).parent.parent
@@ -274,6 +330,33 @@ def main():
     parasites_path = parasites_map.get(lang)
     parasites = load_list(str(base / parasites_path)) if parasites_path else []
     glossary = load_list(args.glossary) if args.glossary else []
+    # Deictic config and tokens (lazy)
+    deictic_cfg = cfg.get("deictic", {}) if isinstance(cfg.get("deictic"), dict) else {}
+    deictic_enabled = bool(deictic_cfg.get("enabled", False))
+    if args.deictic is not None:
+        deictic_enabled = (args.deictic == "true")
+    # build dict of variables to pass to the user template
+    deictic_vars = {
+        "enabled": deictic_enabled,
+        "wrapper_open": deictic_cfg.get("wrapper_open", "⟦"),
+        "wrapper_close": deictic_cfg.get("wrapper_close", "⟧"),
+        "prefix": deictic_cfg.get("prefix", "anchor:"),
+        "name_quotes_open": deictic_cfg.get("name_quotes_open", "«"),
+        "name_quotes_close": deictic_cfg.get("name_quotes_close", "»"),
+        "decorate": deictic_cfg.get("decorate", "plain"),
+        "unknown_marker": deictic_cfg.get("unknown_marker", "?"),
+        "max_per_paragraph": int(deictic_cfg.get("max_per_paragraph", 3) or 3),
+        "max_per_fragment": int(deictic_cfg.get("max_per_fragment", 12) or 12),
+        "window_sentences": int(deictic_cfg.get("window_sentences", 5) or 5),
+        "data_dir": deictic_cfg.get("data_dir", "./data"),
+    }
+    deictic_words = []
+    if deictic_enabled:
+        lang_map = {"uk": "uk", "ru": "ru", "en": "en", "de": "de"}
+        lcode = lang_map.get(lang, lang)
+        words_path = Path(deictic_vars["data_dir"]) / f"deictic_words_{lcode}.txt"
+        if words_path.exists():
+            deictic_words = load_list(str(words_path))
 
     # Decide format
     in_path = Path(args.input)
@@ -366,6 +449,20 @@ def main():
         # Fallback to legacy system.md
         spath = base / "prompts" / "system.md"
     system_prompt = spath.read_text(encoding="utf-8")
+    # Inject system deictic section if enabled (after loading base system prompt)
+    if deictic_enabled:
+        partial_sp = base / "prompts" / "partials" / "system_deictic_insert.md"
+        try:
+            insert = partial_sp.read_text(encoding="utf-8")
+        except Exception:
+            insert = ""
+        if insert:
+            insert = insert.format(
+                DEICTIC_MAX_PER_PARAGRAPH=deictic_cfg.get("max_per_paragraph", 3),
+                DEICTIC_MAX_PER_FRAGMENT=deictic_cfg.get("max_per_fragment", 12),
+                DEICTIC_UNKNOWN=deictic_cfg.get("unknown_marker", "?"),
+            )
+            system_prompt = system_prompt.rstrip() + "\n\n" + insert + "\n"
 
     outdir = Path(args.outdir)
     outdir.mkdir(parents=True, exist_ok=True)
@@ -431,6 +528,9 @@ def main():
                 label=f"chunk {idx}/{total_chunks}",
                 context_text=context_text,
                 term_hints_text=term_hints_text,
+                deictic_enabled=deictic_enabled,
+                deictic_vars=deictic_vars,
+                deictic_words=deictic_words,
             )
         except Exception as e:
             if debug:
