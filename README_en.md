@@ -202,7 +202,7 @@ Most options can be overridden via CLI flags.
   * Currently processed without assigning timecodes to headings.
   * Will likely include an auto-standardizer to unify formats into timestamped TXT.
 * Terminology matching depends on model output; if normalization not recorded, hint won’t appear.
-* Supported languages: RU / UK / EN (filler-word dictionaries). Others can work without dictionaries.
+* Supported languages: RU / UK / EN / DE (filler-word dictionaries). Others can work without dictionaries.
 * Timecodes are approximate (per chunk start). Use smaller chunks for finer granularity.
 * Summary generation sends the full cleaned text at once:
 

@@ -203,7 +203,7 @@ Die meisten Optionen können über CLI-Parameter überschrieben werden.
   * Derzeit ohne Zeitcode-Einfügen in Überschriften.
   * Zukünftig wird ein Standardisierer implementiert, der alle SRT-Dateien in ein einheitliches TXT-Format mit Zeitstempeln konvertiert.
 * Terminologiekontrolle basiert auf Kommentaren des Modells; wenn keine Normalisierung erkannt wurde, fehlt der Hinweis.
-* Unterstützte Sprachen: RU / UK / EN (mit Füllwortlisten). Andere Sprachen funktionieren ohne Wörterlisten.
+* Unterstützte Sprachen: RU / UK / EN / DE (mit Füllwortlisten). Andere Sprachen funktionieren ohne Wörterlisten.
 * Zeitcodes sind nur annähernd; sie beziehen sich auf den Beginn jedes Blocks. Für präzisere Ergebnisse kleinere Blockgrößen verwenden.
 * Bei der Zusammenfassung wird der gesamte bereinigte Text auf einmal gesendet:
 

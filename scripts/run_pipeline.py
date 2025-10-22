@@ -205,7 +205,7 @@ def main():
     ap.add_argument("--input", required=True, help="Path to .srt or .txt")
     ap.add_argument("--format", choices=["srt", "txt"], help="Force input format (otherwise inferred)")
     ap.add_argument("--outdir", default="output", help="Output directory")
-    ap.add_argument("--lang", required=True, choices=["ru", "uk", "en"], help="Language of the lecture")
+    ap.add_argument("--lang", required=True, choices=["ru", "uk", "en", "de"], help="Language of the lecture")
     ap.add_argument("--glossary", default=None, help="Path to glossary terms (one per line)")
     # effective chunking params
     ap.add_argument("--txt-chunk-chars", type=int, default=None)

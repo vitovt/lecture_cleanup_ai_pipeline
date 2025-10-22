@@ -1,7 +1,7 @@
 # Global configuration for the lecture cleanup pipeline
 # You can override most of these via CLI flags in run_pipeline.py
 
-language: ru            # one of: ru, uk, en
+language: ru            # one of: ru, uk, en, de
 model: gpt-5-mini          # choose your model, e.g., gpt-5.1 / gpt-4.1 / o4-mini
 temperature: 1
 top_p: 1.0
@@ -61,3 +61,4 @@ parasites:
   ru: data/parasites_ru.txt
   uk: data/parasites_uk.txt
   en: data/parasites_en.txt
+  de: data/parasites_de.txt
