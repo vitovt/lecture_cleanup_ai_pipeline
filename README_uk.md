@@ -66,15 +66,15 @@
 - Один файл:
 
   ```bash
-  ./lecture_cleanup.sh --input input/lecture.txt --lang=uk
+  ./lecture_cleanup.sh --input input/lecture.txt --lang uk
   ```
 
 - Пакетна обробка всіх `.txt` у каталозі (за замовчуванням `./input`):
 
   ```bash
-  ./bulk_cleanup.sh --lang=uk
+  ./bulk_cleanup.sh --lang uk
   # або в іншій теці
-  ./bulk_cleanup.sh --lang=uk --indir=./notes
+  ./bulk_cleanup.sh --lang uk --indir ./notes
   ```
 
 Файли виходу зберігаються у `./output`:
@@ -99,24 +99,24 @@
 
 ```bash
 # Базовий виклик (українська, TXT визначиться автоматично)
-./lecture_cleanup.sh --input input/lec1.txt --lang=uk
+./lecture_cleanup.sh --input input/lec1.txt --lang uk
 
 # SRT без тайм-кодів у заголовках
 (SRT ще в розробці)
-./lecture_cleanup.sh --input input/lec1.srt --lang=uk --format srt
+./lecture_cleanup.sh --input input/lec1.srt --lang uk --format srt
 
 # Налаштування розміру та перекриття
-./lecture_cleanup.sh --input input/lec1.txt --lang=uk \
+./lecture_cleanup.sh --input input/lec1.txt --lang uk \
   --txt-chunk-chars 6000 --txt-overlap-chars 600
 
 # Звідки брати контекст для перекриття (overlap)
-./lecture_cleanup.sh --input input/lec1.txt --lang=uk --use-context-overlap cleaned
+./lecture_cleanup.sh --input input/lec1.txt --lang uk --use-context-overlap cleaned
 
 # З глосарієм і тайм-кодами
-./lecture_cleanup.sh --input input/lec1.txt --lang=uk --glossary data/my_glossary.txt --include-timecodes
+./lecture_cleanup.sh --input input/lec1.txt --lang uk --glossary data/my_glossary.txt --include-timecodes
 
 # Увімкнути відлагодження
-./lecture_cleanup.sh --input input/lec1.txt --lang=uk --debug
+./lecture_cleanup.sh --input input/lec1.txt --lang uk --debug
 ```
 
 ## Конфігурація (`config.yaml`)

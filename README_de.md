@@ -84,14 +84,14 @@ Es wird empfohlen, die `.sh`-Wrapper zu verwenden, da sie `.venv` aktivieren und
 * **Einzeldatei:**
 
   ```bash
-  ./lecture_cleanup.sh --input input/lecture.txt --lang=uk
+  ./lecture_cleanup.sh --input input/lecture.txt --lang uk
   ```
 * **Stapelverarbeitung aller `.txt`-Dateien (Standard: `./input`):**
 
   ```bash
-  ./bulk_cleanup.sh --lang=uk
+  ./bulk_cleanup.sh --lang uk
   # oder in einem anderen Verzeichnis
-  ./bulk_cleanup.sh --lang=uk --indir=./notes
+  ./bulk_cleanup.sh --lang uk --indir ./notes
   ```
 
 **Ausgabedateien** werden im Verzeichnis `./output` gespeichert:
@@ -118,23 +118,23 @@ Diese Parameter werden über die `.sh`-Skripte an `scripts/run_pipeline.py` übe
 
 ```bash
 # Standardlauf (Ukrainisch, TXT automatisch erkannt)
-./lecture_cleanup.sh --input input/lec1.txt --lang=uk
+./lecture_cleanup.sh --input input/lec1.txt --lang uk
 
 # SRT (noch experimentell)
-./lecture_cleanup.sh --input input/lec1.srt --lang=uk --format srt
+./lecture_cleanup.sh --input input/lec1.srt --lang uk --format srt
 
 # Anpassung der Blockgröße und Überlappung
-./lecture_cleanup.sh --input input/lec1.txt --lang=uk \
+./lecture_cleanup.sh --input input/lec1.txt --lang uk \
   --txt-chunk-chars 6000 --txt-overlap-chars 600
 
 # Überlappung mit bereinigtem Kontext
-./lecture_cleanup.sh --input input/lec1.txt --lang=uk --use-context-overlap cleaned
+./lecture_cleanup.sh --input input/lec1.txt --lang uk --use-context-overlap cleaned
 
 # Mit Glossar und Zeitcodes
-./lecture_cleanup.sh --input input/lec1.txt --lang=uk --glossary data/my_glossary.txt --include-timecodes
+./lecture_cleanup.sh --input input/lec1.txt --lang uk --glossary data/my_glossary.txt --include-timecodes
 
 # Debug-Modus aktivieren
-./lecture_cleanup.sh --input input/lec1.txt --lang=uk --debug
+./lecture_cleanup.sh --input input/lec1.txt --lang uk --debug
 ```
 
 ## Konfiguration (`config.yaml`)
