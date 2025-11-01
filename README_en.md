@@ -20,6 +20,18 @@ It preserves the content without loss, corrects punctuation, capitalization, and
 8. Joins all blocks into a final Markdown document; optionally appends a non-authored summary.
 9. Generates a QC report showing how much each fragment was changed.
 
+## Screenshohts
+
+<img width="500" alt="cleanup-pipeline01" src="https://github.com/user-attachments/assets/9a096d90-fe5f-4c7a-8170-3dd25917ee8d" />
+<img width="500" alt="cleanup-pipeline02" src="https://github.com/user-attachments/assets/20d11eda-0628-49cf-a987-62340eb19d77" />
+
+---
+
+<img width="500" alt="cleanup-pipeline03" src="https://github.com/user-attachments/assets/bb4cc7b1-eba5-401e-9b50-be5a65bd235e" />
+<img width="500" alt="cleanup-pipeline04" src="https://github.com/user-attachments/assets/0d992cd8-ce0f-4f3a-8396-e96e09beeb2d" />
+
+---
+
 ## Algorithm (Detailed)
 
 * **Input lines:**
