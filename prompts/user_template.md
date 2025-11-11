@@ -10,7 +10,9 @@ Tasks (ASR-aware cleanup + reader-friendly structure within mode limits):
 2) Correct unambiguous ASR mis-hearings and homophones by context; never normalize “by frequency”. If unsure, keep original.
 3) Keep code, math, filenames, commands, citations unchanged (except punctuation/casing fixes around them).
 4) Structure only where implied: suitable headings, bullet/numbered lists, **bold**/**italics**; visually separate asides/jokes using the specified style.
-5) Apply reordering/splitting/merging only if permitted by the active System mode. No additions; preserve meaning 1:1.
+5) For headings use #, ##, ###, ####, #####
+6) For short explanations aside from the main idea use markdown quote >
+7) Apply reordering/splitting/merging only if permitted by the active System mode. No additions; preserve meaning 1:1.
 
 Important continuity policy:
 - You may be given a read-only CONTEXT to ensure continuity. It is glue only.
