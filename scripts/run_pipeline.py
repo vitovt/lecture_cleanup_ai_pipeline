@@ -125,6 +125,12 @@ def call_llm(
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": prompt},
     ]
+    if debug:
+        print("===== DEBUG: LLM request BEGIN" + (f" [{label}]" if label else "") + " =====")
+        print(f"Model: {model} | temperature: {temperature} | top_p: {top_p}")
+        print("-- System prompt --\n" + system_prompt)
+        print("-- User prompt --\n" + prompt)
+        print("===== DEBUG: LLM request END =====")
     out_text = adapter.generate(
         messages,
         model=model,
@@ -185,7 +191,7 @@ def main():
     # effective chunking params
     ap.add_argument("--txt-chunk-chars", type=int, default=None)
     ap.add_argument("--txt-overlap-chars", type=int, default=None)
-    ap.add_argument("--debug", action="store_true", help="Enable verbose logging and print LLM requests/responses (no secrets)")
+    ap.add_argument("--debug", action="store_true", help="Enable verbose logging and print full LLM requests/responses (large, sensitive)")
     ap.add_argument("--llm-provider", default=None, help="Override LLM provider: openai|gemini|dummy|...")
     ap.add_argument("--use-context-overlap", dest="use_context_overlap", choices=["raw","cleaned","none"], help="Source of overlap: raw ASR tail, cleaned previous tail, or none")
     ap.add_argument("--include-timecodes", dest="include_timecodes", action="store_true", default=None, help="Append timecodes to headings when available")
