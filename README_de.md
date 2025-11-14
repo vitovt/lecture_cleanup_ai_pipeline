@@ -143,6 +143,7 @@ Diese Parameter werden über die `.sh`-Skripte an `scripts/run_pipeline.py` übe
 * `--use-context-overlap {raw,cleaned,none}` — Quelle des Kontexts für den nächsten Block
 * `--debug` — Debug-Logs (ohne vollständige Prompts/Antworten)
 * `--trace` — sehr ausführlich; druckt vollständige LLM-Prompts und -Antworten
+* `--request-delay <Sekunden>` — Verzögerung zwischen LLM-Anfragen (0 = aus)
 
 **Beispiele**
 
@@ -194,6 +195,7 @@ Die meisten Optionen können über CLI-Parameter überschrieben werden.
 * `append_summary`: Zusammenfassung am Ende hinzufügen
 * `summary_heading`: Überschrift des Zusammenfassungsabschnitts
 * `parasites`: Pfade zu Füllwortlisten je Sprache
+* `llm.request_delay_seconds`: Verzögerung zwischen LLM-Anfragen (Sekunden); hilft gegen Rate Limits; 0 = aus
 
 ### Überlappungs-Kontext (Overlap)
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import os, argparse, yaml, sys, csv, traceback
+import os, argparse, yaml, sys, csv, traceback, time
 from typing import List, Optional, Dict
 from pathlib import Path
 
@@ -195,6 +195,7 @@ def main():
     ap.add_argument("--debug", action="store_true", help="Enable debug logging (no full prompts/responses)")
     ap.add_argument("--trace", action="store_true", help="Enable trace logging: print full LLM prompts and responses (large, sensitive)")
     ap.add_argument("--llm-provider", default=None, help="Override LLM provider: openai|gemini|dummy|...")
+    ap.add_argument("--request-delay", type=float, default=None, help="Delay in seconds between LLM requests (0 = no delay)")
     ap.add_argument("--use-context-overlap", dest="use_context_overlap", choices=["raw","cleaned","none"], help="Source of overlap: raw ASR tail, cleaned previous tail, or none")
     ap.add_argument("--include-timecodes", dest="include_timecodes", action="store_true", default=None, help="Append timecodes to headings when available")
     args = ap.parse_args()
@@ -244,6 +245,15 @@ def main():
     model = _llm["model"]
     temperature = _llm["temperature"]
     top_p = _llm["top_p"]
+    # Delay between LLM requests (seconds). Config llm.request_delay_seconds; CLI overrides.
+    cfg_llm = cfg.get("llm", {}) if isinstance(cfg.get("llm"), dict) else {}
+    request_delay = 0.0
+    try:
+        request_delay = float(cfg_llm.get("request_delay_seconds", 0) or 0)
+    except Exception:
+        request_delay = 0.0
+    if args.request_delay is not None:
+        request_delay = max(0.0, float(args.request_delay))
     include_timecodes = bool(cfg.get("include_timecodes_in_headings", True))
     aside_style = cfg.get("highlight_asides_style", "italic")
     # Overlap source (backward compatible)
@@ -265,7 +275,7 @@ def main():
     content_mode = (cfg.get("content_mode", "normal") or "normal").strip().lower()
     suppress_edit_comments = bool(cfg.get("suppress_edit_comments", True))
     if debug:
-        print(f"[DEBUG] Settings -> provider={_llm['provider']}, model={model}, temperature={temperature}, top_p={top_p}, lang={lang}")
+        print(f"[DEBUG] Settings -> provider={_llm['provider']}, model={model}, temperature={temperature}, top_p={top_p}, lang={lang}, delay={request_delay}s")
         print(f"[DEBUG] Options -> include_timecodes={include_timecodes}, aside_style={aside_style}")
         print(f"[DEBUG] Overlap -> source={overlap_source}, sentence_delimiters={sentence_delimiters!r}, stitch_dedup_window_chars={stitch_dedup_window}")
         print(f"[DEBUG] Content mode -> {content_mode}; suppress_edit_comments={suppress_edit_comments}")
@@ -428,6 +438,9 @@ def main():
         term_hints_text = serialize_term_hints_json(coalesced_for_hints)
         original_text = fragment_text
         try:
+            # Optional delay between requests (skip before first chunk)
+            if request_delay > 0 and idx > 1:
+                time.sleep(request_delay)
             cleaned = call_llm(
                 adapter=adapter,
                 model=model,
@@ -521,6 +534,8 @@ def main():
     # Append summary
     if cfg.get("append_summary", True):
         print("Generating summary…")
+        if request_delay > 0:
+            time.sleep(request_delay)
         try:
             summary = call_llm_summary(
                 adapter, model, system_prompt, full_markdown,

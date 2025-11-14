@@ -142,6 +142,7 @@ These flags are passed to `scripts/run_pipeline.py` via the `.sh` wrappers.
 * `--use-context-overlap {raw,cleaned,none}` — type of context for next fragment
 * `--debug` — debug logs (no full prompts/responses)
 * `--trace` — very verbose; prints full LLM prompts and responses (sensitive/large)
+* `--request-delay <seconds>` — delay between LLM requests (0 disables)
 
 **Examples**
 
@@ -193,6 +194,7 @@ Most options can be overridden via CLI flags.
 * `append_summary`: append summary at end of document
 * `summary_heading`: heading title for summary section
 * `parasites`: paths to filler-word lists by language
+* `llm.request_delay_seconds`: delay between LLM requests (seconds); helps avoid rate limits; 0 disables
 
 ### Overlap Context Source
 

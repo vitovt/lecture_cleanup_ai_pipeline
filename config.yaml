@@ -7,6 +7,9 @@ language: ru            # one of: ru, uk, en, de
 # top-level model/temperature/top_p below.
 llm:
   provider: gemini      # openai | gemini | dummy | ...
+  # Optional delay (seconds) between consecutive LLM requests (chunks and summary).
+  # Helps to avoid provider rate limits. 0 disables. CLI flag: --request-delay
+  request_delay_seconds: 120
   openai:
     model: gpt-5-mini          # choose your model, e.g., gpt-5, gpt-5-mini, gpt-5-nano, gpt-5.1 / gpt-4.1 / o4-mini https://platform.openai.com/docs/models
     temperature: 1
