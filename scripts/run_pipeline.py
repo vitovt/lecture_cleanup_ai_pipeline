@@ -369,6 +369,10 @@ def main():
     known_terms = {}
     prev_raw_fragment = ""
     last_cleaned_fragment = ""
+    # Keep previous plain cleaned text for dedup window (avoid wrapper comments interference)
+    prev_for_dedup: Optional[str] = None
+    effective_chunk_chars = int(cfg.get("txt_chunk_chars", 6500) or 6500)
+
     for idx, ch in enumerate(chunks, 1):
         print(f"[{idx}/{total_chunks}] Processing…", end="", flush=True)
         # Prepare raw fragment for this chunk and compute context from previous chunk based on configured source
@@ -454,9 +458,9 @@ def main():
             if debug:
                 print(f"[DEBUG] Adding timecodes to chunk`s headings; start: {ch['start']}")
             cleaned = add_timecodes_to_headings(cleaned, ch["start"], as_link=True)
-        # Stitch-time deduplication against previous output
-        if cleaned_blocks and stitch_dedup_window > 0:
-            prev = cleaned_blocks[-1]
+        # Stitch-time deduplication against previous output (use plain previous text)
+        if prev_for_dedup and stitch_dedup_window > 0:
+            prev = prev_for_dedup
             deduped, removed, mode = dedup_overlapping_boundary(prev, cleaned, stitch_dedup_window)
             if removed > 0 and debug:
                 print(f"[DEBUG] Dedup removed {removed} {('lines' if mode=='lines' else mode)} from start of chunk {idx} before stitching")
@@ -464,7 +468,13 @@ def main():
         # Optionally strip edit comments in the final output
         if suppress_edit_comments:
             cleaned = strip_edit_comments(cleaned)
-        cleaned_blocks.append(cleaned)
+        # Wrap each part with start/end comments
+        start_comment = f"<!-- STARTING processing; Chunk size: {effective_chunk_chars}; Part [{idx}/{total_chunks}] -->"
+        end_comment = f"<!-- END of part [{idx}/{total_chunks}] -->"
+        wrapped = f"{start_comment}\n{cleaned}\n{end_comment}"
+        cleaned_blocks.append(wrapped)
+        # Update previous-plain text for next dedup window
+        prev_for_dedup = cleaned
         sim = similarity_ratio(original_text, cleaned)
         qc_rows.append({
             "chunk_id": idx,
