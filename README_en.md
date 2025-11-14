@@ -102,6 +102,13 @@ It’s recommended to run via provided `.sh` wrappers — they activate `.venv` 
 
 The core pipeline is provider-agnostic and talks to a unified adapter interface. To add a new provider, copy `aiadapters/dummy_adapter.py` as a template, implement `LLMAdapter.generate`, and register it in `aiadapters/factory.py`.
 
+### Logging verbosity
+
+- Config: set `logging.level` in `config.yaml` to `info`, `debug`, or `trace`.
+- CLI overrides:
+  - `--debug` → debug logs (no full prompts/responses)
+  - `--trace` → very verbose; prints full LLM prompts and responses (sensitive/large)
+
 * **Single file:**
 
   ```bash
@@ -133,7 +140,8 @@ These flags are passed to `scripts/run_pipeline.py` via the `.sh` wrappers.
 * `--txt-overlap-chars` — overlap size in characters
 * `--include-timecodes` — include timecodes in headings (for TXT)
 * `--use-context-overlap {raw,cleaned,none}` — type of context for next fragment
-* `--debug` — detailed logging (includes prompts/responses)
+* `--debug` — debug logs (no full prompts/responses)
+* `--trace` — very verbose; prints full LLM prompts and responses (sensitive/large)
 
 **Examples**
 
@@ -154,8 +162,11 @@ These flags are passed to `scripts/run_pipeline.py` via the `.sh` wrappers.
 # With glossary and timecodes
 ./lecture_cleanup.sh --input input/lec1.txt --lang uk --glossary data/my_glossary.txt --include-timecodes
 
-# Enable debug mode
+# Enable debug (no full texts)
 ./lecture_cleanup.sh --input input/lec1.txt --lang uk --debug
+
+# Enable trace (full prompts and responses)
+./lecture_cleanup.sh --input input/lec1.txt --lang uk --trace
 ```
 
 ## Configuration (`config.yaml`)
@@ -215,7 +226,7 @@ Most options can be overridden via CLI flags.
 
 * Create `.env` and never commit your API key.
 * Keep `suppress_edit_comments: false` for debugging changes.
-* Use `--debug` to inspect prompts and responses.
+* Use `--trace` to inspect full prompts and responses; use `--debug` for metadata without full text.
 
 ## Limitations
 

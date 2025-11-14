@@ -103,6 +103,13 @@ Es wird empfohlen, die `.sh`-Wrapper zu verwenden, da sie `.venv` aktivieren und
 
 Die Pipeline ist anbieterunabhängig und verwendet eine einheitliche Adapter-Schnittstelle. Um einen neuen Provider hinzuzufügen, `aiadapters/dummy_adapter.py` kopieren, `LLMAdapter.generate` implementieren und in `aiadapters/factory.py` registrieren.
 
+### Protokollierungsstufe
+
+- Konfiguration: `logging.level` in `config.yaml` auf `info`, `debug` oder `trace` setzen.
+- CLI-Überschreibungen:
+  - `--debug` → Debug-Logs (ohne vollständige Prompts/Antworten)
+  - `--trace` → sehr ausführlich; druckt vollständige LLM-Prompts und -Antworten (groß, sensibel)
+
 * **Einzeldatei:**
 
   ```bash
@@ -134,7 +141,8 @@ Diese Parameter werden über die `.sh`-Skripte an `scripts/run_pipeline.py` übe
 * `--txt-overlap-chars` — Überlappung in Zeichen
 * `--include-timecodes` — Zeitcodes in Überschriften einfügen (für TXT)
 * `--use-context-overlap {raw,cleaned,none}` — Quelle des Kontexts für den nächsten Block
-* `--debug` — detailliertes Logging (inkl. Prompts und Antworten)
+* `--debug` — Debug-Logs (ohne vollständige Prompts/Antworten)
+* `--trace` — sehr ausführlich; druckt vollständige LLM-Prompts und -Antworten
 
 **Beispiele**
 
@@ -155,8 +163,11 @@ Diese Parameter werden über die `.sh`-Skripte an `scripts/run_pipeline.py` übe
 # Mit Glossar und Zeitcodes
 ./lecture_cleanup.sh --input input/lec1.txt --lang uk --glossary data/my_glossary.txt --include-timecodes
 
-# Debug-Modus aktivieren
+# Debug-Modus aktivieren (ohne vollständige Texte)
 ./lecture_cleanup.sh --input input/lec1.txt --lang uk --debug
+
+# Trace aktivieren (mit vollständigen Prompts/Antworten)
+./lecture_cleanup.sh --input input/lec1.txt --lang uk --trace
 ```
 
 ## Konfiguration (`config.yaml`)
@@ -216,7 +227,7 @@ Die meisten Optionen können über CLI-Parameter überschrieben werden.
 
 * Lege eine `.env`-Datei an und speichere den API-Schlüssel nicht im Git-Repository.
 * Für Debug-Zwecke `suppress_edit_comments: false` in `config.yaml` lassen.
-* `--debug` hilft beim Analysieren von Prompts und Antworten.
+* `--trace` hilft beim Analysieren vollständiger Prompts und Antworten; `--debug` zeigt Metadaten ohne vollständige Texte.
 
 ## Einschränkungen
 
