@@ -90,6 +90,7 @@ def call_llm(
     temperature: float = 1.0,
     top_p: float = None,
     debug: bool = False,
+    trace: bool = False,
     label: str = None,
     context_text: str = "",
     term_hints_text: str = "",
@@ -125,27 +126,27 @@ def call_llm(
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": prompt},
     ]
-    if debug:
-        print("===== DEBUG: LLM request BEGIN" + (f" [{label}]" if label else "") + " =====")
+    if trace:
+        print("===== TRACE: LLM request BEGIN" + (f" [{label}]" if label else "") + " =====")
         print(f"Model: {model} | temperature: {temperature} | top_p: {top_p}")
         print("-- System prompt --\n" + system_prompt)
         print("-- User prompt --\n" + prompt)
-        print("===== DEBUG: LLM request END =====")
+        print("===== TRACE: LLM request END =====")
     out_text = adapter.generate(
         messages,
         model=model,
         temperature=temperature,
         top_p=top_p,
-        debug=debug,
+        debug=(debug or trace),
         label=label,
     )
-    if debug:
-        print("===== DEBUG: LLM response BEGIN" + (f" [{label}]" if label else "") + " =====")
+    if trace:
+        print("===== TRACE: LLM response BEGIN" + (f" [{label}]" if label else "") + " =====")
         print(out_text)
-        print("===== DEBUG: LLM response END =====")
+        print("===== TRACE: LLM response END =====")
     return out_text
 
-def call_llm_summary(adapter: LLMAdapter, model: str, system_prompt: str, full_markdown: str, temperature: float = 1.0, top_p: float = None, debug: bool = False, label: str = None) -> str:
+def call_llm_summary(adapter: LLMAdapter, model: str, system_prompt: str, full_markdown: str, temperature: float = 1.0, top_p: float = None, debug: bool = False, trace: bool = False, label: str = None) -> str:
     from pathlib import Path
     summary_tmpl_path = Path(__file__).parent.parent / "prompts" / "summary_prompt.md"
     with open(summary_tmpl_path, "r", encoding="utf-8") as f:
@@ -154,25 +155,25 @@ def call_llm_summary(adapter: LLMAdapter, model: str, system_prompt: str, full_m
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": sum_prompt + "\n\n<<<\n" + full_markdown + "\n>>>"},
     ]
-    if debug:
-        print("===== DEBUG: Summary request BEGIN" + (f" [{label}]" if label else "") + " =====")
+    if trace:
+        print("===== TRACE: Summary request BEGIN" + (f" [{label}]" if label else "") + " =====")
         print(f"Model: {model} | temperature: {temperature} | top_p: {top_p}")
         from pathlib import Path as _Path
         print("-- User prompt (summary) --\n" + (open((_Path(__file__).parent.parent / "prompts" / "summary_prompt.md"), "r", encoding="utf-8").read()))
         print("-- Document (full markdown) --\n" + full_markdown)
-        print("===== DEBUG: Summary request END =====")
+        print("===== TRACE: Summary request END =====")
     out_text = adapter.generate(
         messages,
         model=model,
         temperature=temperature,
         top_p=top_p,
-        debug=debug,
+        debug=(debug or trace),
         label=label,
     )
-    if debug:
-        print("===== DEBUG: Summary response BEGIN" + (f" [{label}]" if label else "") + " =====")
+    if trace:
+        print("===== TRACE: Summary response BEGIN" + (f" [{label}]" if label else "") + " =====")
         print(out_text)
-        print("===== DEBUG: Summary response END =====")
+        print("===== TRACE: Summary response END =====")
     return out_text
 
 def main():
@@ -191,7 +192,8 @@ def main():
     # effective chunking params
     ap.add_argument("--txt-chunk-chars", type=int, default=None)
     ap.add_argument("--txt-overlap-chars", type=int, default=None)
-    ap.add_argument("--debug", action="store_true", help="Enable verbose logging and print full LLM requests/responses (large, sensitive)")
+    ap.add_argument("--debug", action="store_true", help="Enable debug logging (no full prompts/responses)")
+    ap.add_argument("--trace", action="store_true", help="Enable trace logging: print full LLM prompts and responses (large, sensitive)")
     ap.add_argument("--llm-provider", default=None, help="Override LLM provider: openai|gemini|dummy|...")
     ap.add_argument("--use-context-overlap", dest="use_context_overlap", choices=["raw","cleaned","none"], help="Source of overlap: raw ASR tail, cleaned previous tail, or none")
     ap.add_argument("--include-timecodes", dest="include_timecodes", action="store_true", default=None, help="Append timecodes to headings when available")
@@ -199,9 +201,23 @@ def main():
 
     base = Path(__file__).parent.parent
     cfg = read_config(str(base / "config.yaml"))
-    debug = bool(args.debug)
+    # Resolve logging verbosity from config and CLI
+    cfg_level = None
+    if isinstance(cfg.get("logging"), dict):
+        cfg_level = (cfg.get("logging", {}).get("level") or "").strip().lower()
+    elif isinstance(cfg.get("debug_level"), str):
+        cfg_level = (cfg.get("debug_level") or "").strip().lower()
+
+    level = cfg_level if cfg_level in ("debug", "trace", "info") else "info"
+    if args.debug:
+        level = "debug"
+    if args.trace:
+        level = "trace"
+
+    debug = (level in ("debug", "trace"))
+    trace = (level == "trace")
     if debug:
-        print("Debug mode enabled")
+        print(f"Debug mode: {level}")
 
     # Load .env (keys for any provider); adapter will validate required ones
     load_env_from_env_file(base)
@@ -424,6 +440,7 @@ def main():
                 temperature=temperature,
                 top_p=top_p,
                 debug=debug,
+                trace=trace,
                 label=f"chunk {idx}/{total_chunks}",
                 context_text=context_text,
                 term_hints_text=term_hints_text,
@@ -508,7 +525,7 @@ def main():
             summary = call_llm_summary(
                 adapter, model, system_prompt, full_markdown,
                 temperature=temperature, top_p=top_p,
-                debug=debug, label="summary",
+                debug=debug, trace=trace, label="summary",
             )
         except Exception as e:
             provider_name = adapter.name()

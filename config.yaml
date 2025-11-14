@@ -72,3 +72,17 @@ parasites:
   uk: data/parasites_uk.txt
   en: data/parasites_en.txt
   de: data/parasites_de.txt
+
+# Logging verbosity controls how much the pipeline prints:
+#   - info  : concise progress + errors only; no stack traces; never prints full
+#             LLM prompts/responses. Suitable for normal runs.
+#   - debug : adds diagnostics (provider, model, temperature/top_p, chunk/overlap info)
+#             and stack traces on errors; still does NOT print full prompts/responses.
+#   - trace : prints EVERYTHING relevant, including full LLM requests and responses
+#             for chunks and summary. This can be large and may contain sensitive
+#             content. Use only for troubleshooting.
+# You can override this via CLI flags:
+#   --debug  -> sets level=debug
+#   --trace  -> sets level=trace (implies debug)
+logging:
+  level: info
