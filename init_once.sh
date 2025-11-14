@@ -14,4 +14,4 @@ python3 -m venv $DIRECTORY
 
 # Activate venv
 source "$DIRECTORY/bin/activate"
-pip install pyyaml openai
+pip install pyyaml openai google-generativeai

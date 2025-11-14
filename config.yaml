@@ -2,9 +2,19 @@
 # You can override most of these via CLI flags in run_pipeline.py
 
 language: ru            # one of: ru, uk, en, de
-model: gpt-5-mini          # choose your model, e.g., gpt-5.1 / gpt-4.1 / o4-mini
-temperature: 1
-top_p: 1.0
+
+# LLM settings (new, provider-aware). Backward-compatible with legacy
+# top-level model/temperature/top_p below.
+llm:
+  provider: gemini      # openai | gemini | dummy | ...
+  openai:
+    model: gpt-5-mini          # choose your model, e.g., gpt-5, gpt-5-mini, gpt-5-nano, gpt-5.1 / gpt-4.1 / o4-mini https://platform.openai.com/docs/models
+    temperature: 1
+    top_p: 1.0
+  gemini:
+    model: gemini-2.5-pro   # model like: gemini-2.5-pro, gemini-2.5-flash, gemini-2.5-flash-lite https://ai.google.dev/gemini-api/docs/models
+    temperature: 1
+    top_p: 1.0
 
 # Input format control. When set, overrides auto-detection by file extension.
 # One of: srt(VIP), txt (CLI --format still overrides this if provided)

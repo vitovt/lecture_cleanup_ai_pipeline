@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 import os, argparse, yaml, sys, csv, traceback
-from typing import List, Optional
-from openai import OpenAI
+from typing import List, Optional, Dict
 from pathlib import Path
 
-from utils import (
+from aiadapters.factory import create_llm_adapter
+from aiadapters.base import LLMAdapter
+
+from scripts.utils import (
     add_timecodes_to_headings,
     similarity_ratio,
     parse_timestamped_txt_lines,
@@ -39,39 +41,35 @@ def read_config(cfg_path: str) -> dict:
     with open(cfg_path, "r", encoding="utf-8") as f:
         return yaml.safe_load(f)
 
-def load_api_key_from_env_file(root: Path) -> bool:
-    """Load OPENAI_API_KEY from a .env file at project root.
+def load_env_from_env_file(root: Path) -> bool:
+    """Load key=value pairs from a .env file into process environment.
 
-    Prefers .env over existing environment variable. Returns True if a key
-    was found in .env and set into os.environ, else False.
+    Supports optional 'export ' prefix. Returns True if at least one key
+    from the file was set.
     """
     env_path = root / ".env"
     if not env_path.exists():
         return False
+    loaded_any = False
     try:
         with open(env_path, "r", encoding="utf-8", errors="ignore") as f:
             for raw in f:
                 line = raw.strip()
                 if not line or line.startswith("#"):
                     continue
-                # support optional 'export ' prefix
                 if line.lower().startswith("export "):
                     line = line[7:].lstrip()
                 if "=" not in line:
                     continue
                 k, v = line.split("=", 1)
                 k = k.strip()
-                if k != "OPENAI_API_KEY":
-                    continue
                 v = v.strip().strip('"').strip("'")
-                if v:
-                    os.environ["OPENAI_API_KEY"] = v
-                    print("Loaded OPENAI_API_KEY from .env")
-                    return True
+                if k and v:
+                    os.environ[k] = v
+                    loaded_any = True
     except Exception:
-        # Fail silent, fallback to environment
         pass
-    return False
+    return loaded_any
 
 def build_user_prompt(lang: str, parasites: List[str], aside_style: str) -> str:
     # load template
@@ -80,8 +78,8 @@ def build_user_prompt(lang: str, parasites: List[str], aside_style: str) -> str:
         tmpl = f.read()
     return tmpl
 
-def call_openai(
-    client: OpenAI,
+def call_llm(
+    adapter: LLMAdapter,
     model: str,
     system_prompt: str,
     chunk_text: str,
@@ -123,75 +121,52 @@ def call_openai(
     )
 
     # Build request parameters, honoring config temperature/top_p when provided
-    params = {
-        "model": model,
-        "temperature": temperature,
-        "input": [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": prompt},
-        ],
-    }
-    if top_p is not None:
-        params["top_p"] = top_p
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": prompt},
+    ]
+    out_text = adapter.generate(
+        messages,
+        model=model,
+        temperature=temperature,
+        top_p=top_p,
+        debug=debug,
+        label=label,
+    )
     if debug:
-        print("===== DEBUG: OpenAI request BEGIN" + (f" [{label}]" if label else "") + " =====")
-        print(f"Model: {model} | temperature: {temperature} | top_p: {top_p}")
-        print("-- System prompt --\n" + system_prompt)
-        print("-- User prompt --\n" + prompt)
-        print("===== DEBUG: OpenAI request END =====")
-    resp = client.responses.create(**params)
-    # Decide output text once to allow logging
-    out_text = None
-    try:
-        if resp.output and len(resp.output) and resp.output[0].content and len(resp.output[0].content):
-            out_text = resp.output_text
-    except Exception:
-        out_text = None
-    if out_text is None:
-        try:
-            out_text = resp.output_text
-        except Exception:
-            out_text = ""
-    if debug:
-        print("===== DEBUG: OpenAI response BEGIN" + (f" [{label}]" if label else "") + " =====")
+        print("===== DEBUG: LLM response BEGIN" + (f" [{label}]" if label else "") + " =====")
         print(out_text)
-        print("===== DEBUG: OpenAI response END =====")
+        print("===== DEBUG: LLM response END =====")
     return out_text
 
-def call_openai_summary(client: OpenAI, model: str, system_prompt: str, full_markdown: str, temperature: float = 1.0, top_p: float = None, debug: bool = False, label: str = None) -> str:
+def call_llm_summary(adapter: LLMAdapter, model: str, system_prompt: str, full_markdown: str, temperature: float = 1.0, top_p: float = None, debug: bool = False, label: str = None) -> str:
     from pathlib import Path
     summary_tmpl_path = Path(__file__).parent.parent / "prompts" / "summary_prompt.md"
     with open(summary_tmpl_path, "r", encoding="utf-8") as f:
         sum_prompt = f.read()
-    params = {
-        "model": model,
-        "temperature": temperature,
-        "input": [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": sum_prompt + "\n\n<<<\n" + full_markdown + "\n>>>"},
-        ],
-    }
-    if top_p is not None:
-        params["top_p"] = top_p
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": sum_prompt + "\n\n<<<\n" + full_markdown + "\n>>>"},
+    ]
     if debug:
-        print("===== DEBUG: OpenAI request BEGIN" + (f" [{label}]" if label else "") + " =====")
+        print("===== DEBUG: Summary request BEGIN" + (f" [{label}]" if label else "") + " =====")
         print(f"Model: {model} | temperature: {temperature} | top_p: {top_p}")
-        print("-- System prompt --\n" + system_prompt)
-        # Show entire request for transparency (can be large)
         from pathlib import Path as _Path
         print("-- User prompt (summary) --\n" + (open((_Path(__file__).parent.parent / "prompts" / "summary_prompt.md"), "r", encoding="utf-8").read()))
         print("-- Document (full markdown) --\n" + full_markdown)
-        print("===== DEBUG: OpenAI request END =====")
-    resp = client.responses.create(**params)
-    out_text = ""
-    try:
-        out_text = resp.output_text
-    except Exception:
-        out_text = ""
+        print("===== DEBUG: Summary request END =====")
+    out_text = adapter.generate(
+        messages,
+        model=model,
+        temperature=temperature,
+        top_p=top_p,
+        debug=debug,
+        label=label,
+    )
     if debug:
-        print("===== DEBUG: OpenAI response BEGIN" + (f" [{label}]" if label else "") + " =====")
+        print("===== DEBUG: Summary response BEGIN" + (f" [{label}]" if label else "") + " =====")
         print(out_text)
-        print("===== DEBUG: OpenAI response END =====")
+        print("===== DEBUG: Summary response END =====")
     return out_text
 
 def main():
@@ -210,7 +185,8 @@ def main():
     # effective chunking params
     ap.add_argument("--txt-chunk-chars", type=int, default=None)
     ap.add_argument("--txt-overlap-chars", type=int, default=None)
-    ap.add_argument("--debug", action="store_true", help="Enable verbose logging and print all OpenAI requests/responses")
+    ap.add_argument("--debug", action="store_true", help="Enable verbose logging and print LLM requests/responses (no secrets)")
+    ap.add_argument("--llm-provider", default=None, help="Override LLM provider: openai|gemini|dummy|...")
     ap.add_argument("--use-context-overlap", dest="use_context_overlap", choices=["raw","cleaned","none"], help="Source of overlap: raw ASR tail, cleaned previous tail, or none")
     ap.add_argument("--include-timecodes", dest="include_timecodes", action="store_true", default=None, help="Append timecodes to headings when available")
     args = ap.parse_args()
@@ -221,18 +197,8 @@ def main():
     if debug:
         print("Debug mode enabled")
 
-    # API key resolution: prefer .env, else CLI environment
-    has_dotenv_key = load_api_key_from_env_file(base)
-    if not has_dotenv_key:
-        # Try existing env (e.g., provided via CLI: OPENAI_API_KEY=... python ...)
-        if os.environ.get("OPENAI_API_KEY"):
-            print("Using OPENAI_API_KEY from environment")
-        else:
-            print(
-                "ERROR: OPENAI_API_KEY not found. Provide it in .env or as an environment variable before the command.",
-                file=sys.stderr,
-            )
-            sys.exit(1)
+    # Load .env (keys for any provider); adapter will validate required ones
+    load_env_from_env_file(base)
 
     # override config
     if args.txt_chunk_chars: cfg["txt_chunk_chars"] = args.txt_chunk_chars
@@ -240,9 +206,22 @@ def main():
     if args.include_timecodes is not None: cfg["include_timecodes_in_headings"] = bool(args.include_timecodes)
 
     lang = args.lang
-    model = cfg.get("model", "gpt-5.1")
-    temperature = cfg.get("temperature", 1)
-    top_p = cfg.get("top_p", None)
+    # Resolve provider + effective model params with backward compatibility
+    def _effective_llm_params(cfg: Dict, provider_override: Optional[str]) -> Dict:
+        llm_section = cfg.get("llm", {}) if isinstance(cfg.get("llm"), dict) else {}
+        provider = (provider_override or llm_section.get("provider") or "openai")
+        p_cfg = llm_section.get(provider, {}) if isinstance(llm_section.get(provider), dict) else {}
+        eff = {
+            "model": p_cfg.get("model", cfg.get("model", "gpt-5-mini")),
+            "temperature": p_cfg.get("temperature", cfg.get("temperature", 1)),
+            "top_p": p_cfg.get("top_p", cfg.get("top_p", None)),
+            "provider": provider,
+        }
+        return eff
+    _llm = _effective_llm_params(cfg, args.llm_provider)
+    model = _llm["model"]
+    temperature = _llm["temperature"]
+    top_p = _llm["top_p"]
     include_timecodes = bool(cfg.get("include_timecodes_in_headings", True))
     aside_style = cfg.get("highlight_asides_style", "italic")
     # Overlap source (backward compatible)
@@ -264,7 +243,7 @@ def main():
     content_mode = (cfg.get("content_mode", "normal") or "normal").strip().lower()
     suppress_edit_comments = bool(cfg.get("suppress_edit_comments", True))
     if debug:
-        print(f"[DEBUG] Settings -> model={model}, temperature={temperature}, top_p={top_p}, lang={lang}")
+        print(f"[DEBUG] Settings -> provider={_llm['provider']}, model={model}, temperature={temperature}, top_p={top_p}, lang={lang}")
         print(f"[DEBUG] Options -> include_timecodes={include_timecodes}, aside_style={aside_style}")
         print(f"[DEBUG] Overlap -> source={overlap_source}, sentence_delimiters={sentence_delimiters!r}, stitch_dedup_window_chars={stitch_dedup_window}")
         print(f"[DEBUG] Content mode -> {content_mode}; suppress_edit_comments={suppress_edit_comments}")
@@ -370,7 +349,14 @@ def main():
     outdir = Path(args.outdir)
     outdir.mkdir(parents=True, exist_ok=True)
 
-    client = OpenAI()  # uses OPENAI_API_KEY env var
+    # Select adapter
+    try:
+        adapter = create_llm_adapter(cfg, provider_override=args.llm_provider, project_root=base)
+        if debug:
+            print(f"[DEBUG] Using LLM adapter: {adapter.name()}")
+    except Exception as e:
+        print(f"ERROR: Failed to initialize LLM adapter: {e}", file=sys.stderr)
+        sys.exit(1)
 
     # Process chunks
     cleaned_blocks = []
@@ -379,7 +365,7 @@ def main():
     fail_count = 0
     # Accumulate normalized term variants across chunks
     from copy import deepcopy
-    from utils import coalesce_term_map, build_alias_index, remap_keys_to_canonical
+    from scripts.utils import coalesce_term_map, build_alias_index, remap_keys_to_canonical
     known_terms = {}
     prev_raw_fragment = ""
     last_cleaned_fragment = ""
@@ -416,8 +402,8 @@ def main():
         term_hints_text = serialize_term_hints_json(coalesced_for_hints)
         original_text = fragment_text
         try:
-            cleaned = call_openai(
-                client=client,
+            cleaned = call_llm(
+                adapter=adapter,
                 model=model,
                 system_prompt=system_prompt,
                 chunk_text=original_text,
@@ -500,8 +486,8 @@ def main():
     # Append summary
     if cfg.get("append_summary", True):
         print("Generating summary…")
-        summary = call_openai_summary(
-            client, model, system_prompt, full_markdown,
+        summary = call_llm_summary(
+            adapter, model, system_prompt, full_markdown,
             temperature=temperature, top_p=top_p,
             debug=debug, label="summary",
         )

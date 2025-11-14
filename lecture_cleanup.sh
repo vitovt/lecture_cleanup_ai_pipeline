@@ -18,5 +18,5 @@ fi
 source "$VENV_DIR/bin/activate"
 
 # Run the Python script with arguments passed to this script
-exec "$PYTHON" scripts/run_pipeline.py "$@"
-
+# Run as a module so project root is on sys.path for imports
+exec "$PYTHON" -m scripts.run_pipeline "$@"

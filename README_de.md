@@ -86,12 +86,22 @@ Außerdem fügt es eine einfache Struktur hinzu und sorgt für konsistente Termi
    ./init_once.sh
    ```
 
-   Dieses Skript erstellt `.venv` und installiert Abhängigkeiten (`pyyaml`, `openai`).
+   Dieses Skript erstellt `.venv` und installiert Abhängigkeiten (`pyyaml`, `openai`, `google-generativeai`).
 
 ## Verwendung
 
 Es wird empfohlen, die `.sh`-Wrapper zu verwenden, da sie `.venv` aktivieren und das Python-Skript mit den richtigen Parametern aufrufen.
-⚠️ **Achtung:** Verwende unbedingt die neueste Version des `openai`-Pakets – alte Versionen können Abstürze oder fehlerhafte Ergebnisse verursachen!
+⚠️ **Achtung:** Verwende unbedingt die neueste Version des `openai`-Pakets – alte Versionen können Abstürze oder fehlerhafte Ergebnisse verursachen! Für Gemini-Unterstützung wird `google-generativeai` durch `init_once.sh` installiert.
+
+### LLM-Provider wählen (Adapter)
+
+- Den Provider in `config.yaml` unter `llm.provider` setzen (Standard: `openai`).
+- Per CLI überschreiben mit `--llm-provider openai|gemini|dummy|...`.
+- API-Schlüssel in `.env` im Projektverzeichnis ablegen:
+  - OpenAI: `OPENAI_API_KEY=...`
+  - Gemini: `GOOGLE_API_KEY=...`
+
+Die Pipeline ist anbieterunabhängig und verwendet eine einheitliche Adapter-Schnittstelle. Um einen neuen Provider hinzuzufügen, `aiadapters/dummy_adapter.py` kopieren, `LLMAdapter.generate` implementieren und in `aiadapters/factory.py` registrieren.
 
 * **Einzeldatei:**
 
