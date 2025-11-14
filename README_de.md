@@ -145,6 +145,7 @@ Diese Parameter werden über die `.sh`-Skripte an `scripts/run_pipeline.py` übe
 * `--trace` — sehr ausführlich; druckt vollständige LLM-Prompts und -Antworten
 * `--request-delay <Sekunden>` — Verzögerung zwischen LLM-Anfragen (0 = aus)
 * `--chunks <Spezifikation>` — nur bestimmte Blöcke verarbeiten; z. B. `1,3,7-9,23` (1-basiert)
+* `--retry-attempts <N>` — fehlgeschlagene LLM-Anfragen bis zu N‑mal erneut versuchen (1 = kein Retry)
 
 **Beispiele**
 
@@ -195,6 +196,12 @@ Allgemein
 * `summary_heading`: Überschrift des Zusammenfassungsabschnitts
 * `parasites`: Pfade zu Füllwortlisten je Sprache
 * `llm.request_delay_seconds`: Verzögerung zwischen LLM-Anfragen (Sekunden); hilft gegen Rate Limits; 0 = aus
+* `retry.attempts`: globale Standardanzahl an Versuchen (1 = kein Retry)
+* `retry.pause_seconds`: zusätzliche Wartezeit, die zu einer ggf. vom Provider vorgeschlagenen Wartezeit addiert wird; ohne Vorschlag allein genutzt
+* `llm.openai.retry.attempts`: Versuche für OpenAI (überschreibt global)
+* `llm.openai.retry.pause_seconds`: zusätzliche Wartezeit für OpenAI (addiert zur Provider-Empfehlung; sonst allein)
+* `llm.gemini.retry.attempts`: Versuche für Gemini (überschreibt global)
+* `llm.gemini.retry.pause_seconds`: zusätzliche Wartezeit für Gemini (addiert zur Provider-Empfehlung; sonst allein)
 
 LLM
 - `llm.provider`: `openai`, `gemini` oder eigener Adapter

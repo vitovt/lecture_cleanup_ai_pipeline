@@ -104,12 +104,16 @@ class GeminiAdapter(LLMAdapter):
             return getattr(resp, "text", "") or ""
         except Exception as e:
             err = str(e).lower()
-            if any(k in err for k in ["rate limit", "quota", "429", "resourceexhausted"]):
+            # Retriable: clear rate-limit signals (checked first)
+            if any(k in err for k in ["rate limit", "429", "resourceexhausted", "too many requests", "retry in", "retry_delay"]):
                 raise LLMRateLimitError(str(e))
-            if any(k in err for k in ["unauthenticated", "invalid api key", "401", "permission", "api key not valid"]):
-                raise LLMAuthError(str(e))
-            if any(k in err for k in ["deadline exceeded", "timeout", "temporarily unavailable", "connection", "unavailable"]):
+            # Retriable: transient/connection
+            if any(k in err for k in ["deadline exceeded", "timeout", "temporarily unavailable", "connection", "unavailable", "dns"]):
                 raise LLMConnectionError(str(e))
+            # Non-retriable: authentication/billing/subscription issues
+            if any(k in err for k in [
+                "unauthenticated", "invalid api key", "401", "permission", "api key not valid", "forbidden",
+                "billing", "payment", "insufficient funds", "subscription"]):
+                raise LLMAuthError(str(e))
+            # Unknown -> non-retriable by default
             raise LLMUnknownError(str(e))
-
-

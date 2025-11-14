@@ -81,12 +81,16 @@ class OpenAIAdapter(LLMAdapter):
                 return getattr(resp, "output", "") or ""
         except Exception as e:  # Map to generic errors
             err_str = str(e).lower()
-            if any(k in err_str for k in ["rate limit", "quota", "429"]):
+            # Retriable: 429 Too Many Requests / rate limited (checked first)
+            if any(k in err_str for k in ["rate limit", "429", "too many requests", "retry in", "retry_after"]):
                 raise LLMRateLimitError(str(e))
-            if any(k in err_str for k in ["unauthorized", "invalid api key", "401", "permission"]):
-                raise LLMAuthError(str(e))
-            if any(k in err_str for k in ["timeout", "temporarily unavailable", "connection"]):
+            # Retriable: transient/connection
+            if any(k in err_str for k in ["timeout", "temporarily unavailable", "connection", "unavailable", "dns"]):
                 raise LLMConnectionError(str(e))
+            # Non-retriable: authentication/billing/quota exhausted
+            if any(k in err_str for k in [
+                "unauthorized", "invalid api key", "401", "permission", "forbidden", "payment required",
+                "insufficient_quota", "insufficient quota", "insufficient funds", "billing", "subscription"]):
+                raise LLMAuthError(str(e))
+            # Unknown -> non-retriable by default
             raise LLMUnknownError(str(e))
-
-

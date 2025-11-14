@@ -14,10 +14,23 @@ llm:
     model: gpt-5-mini          # choose your model, e.g., gpt-5, gpt-5-mini, gpt-5-nano, gpt-5.1 / gpt-4.1 / o4-mini https://platform.openai.com/docs/models
     temperature: 1
     top_p: 1.0
+    # Retry settings specific to OpenAI (override global defaults below).
+    retry:
+      attempts: 2        # 1 = no retry, 2..N = number of attempts per request
+      pause_seconds: 10.0 # extra pause added to provider-suggested retry delay; if none, used alone
   gemini:
     model: gemini-2.5-pro   # model like: gemini-2.5-pro, gemini-2.5-flash, gemini-2.5-flash-lite https://ai.google.dev/gemini-api/docs/models
     temperature: 1
     top_p: 1.0
+    # Retry settings specific to Gemini (override global defaults below).
+    retry:
+      attempts: 3        # 1 = no retry, 2..N = number of attempts per request
+      pause_seconds: 60.0 # extra pause added to provider-suggested retry delay; if none, used alone
+
+# Global LLM API retry defaults (used if llm.<provider>.retry.* not provided). CLI --retry-attempts overrides attempts.
+retry:
+  attempts: 2        # 1 = no retry
+  pause_seconds: 60.0 # extra pause added to provider-suggested retry delay; if none, used alone
 
 # Input format control. When set, overrides auto-detection by file extension.
 # One of: srt(VIP), txt (CLI --format still overrides this if provided)

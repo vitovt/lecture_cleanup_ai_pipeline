@@ -42,20 +42,15 @@ def _load_env_file_generic(project_root: Path) -> bool:
 def _effective_provider_and_config(cfg: Dict, provider_override: Optional[str]) -> Tuple[str, Dict]:
     """Resolve provider name and its config from the global config dict.
 
-    Supports both new structure:
+    Assumes validated config with:
       llm:
         provider: openai|gemini|...
-        openai: { model, temperature, top_p }
-        gemini: { model, temperature, top_p }
-
-    and legacy top-level keys: model, temperature, top_p.
+        openai: { model, temperature, top_p, ... }
+        gemini: { model, temperature, top_p, ... }
     """
-    llm_section = cfg.get("llm", {}) if isinstance(cfg.get("llm"), dict) else {}
-    provider = (provider_override or llm_section.get("provider") or "openai").strip().lower()
-    provider_cfg: Dict = {}
-    if isinstance(llm_section.get(provider), dict):
-        provider_cfg = dict(llm_section.get(provider) or {})
-    # No legacy top-level fallbacks: require values in llm.<provider>
+    llm_section = cfg["llm"]
+    provider = (provider_override or llm_section["provider"]).strip().lower()
+    provider_cfg: Dict = dict(llm_section[provider])
     return provider, provider_cfg
 
 
@@ -96,4 +91,3 @@ def create_llm_adapter(cfg: Dict, *, provider_override: Optional[str], project_r
             raise
         raise
     return adapter
-

@@ -144,6 +144,7 @@ These flags are passed to `scripts/run_pipeline.py` via the `.sh` wrappers.
 * `--trace` — very verbose; prints full LLM prompts and responses (sensitive/large)
 * `--request-delay <seconds>` — delay between LLM requests (0 disables)
 * `--chunks <spec>` — process only specific chunks; spec example: `1,3,7-9,23` (1-based indices)
+* `--retry-attempts <N>` — retry failed LLM requests up to N times (1 = no retry)
 
 **Examples**
 
@@ -194,6 +195,12 @@ General
 * `summary_heading`: heading title for summary section
 * `parasites`: paths to filler-word lists by language
 * `llm.request_delay_seconds`: delay between LLM requests (seconds); helps avoid rate limits; 0 disables
+* `retry.attempts`: global default retry attempts (1 = no retry)
+* `retry.pause_seconds`: global extra pause added to provider-suggested retry delay; if none, used alone
+* `llm.openai.retry.attempts`: retries for OpenAI (overrides global)
+* `llm.openai.retry.pause_seconds`: extra pause for OpenAI (added to provider-suggested delay; else used alone)
+* `llm.gemini.retry.attempts`: retries for Gemini (overrides global)
+* `llm.gemini.retry.pause_seconds`: extra pause for Gemini (added to provider-suggested delay; else used alone)
 
 LLM
 - `llm.provider`: `openai`, `gemini`, or custom

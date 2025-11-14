@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import os, argparse, yaml, sys, csv, traceback, time
+import os, argparse, yaml, sys, csv, traceback, time, re
 from typing import List, Optional, Dict
 from pathlib import Path
 
@@ -115,6 +115,26 @@ def _parse_chunks_spec(spec: str, total: int) -> Optional[set[int]]:
             if 1 <= i <= total:
                 out.add(i)
     return out
+
+def _extract_retry_after_seconds(msg: str) -> Optional[float]:
+    """Best-effort parse of provider-suggested retry-after seconds from error text.
+    Supports patterns like 'retry in 17.8s' and 'retry_delay { seconds: 17 }'.
+    """
+    if not msg:
+        return None
+    m = re.search(r"retry\s+in\s+([0-9]+(?:\.[0-9]+)?)s", msg, re.IGNORECASE)
+    if m:
+        try:
+            return float(m.group(1))
+        except Exception:
+            return None
+    m2 = re.search(r"retry_delay\s*\{\s*seconds:\s*([0-9]+)\s*\}", msg, re.IGNORECASE)
+    if m2:
+        try:
+            return float(m2.group(1))
+        except Exception:
+            return None
+    return None
 
 def call_llm(
     adapter: LLMAdapter,
@@ -234,6 +254,7 @@ def main():
     ap.add_argument("--trace", action="store_true", help="Enable trace logging: print full LLM prompts and responses (large, sensitive)")
     ap.add_argument("--llm-provider", default=None, help="Override LLM provider: openai|gemini|dummy|...")
     ap.add_argument("--request-delay", type=float, default=None, help="Delay in seconds between LLM requests (0 = no delay)")
+    ap.add_argument("--retry-attempts", type=int, default=None, help="Retry failed LLM requests up to N times (1 = no retry)")
     ap.add_argument("--chunks", type=str, default=None, help="Process only specified chunks, e.g. '1,3,7-9' (1-based indices)")
     ap.add_argument("--use-context-overlap", dest="use_context_overlap", choices=["raw","cleaned","none"], help="Source of overlap: raw ASR tail, cleaned previous tail, or none")
     ap.add_argument("--include-timecodes", dest="include_timecodes", action="store_true", default=None, help="Append timecodes to headings when available")
@@ -242,13 +263,7 @@ def main():
     base = Path(__file__).parent.parent
     cfg = read_config(str(base / "config.yaml"))
     # Resolve logging verbosity from config and CLI
-    cfg_level = None
-    if isinstance(cfg.get("logging"), dict):
-        cfg_level = (cfg.get("logging", {}).get("level") or "").strip().lower()
-    elif isinstance(cfg.get("debug_level"), str):
-        cfg_level = (cfg.get("debug_level") or "").strip().lower()
-
-    level = cfg_level if cfg_level in ("debug", "trace", "info") else "info"
+    level = str(cfg["logging"]["level"]).strip().lower()
     if args.debug:
         level = "debug"
     if args.trace:
@@ -270,18 +285,17 @@ def main():
     lang = args.lang
     # Resolve provider + effective model params with backward compatibility
     def _effective_llm_params(cfg: Dict, provider_override: Optional[str]) -> Dict:
-        llm_section = cfg.get("llm", {}) if isinstance(cfg.get("llm"), dict) else {}
-        provider = (provider_override or llm_section.get("provider") or "openai")
-        p_cfg = llm_section.get(provider, {}) if isinstance(llm_section.get(provider), dict) else {}
-        eff = {
-            "model": p_cfg.get("model"),
+        llm = cfg["llm"]
+        provider = provider_override or llm["provider"]
+        p_cfg = llm[provider]
+        return {
+            "model": p_cfg["model"],
             "temperature": p_cfg.get("temperature"),
             "top_p": p_cfg.get("top_p"),
             "provider": provider,
         }
-        return eff
     _llm = _effective_llm_params(cfg, args.llm_provider)
-    model = _llm.get("model")
+    model = _llm["model"]
     temperature = _llm.get("temperature")
     top_p = _llm.get("top_p")
     # Basic validation to catch missing required model setting
@@ -289,36 +303,31 @@ def main():
         print("ERROR: Missing model in config under llm.<provider>.model", file=sys.stderr)
         sys.exit(1)
     # Delay between LLM requests (seconds). Config llm.request_delay_seconds; CLI overrides.
-    cfg_llm = cfg.get("llm", {}) if isinstance(cfg.get("llm"), dict) else {}
-    request_delay = 0.0
-    try:
-        request_delay = float(cfg_llm.get("request_delay_seconds", 0) or 0)
-    except Exception:
-        request_delay = 0.0
+    cfg_llm = cfg["llm"]
+    request_delay = float(cfg_llm.get("request_delay_seconds", 0.0) or 0.0)
     if args.request_delay is not None:
         request_delay = max(0.0, float(args.request_delay))
+    # Retry settings: prefer CLI, else per-provider llm.<provider>.retry.*, else global retry.*
+    cfg_retry_global = cfg.get("retry", {})
+    provider_name = _llm['provider']
+    cfg_retry_provider = cfg_llm.get(provider_name, {}).get("retry", {})
+    attempts = int(cfg_retry_provider.get("attempts", cfg_retry_global.get("attempts", 1)) or 1)
+    if args.retry_attempts is not None:
+        attempts = max(1, int(args.retry_attempts))
+    pause_between_attempts = float(cfg_retry_provider.get("pause_seconds", cfg_retry_global.get("pause_seconds", 0.0)) or 0.0)
     include_timecodes = bool(cfg.get("include_timecodes_in_headings", True))
     aside_style = cfg.get("highlight_asides_style", "italic")
-    # Overlap source (backward compatible)
-    cfg_overlap_source = cfg.get("use_context_overlap", None)
-    if isinstance(cfg_overlap_source, str) and cfg_overlap_source.lower() in ("raw","cleaned","none"):
-        overlap_source = cfg_overlap_source.lower()
-    elif isinstance(cfg_overlap_source, bool):
-        overlap_source = "raw" if cfg_overlap_source else "none"
-    else:
-        overlap_source = "raw"
+    # Overlap source (assumes validated config)
+    overlap_source = str(cfg.get("use_context_overlap", "raw")).lower()
     if args.use_context_overlap:
         overlap_source = args.use_context_overlap
     # sentence delimiters for overlap selection
-    try:
-        sentence_delimiters = str(cfg.get("overlap_sentence_delimiters", ".!?…"))
-    except Exception:
-        sentence_delimiters = ".!?…"
+    sentence_delimiters = str(cfg.get("overlap_sentence_delimiters", ".!?…"))
     stitch_dedup_window = int(cfg.get("stitch_dedup_window_chars", cfg.get("txt_overlap_chars", 500)) or 0)
-    content_mode = (cfg.get("content_mode", "normal") or "normal").strip().lower()
+    content_mode = str(cfg.get("content_mode", "normal")).strip().lower()
     suppress_edit_comments = bool(cfg.get("suppress_edit_comments", True))
     if debug:
-        print(f"[DEBUG] Settings -> provider={_llm['provider']}, model={model}, temperature={temperature}, top_p={top_p}, lang={lang}, delay={request_delay}s")
+        print(f"[DEBUG] Settings -> provider={_llm['provider']}, model={model}, temperature={temperature}, top_p={top_p}, lang={lang}, delay={request_delay}s, retries={attempts} x pause {pause_between_attempts}s")
         print(f"[DEBUG] Options -> include_timecodes={include_timecodes}, aside_style={aside_style}")
         print(f"[DEBUG] Overlap -> source={overlap_source}, sentence_delimiters={sentence_delimiters!r}, stitch_dedup_window_chars={stitch_dedup_window}")
         print(f"[DEBUG] Content mode -> {content_mode}; suppress_edit_comments={suppress_edit_comments}")
@@ -331,7 +340,7 @@ def main():
 
     # Decide format
     in_path = Path(args.input)
-    cfg_format = (cfg.get("format") or "").strip().lower() if isinstance(cfg.get("format"), str) else None
+    cfg_format = str(cfg.get("format", "")).strip().lower()
     if args.format:
         fmt = args.format
     elif cfg_format in ("srt", "txt"):
@@ -501,34 +510,65 @@ def main():
         coalesced_for_hints = coalesce_term_map(known_terms)
         term_hints_text = serialize_term_hints_json(coalesced_for_hints)
         original_text = fragment_text
-        try:
-            # Optional delay between requests (skip before first chunk)
-            if request_delay > 0 and idx > 1:
-                time.sleep(request_delay)
-            cleaned = call_llm(
-                adapter=adapter,
-                model=model,
-                system_prompt=system_prompt,
-                chunk_text=original_text,
-                lang=lang,
-                parasites=parasites,
-                aside_style=aside_style,
-                glossary=glossary,
-                temperature=temperature,
-                top_p=top_p,
-                debug=debug,
-                trace=trace,
-                label=f"chunk {idx}/{total_chunks}",
-                context_text=context_text,
-                term_hints_text=term_hints_text,
-            )
-        except Exception as e:
-            # Always show concise error message; include traceback only when debug
-            provider_name = adapter.name()
-            print(f"\n[ERROR] {provider_name} failed on chunk {idx}/{total_chunks}: {e}", file=sys.stderr)
-            if debug:
-                traceback.print_exc()
-            cleaned = ""
+        cleaned = ""
+        attempt_i = 1
+        while attempt_i <= attempts:
+            try:
+                # Optional delay before the first attempt on this chunk (inter-request pacing)
+                if attempt_i == 1 and request_delay > 0 and idx > 1:
+                    if debug:
+                        print(f"\n[DEBUG] Sleeping {request_delay}s before first attempt for chunk {idx}")
+                    time.sleep(request_delay)
+                cleaned = call_llm(
+                    adapter=adapter,
+                    model=model,
+                    system_prompt=system_prompt,
+                    chunk_text=original_text,
+                    lang=lang,
+                    parasites=parasites,
+                    aside_style=aside_style,
+                    glossary=glossary,
+                    temperature=temperature,
+                    top_p=top_p,
+                    debug=debug,
+                    trace=trace,
+                    label=f"chunk {idx}/{total_chunks} (attempt {attempt_i}/{attempts})",
+                    context_text=context_text,
+                    term_hints_text=term_hints_text,
+                )
+                # consider empty response as failure deserving a retry
+                if not (cleaned or "").strip():
+                    raise RuntimeError("Empty response text")
+                break
+            except Exception as e:
+                provider_name = adapter.name()
+                is_last = (attempt_i >= attempts)
+                if debug:
+                    traceback.print_exc()
+                # Determine if retriable based on exception type
+                retriable = isinstance(e, (Exception,))  # placeholder, refined below
+                from aiadapters.base import LLMAuthError, LLMRateLimitError, LLMConnectionError, LLMUnknownError
+                if isinstance(e, (LLMAuthError, LLMUnknownError)):
+                    retriable = False
+                elif isinstance(e, (LLMRateLimitError, LLMConnectionError)):
+                    retriable = True
+                else:
+                    # other exceptions (including RuntimeError for empty text) -> retryable
+                    retriable = True
+                if not retriable or is_last:
+                    print(f"\n[ERROR] {provider_name} failed on chunk {idx}/{total_chunks} (attempt {attempt_i}/{attempts}): {e}", file=sys.stderr)
+                    cleaned = ""
+                    break
+                else:
+                    suggested = _extract_retry_after_seconds(str(e)) if isinstance(e, (LLMRateLimitError,)) else None
+                    if suggested and suggested > 0:
+                        wait_for = suggested + (pause_between_attempts or 0.0)
+                    else:
+                        wait_for = pause_between_attempts
+                    print(f"\n[WARN] {provider_name} error on chunk {idx}/{total_chunks} (attempt {attempt_i}/{attempts}): {e}. Retrying after {wait_for or 0}s…", file=sys.stderr)
+                    if wait_for and wait_for > 0:
+                        time.sleep(wait_for)
+                    attempt_i += 1
         status = "OK" if cleaned and cleaned.strip() else "FAILED"
         if status == "OK":
             ok_count += 1
@@ -598,20 +638,51 @@ def main():
     # Append summary
     if cfg.get("append_summary", True):
         print("Generating summary…")
-        if request_delay > 0:
-            time.sleep(request_delay)
-        try:
-            summary = call_llm_summary(
-                adapter, model, system_prompt, full_markdown,
-                temperature=temperature, top_p=top_p,
-                debug=debug, trace=trace, label="summary",
-            )
-        except Exception as e:
-            provider_name = adapter.name()
-            print(f"[ERROR] {provider_name} summary generation failed: {e}", file=sys.stderr)
-            if debug:
-                traceback.print_exc()
-            summary = ""
+        summary = ""
+        attempt_i = 1
+        while attempt_i <= attempts:
+            try:
+                # Optional delay before the first attempt on summary
+                if attempt_i == 1 and request_delay > 0:
+                    if debug:
+                        print(f"[DEBUG] Sleeping {request_delay}s before summary request")
+                    time.sleep(request_delay)
+                summary = call_llm_summary(
+                    adapter, model, system_prompt, full_markdown,
+                    temperature=temperature, top_p=top_p,
+                    debug=debug, trace=trace, label=f"summary (attempt {attempt_i}/{attempts})",
+                )
+                if not (summary or "").strip():
+                    raise RuntimeError("Empty response text (summary)")
+                break
+            except Exception as e:
+                provider_name = adapter.name()
+                is_last = (attempt_i >= attempts)
+                if debug:
+                    traceback.print_exc()
+                from aiadapters.base import LLMAuthError, LLMRateLimitError, LLMConnectionError, LLMUnknownError
+                if isinstance(e, (LLMAuthError, LLMUnknownError)):
+                    print(f"[ERROR] {provider_name} summary generation failed (attempt {attempt_i}/{attempts}): {e}", file=sys.stderr)
+                    summary = ""
+                    break
+                elif isinstance(e, (LLMRateLimitError, LLMConnectionError)):
+                    if is_last:
+                        print(f"[ERROR] {provider_name} summary generation failed (attempt {attempt_i}/{attempts}): {e}", file=sys.stderr)
+                        summary = ""
+                        break
+                    suggested = _extract_retry_after_seconds(str(e)) if isinstance(e, (LLMRateLimitError,)) else None
+                    if suggested and suggested > 0:
+                        wait_for = suggested + (pause_between_attempts or 0.0)
+                    else:
+                        wait_for = pause_between_attempts
+                    print(f"[WARN] {provider_name} summary error (attempt {attempt_i}/{attempts}): {e}. Retrying after {wait_for or 0}s…", file=sys.stderr)
+                    if wait_for and wait_for > 0:
+                        time.sleep(wait_for)
+                    attempt_i += 1
+                else:
+                    print(f"[ERROR] {provider_name} summary generation failed (attempt {attempt_i}/{attempts}): {e}", file=sys.stderr)
+                    summary = ""
+                    break
         if summary.strip():
             summary_heading = cfg.get("summary_heading", "## Non-authorial AI generated summary")
             full_markdown = full_markdown.rstrip() + "\n\n" + summary_heading + "\n\n" + summary + "\n"
