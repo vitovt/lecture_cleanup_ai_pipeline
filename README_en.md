@@ -143,6 +143,7 @@ These flags are passed to `scripts/run_pipeline.py` via the `.sh` wrappers.
 * `--debug` — debug logs (no full prompts/responses)
 * `--trace` — very verbose; prints full LLM prompts and responses (sensitive/large)
 * `--request-delay <seconds>` — delay between LLM requests (0 disables)
+* `--chunks <spec>` — process only specific chunks; spec example: `1,3,7-9,23` (1-based indices)
 
 **Examples**
 

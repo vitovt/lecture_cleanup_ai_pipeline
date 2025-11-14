@@ -144,6 +144,7 @@ Diese Parameter werden über die `.sh`-Skripte an `scripts/run_pipeline.py` übe
 * `--debug` — Debug-Logs (ohne vollständige Prompts/Antworten)
 * `--trace` — sehr ausführlich; druckt vollständige LLM-Prompts und -Antworten
 * `--request-delay <Sekunden>` — Verzögerung zwischen LLM-Anfragen (0 = aus)
+* `--chunks <Spezifikation>` — nur bestimmte Blöcke verarbeiten; z. B. `1,3,7-9,23` (1-basiert)
 
 **Beispiele**
 

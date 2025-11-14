@@ -78,6 +78,44 @@ def build_user_prompt(lang: str, parasites: List[str], aside_style: str) -> str:
         tmpl = f.read()
     return tmpl
 
+def _parse_chunks_spec(spec: str, total: int) -> Optional[set[int]]:
+    """Parse a comma/dash-separated chunks spec into a set of 1-based indices.
+
+    Examples:
+      '1,3,7' -> {1,3,7}
+      '4-7' -> {4,5,6,7}
+      '1,2,3,7-9,23' -> {1,2,3,7,8,9,23}
+
+    Out-of-range numbers are ignored. Returns an empty set if nothing valid.
+    """
+    if not spec:
+        return None
+    out: set[int] = set()
+    for part in str(spec).split(','):
+        p = part.strip()
+        if not p:
+            continue
+        if '-' in p:
+            try:
+                a_str, b_str = p.split('-', 1)
+                a = int(a_str)
+                b = int(b_str)
+            except Exception:
+                continue
+            if a > b:
+                a, b = b, a
+            for i in range(a, b + 1):
+                if 1 <= i <= total:
+                    out.add(i)
+        else:
+            try:
+                i = int(p)
+            except Exception:
+                continue
+            if 1 <= i <= total:
+                out.add(i)
+    return out
+
 def call_llm(
     adapter: LLMAdapter,
     model: str,
@@ -196,6 +234,7 @@ def main():
     ap.add_argument("--trace", action="store_true", help="Enable trace logging: print full LLM prompts and responses (large, sensitive)")
     ap.add_argument("--llm-provider", default=None, help="Override LLM provider: openai|gemini|dummy|...")
     ap.add_argument("--request-delay", type=float, default=None, help="Delay in seconds between LLM requests (0 = no delay)")
+    ap.add_argument("--chunks", type=str, default=None, help="Process only specified chunks, e.g. '1,3,7-9' (1-based indices)")
     ap.add_argument("--use-context-overlap", dest="use_context_overlap", choices=["raw","cleaned","none"], help="Source of overlap: raw ASR tail, cleaned previous tail, or none")
     ap.add_argument("--include-timecodes", dest="include_timecodes", action="store_true", default=None, help="Append timecodes to headings when available")
     args = ap.parse_args()
@@ -370,6 +409,13 @@ def main():
     if debug and total_chunks:
         print(f"[DEBUG] First chunk length={len(chunks[0].get('text',''))}; last chunk length={len(chunks[-1].get('text',''))}; count={len(chunks)}")
 
+    # Optional selection of specific chunks to process
+    selected_chunks: Optional[set[int]] = None
+    if args.chunks:
+        selected_chunks = _parse_chunks_spec(args.chunks, total_chunks)
+        if debug:
+            print(f"[DEBUG] Chunk selection spec='{args.chunks}' -> {sorted(selected_chunks or [])}")
+
     # Load system prompt according to mode
     mode_to_file = {
         "normal": base / "prompts" / "system_normal.md",
@@ -410,11 +456,19 @@ def main():
     effective_chunk_chars = int(cfg.get("txt_chunk_chars", 6500) or 6500)
 
     for idx, ch in enumerate(chunks, 1):
-        print(f"[{idx}/{total_chunks}] Processing…", end="", flush=True)
         # Prepare raw fragment for this chunk and compute context from previous chunk based on configured source
         units = ch.get("_units", [])
         overlap_n = int(ch.get("_overlap_units", 0))
         fragment_text = "\n".join(u["text"] for u in units[overlap_n:])
+
+        # Skip chunks not in selection (if provided). Maintain prev_raw_fragment for better context continuity.
+        if selected_chunks is not None and idx not in selected_chunks:
+            print(f"[{idx}/{total_chunks}] Skipping…", flush=True)
+            # Advance raw fragment for potential future context even if not processed
+            prev_raw_fragment = fragment_text
+            continue
+
+        print(f"[{idx}/{total_chunks}] Processing…", end="", flush=True)
         # Build context from tail of previous fragment/output
         if idx == 1:
             context_text = ""
@@ -422,7 +476,13 @@ def main():
         else:
             used_source = overlap_source
             cleaned_available = bool((last_cleaned_fragment or "").strip())
-            if used_source == "cleaned" and not cleaned_available:
+            # If previous chunk wasn't processed and user asked for cleaned overlap,
+            # we fallback to raw to keep continuity with immediately preceding text.
+            prev_chunk_processed = (selected_chunks is None or (idx - 1) in (selected_chunks or set()))
+            if used_source == "cleaned" and not prev_chunk_processed:
+                print("\n[WARN] cleaned overlap requested but previous chunk was skipped; using raw overlap instead", file=sys.stderr)
+                used_source = "raw"
+            elif used_source == "cleaned" and not cleaned_available:
                 # Check after stripping comments too
                 if not (strip_all_html_comments(last_cleaned_fragment or "").strip()):
                     print("\n[WARN] cleaned overlap requested but empty; falling back to raw", file=sys.stderr)
