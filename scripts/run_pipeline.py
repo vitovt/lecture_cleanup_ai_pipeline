@@ -235,16 +235,20 @@ def main():
         provider = (provider_override or llm_section.get("provider") or "openai")
         p_cfg = llm_section.get(provider, {}) if isinstance(llm_section.get(provider), dict) else {}
         eff = {
-            "model": p_cfg.get("model", cfg.get("model", "gpt-5-mini")),
-            "temperature": p_cfg.get("temperature", cfg.get("temperature", 1)),
-            "top_p": p_cfg.get("top_p", cfg.get("top_p", None)),
+            "model": p_cfg.get("model"),
+            "temperature": p_cfg.get("temperature"),
+            "top_p": p_cfg.get("top_p"),
             "provider": provider,
         }
         return eff
     _llm = _effective_llm_params(cfg, args.llm_provider)
-    model = _llm["model"]
-    temperature = _llm["temperature"]
-    top_p = _llm["top_p"]
+    model = _llm.get("model")
+    temperature = _llm.get("temperature")
+    top_p = _llm.get("top_p")
+    # Basic validation to catch missing required model setting
+    if not model:
+        print("ERROR: Missing model in config under llm.<provider>.model", file=sys.stderr)
+        sys.exit(1)
     # Delay between LLM requests (seconds). Config llm.request_delay_seconds; CLI overrides.
     cfg_llm = cfg.get("llm", {}) if isinstance(cfg.get("llm"), dict) else {}
     request_delay = 0.0

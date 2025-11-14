@@ -174,17 +174,15 @@ These flags are passed to `scripts/run_pipeline.py` via the `.sh` wrappers.
 
 Most options can be overridden via CLI flags.
 
-* `language`: lecture language (`ru`, `uk`, `en`)
-* `model`: OpenAI model (`gpt-5.1`, `gpt-5-mini`, etc.)
-* `temperature`: 0–2 (use moderate for cleanup modes). For GPT-5 must allways = 1
-* `top_p`: top-p sampling (keep 1.0 for determinism)
-* `format`: `txt` or `srt` (overrides auto-detection)
-* `txt_chunk_chars`: chunk size (default 6500)
-* `txt_overlap_chars`: overlap size (default 500)
-* `use_context_overlap`: `raw`, `cleaned`, or `none` (`raw` = default)
-* `stitch_dedup_window_chars`: deduplication window (null = same as overlap, 0 = off)
-* `include_timecodes_in_headings`: add timecodes to headings (for TXT)
-* `content_mode`: `strict` / `normal` / `creative`
+General
+- `language`: lecture language (`ru`, `uk`, `en`, `de`)
+- `format`: `txt` or `srt` (overrides auto-detection)
+- `txt_chunk_chars`: chunk size (default 6500)
+- `txt_overlap_chars`: overlap size (default 500)
+- `use_context_overlap`: `raw`, `cleaned`, or `none` (`raw` = default)
+- `stitch_dedup_window_chars`: deduplication window (null = same as overlap, 0 = off)
+- `include_timecodes_in_headings`: add timecodes to headings (for TXT)
+- `content_mode`: `strict` / `normal` / `creative`
 
   * `strict`: minimal surface corrections only
   * `normal`: readable phrasing, minor reorderings allowed
@@ -195,6 +193,15 @@ Most options can be overridden via CLI flags.
 * `summary_heading`: heading title for summary section
 * `parasites`: paths to filler-word lists by language
 * `llm.request_delay_seconds`: delay between LLM requests (seconds); helps avoid rate limits; 0 disables
+
+LLM
+- `llm.provider`: `openai`, `gemini`, or custom
+- `llm.openai.model`: model name (e.g., `gpt-5-mini`)
+- `llm.openai.temperature`: float
+- `llm.openai.top_p`: float or null
+- `llm.gemini.model`: model name (e.g., `gemini-2.5-pro`)
+- `llm.gemini.temperature`: float
+- `llm.gemini.top_p`: float or null
 
 ### Overlap Context Source
 

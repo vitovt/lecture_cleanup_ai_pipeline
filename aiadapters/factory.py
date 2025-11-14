@@ -52,13 +52,10 @@ def _effective_provider_and_config(cfg: Dict, provider_override: Optional[str]) 
     """
     llm_section = cfg.get("llm", {}) if isinstance(cfg.get("llm"), dict) else {}
     provider = (provider_override or llm_section.get("provider") or "openai").strip().lower()
-    provider_cfg = {}
+    provider_cfg: Dict = {}
     if isinstance(llm_section.get(provider), dict):
         provider_cfg = dict(llm_section.get(provider) or {})
-    # Backward-compat fallbacks
-    provider_cfg.setdefault("model", cfg.get("model"))
-    provider_cfg.setdefault("temperature", cfg.get("temperature"))
-    provider_cfg.setdefault("top_p", cfg.get("top_p"))
+    # No legacy top-level fallbacks: require values in llm.<provider>
     return provider, provider_cfg
 
 
@@ -99,5 +96,4 @@ def create_llm_adapter(cfg: Dict, *, provider_override: Optional[str], project_r
             raise
         raise
     return adapter
-
 

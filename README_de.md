@@ -175,17 +175,15 @@ Diese Parameter werden über die `.sh`-Skripte an `scripts/run_pipeline.py` übe
 
 Die meisten Optionen können über CLI-Parameter überschrieben werden.
 
-* `language`: Sprache der Vorlesung (`ru`, `uk`, `en`)
-* `model`: OpenAI-Modell (z. B. `gpt-5.1`, `gpt-5-mini`)
-* `temperature`: 0–2 (empfohlen: moderate Werte). Für GPT-5 muss immer 1 sein
-* `top_p`: Top-p-Sampling (1.0 = deterministisch)
-* `format`: `txt` oder `srt` (überschreibt automatische Erkennung)
-* `txt_chunk_chars`: Blockgröße (Standard: 6500)
-* `txt_overlap_chars`: Überlappung (Standard: 500)
-* `use_context_overlap`: `raw`, `cleaned` oder `none` (`raw` = Standard)
-* `stitch_dedup_window_chars`: Fenster zur Deduplizierung (null = wie Überlappung, 0 = aus)
-* `include_timecodes_in_headings`: Zeitcodes in Überschriften einfügen (für TXT)
-* `content_mode`: `strict` / `normal` / `creative`
+Allgemein
+- `language`: Sprache (`ru`, `uk`, `en`, `de`)
+- `format`: `txt` oder `srt` (überschreibt automatische Erkennung)
+- `txt_chunk_chars`: Blockgröße (Standard: 6500)
+- `txt_overlap_chars`: Überlappung (Standard: 500)
+- `use_context_overlap`: `raw`, `cleaned` oder `none` (Standard `raw`)
+- `stitch_dedup_window_chars`: Fenster zur Deduplizierung (null = wie Überlappung, 0 = aus)
+- `include_timecodes_in_headings`: Zeitcodes in Überschriften (für TXT)
+- `content_mode`: `strict` / `normal` / `creative`
 
   * `strict`: nur minimale Oberflächenkorrekturen
   * `normal`: bessere Lesbarkeit, leichte Umstellungen erlaubt
@@ -196,6 +194,15 @@ Die meisten Optionen können über CLI-Parameter überschrieben werden.
 * `summary_heading`: Überschrift des Zusammenfassungsabschnitts
 * `parasites`: Pfade zu Füllwortlisten je Sprache
 * `llm.request_delay_seconds`: Verzögerung zwischen LLM-Anfragen (Sekunden); hilft gegen Rate Limits; 0 = aus
+
+LLM
+- `llm.provider`: `openai`, `gemini` oder eigener Adapter
+- `llm.openai.model`: Modellname (z. B. `gpt-5-mini`)
+- `llm.openai.temperature`: Zahl
+- `llm.openai.top_p`: Zahl oder null
+- `llm.gemini.model`: Modellname (z. B. `gemini-2.5-pro`)
+- `llm.gemini.temperature`: Zahl
+- `llm.gemini.top_p`: Zahl oder null
 
 ### Überlappungs-Kontext (Overlap)
 

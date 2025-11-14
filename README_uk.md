@@ -156,14 +156,12 @@
 ## Конфігурація (`config.yaml`)
 Більшість опцій можна перекрити CLI-прапорцями.
 
-- `language`: мова лекції (`ru`, `uk`, `en`). Необов’язково, бо вказуєте `--lang`.
-- `model`: модель OpenAI (наприклад, `gpt-5.1`, `gpt-5-mini`).
-- `temperature`: температура (0–2). Для режимів очищення краще помірні значення. Для GPT5 - завжди повинна бути 1
-- `top_p`: top-p семплінг. Залишайте 1.0 для детермінізму.
-- `format`: `txt` або `srt`. Якщо вказано — перекриває авто-визначення.
+Загальне
+- `language`: мова лекції (`ru`, `uk`, `en`, `de`).
+- `format`: `txt` або `srt` (перекриває авто-визначення).
 - `txt_chunk_chars`: розмір блока (символи). Типово 6500.
 - `txt_overlap_chars`: перекриття між блоками (символи). Типово 500.
-- `use_context_overlap`: джерело контексту: `raw`, `cleaned`, `none`. За замовчуванням `raw`. Сумісність: `true` ≡ `raw`, `false` ≡ `none`.
+- `use_context_overlap`: джерело контексту: `raw`, `cleaned`, `none`. За замовчуванням `raw`.
 - `stitch_dedup_window_chars`: вікно (символи) для видалення дублів при зшиванні. `null` = як `txt_overlap_chars`, `0` = вимкнено.
 - `include_timecodes_in_headings`: чи додавати тайм-коди у заголовки (для TXT з часом).
 - `content_mode`: `strict` / `normal` / `creative`.
@@ -175,6 +173,16 @@
 - `append_summary`: додати підсумок наприкінці документа.
 - `summary_heading`: заголовок розділу з підсумком.
 - `parasites`: шляхи до списків «слів-паразитів» по мовах.
+- `llm.request_delay_seconds`: пауза між LLM-запитами (секунди); допомагає уникати лімітів; 0 вимикає.
+
+LLM
+- `llm.provider`: `openai`, `gemini` або власний адаптер.
+- `llm.openai.model`: назва моделі (наприклад, `gpt-5-mini`).
+- `llm.openai.temperature`: число (float).
+- `llm.openai.top_p`: число або null.
+- `llm.gemini.model`: назва моделі (наприклад, `gemini-2.5-pro`).
+- `llm.gemini.temperature`: число (float).
+- `llm.gemini.top_p`: число або null.
 - `llm.request_delay_seconds`: пауза між LLM-запитами (секунди); допомагає уникати лімітів; 0 вимикає.
 
 ### Overlap (Звідки брати текст для контекстного перекриття - Overlap)
