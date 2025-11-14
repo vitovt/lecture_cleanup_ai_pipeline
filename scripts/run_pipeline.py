@@ -419,8 +419,10 @@ def main():
                 term_hints_text=term_hints_text,
             )
         except Exception as e:
+            # Always show concise error message; include traceback only when debug
+            provider_name = adapter.name()
+            print(f"\n[ERROR] {provider_name} failed on chunk {idx}/{total_chunks}: {e}", file=sys.stderr)
             if debug:
-                print(f"[DEBUG] Exception during OpenAI call for chunk {idx}: {e}")
                 traceback.print_exc()
             cleaned = ""
         status = "OK" if cleaned and cleaned.strip() else "FAILED"
@@ -486,11 +488,18 @@ def main():
     # Append summary
     if cfg.get("append_summary", True):
         print("Generating summary…")
-        summary = call_llm_summary(
-            adapter, model, system_prompt, full_markdown,
-            temperature=temperature, top_p=top_p,
-            debug=debug, label="summary",
-        )
+        try:
+            summary = call_llm_summary(
+                adapter, model, system_prompt, full_markdown,
+                temperature=temperature, top_p=top_p,
+                debug=debug, label="summary",
+            )
+        except Exception as e:
+            provider_name = adapter.name()
+            print(f"[ERROR] {provider_name} summary generation failed: {e}", file=sys.stderr)
+            if debug:
+                traceback.print_exc()
+            summary = ""
         if summary.strip():
             summary_heading = cfg.get("summary_heading", "## Non-authorial AI generated summary")
             full_markdown = full_markdown.rstrip() + "\n\n" + summary_heading + "\n\n" + summary + "\n"
