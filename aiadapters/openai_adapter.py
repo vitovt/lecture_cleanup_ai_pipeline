@@ -82,15 +82,30 @@ class OpenAIAdapter(LLMAdapter):
         except Exception as e:  # Map to generic errors
             err_str = str(e).lower()
             # Retriable: 429 Too Many Requests / rate limited (checked first)
-            if any(k in err_str for k in ["rate limit", "429", "too many requests", "retry in", "retry_after"]):
-                raise LLMRateLimitError(str(e))
+            rate_keys = ["rate limit", "429", "too many requests", "retry in", "retry_after"]
+            for k in rate_keys:
+                if k in err_str:
+                    if debug:
+                        print(f"[DEBUG] {self.name()} matched '{k}' -> LLMRateLimitError")
+                    raise LLMRateLimitError(str(e))
             # Retriable: transient/connection
-            if any(k in err_str for k in ["timeout", "temporarily unavailable", "connection", "unavailable", "dns"]):
-                raise LLMConnectionError(str(e))
+            conn_keys = ["timeout", "temporarily unavailable", "connection", "unavailable", "dns"]
+            for k in conn_keys:
+                if k in err_str:
+                    if debug:
+                        print(f"[DEBUG] {self.name()} matched '{k}' -> LLMConnectionError")
+                    raise LLMConnectionError(str(e))
             # Non-retriable: authentication/billing/quota exhausted
-            if any(k in err_str for k in [
+            auth_keys = [
                 "unauthorized", "invalid api key", "401", "permission", "forbidden", "payment required",
-                "insufficient_quota", "insufficient quota", "insufficient funds", "billing", "subscription"]):
-                raise LLMAuthError(str(e))
+                "insufficient_quota", "insufficient quota", "insufficient funds", "billing", "subscription",
+            ]
+            for k in auth_keys:
+                if k in err_str:
+                    if debug:
+                        print(f"[DEBUG] {self.name()} matched '{k}' -> LLMAuthError")
+                    raise LLMAuthError(str(e))
             # Unknown -> non-retriable by default
+            if debug:
+                print(f"[DEBUG] {self.name()} did not match known errors -> LLMUnknownError")
             raise LLMUnknownError(str(e))

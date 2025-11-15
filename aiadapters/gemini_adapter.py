@@ -105,15 +105,30 @@ class GeminiAdapter(LLMAdapter):
         except Exception as e:
             err = str(e).lower()
             # Retriable: clear rate-limit signals (checked first)
-            if any(k in err for k in ["rate limit", "429", "resourceexhausted", "too many requests", "retry in", "retry_delay"]):
-                raise LLMRateLimitError(str(e))
+            rate_keys = ["rate limit", "429", "resourceexhausted", "too many requests", "retry in", "retry_delay"]
+            for k in rate_keys:
+                if k in err:
+                    if debug:
+                        print(f"[DEBUG] {self.name()} matched '{k}' -> LLMRateLimitError")
+                    raise LLMRateLimitError(str(e))
             # Retriable: transient/connection
-            if any(k in err for k in ["deadline exceeded", "timeout", "temporarily unavailable", "connection", "unavailable", "dns"]):
-                raise LLMConnectionError(str(e))
+            conn_keys = ["deadline exceeded", "timeout", "temporarily unavailable", "connection", "unavailable", "dns"]
+            for k in conn_keys:
+                if k in err:
+                    if debug:
+                        print(f"[DEBUG] {self.name()} matched '{k}' -> LLMConnectionError")
+                    raise LLMConnectionError(str(e))
             # Non-retriable: authentication/billing/subscription issues
-            if any(k in err for k in [
+            auth_keys = [
                 "unauthenticated", "invalid api key", "401", "permission", "api key not valid", "forbidden",
-                "billing", "payment", "insufficient funds", "subscription"]):
-                raise LLMAuthError(str(e))
+                "billing", "payment", "insufficient funds", "subscription",
+            ]
+            for k in auth_keys:
+                if k in err:
+                    if debug:
+                        print(f"[DEBUG] {self.name()} matched '{k}' -> LLMAuthError")
+                    raise LLMAuthError(str(e))
             # Unknown -> non-retriable by default
+            if debug:
+                print(f"[DEBUG] {self.name()} did not match known errors -> LLMUnknownError")
             raise LLMUnknownError(str(e))
