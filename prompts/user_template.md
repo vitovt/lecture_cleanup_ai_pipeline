@@ -1,6 +1,6 @@
 Context: This is a lecture fragment (ASR-recognized, may contain audio-specific errors) to be read in a knowledge base (Obsidian) and searched later. Follow the active System-mode rules (STRICT/NORMAL/CREATIVE) exactly.
 
-Language of this fragment: {LANG}
+{SOURCE_CONTEXT_BLOCK}Language of this fragment: {LANG}
 Filler words for this language (remove only if safe): [{PARASITES}]
 Glossary (verbatim, may be empty): {GLOSSARY_OR_DASH}
 Asides style: {ASIDE_STYLE}
@@ -34,7 +34,11 @@ Timecodes policy (if applicable):
 
 Output: Markdown ONLY (no prefixes, no explanations, no context echoes).
 
-CONTEXT (DO NOT OUTPUT):
+Previous fragment context (same file, READ-ONLY, DO NOT OUTPUT):
+- This is text from earlier chunks of the same recording.
+- Use it only for continuity (who speaks, what they refer to, correct headings).
+- Do NOT repeat, paraphrase, or output any of it directly.
+- Can be empty if it is the first fragment
 <<<
 {CONTEXT_TEXT}
 >>>

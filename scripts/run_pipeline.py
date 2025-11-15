@@ -152,6 +152,7 @@ def call_llm(
     label: str = None,
     context_text: str = "",
     term_hints_text: str = "",
+    source_context_text: str = "",
 ) -> str:
     # fill template
     template = build_user_prompt(lang, parasites, aside_style)
@@ -169,6 +170,14 @@ def call_llm(
     parasites_str = ", ".join(parasites) if parasites else ""
     glossary_str = "—" if not glossary else ", ".join(glossary)
 
+    # Optional per-file source context block to inject right after the generic Context sentence
+    if (source_context_text or "").strip():
+        source_block = (
+            "Source file context (read-only, DO NOT OUTPUT):\n<<<\n" + source_context_text.strip() + "\n>>>\n\n"
+        )
+    else:
+        source_block = ""
+
     prompt = template.format(
         LANG=lang,
         PARASITES=parasites_str,
@@ -177,6 +186,7 @@ def call_llm(
         CHUNK_TEXT=chunk_text,
         CONTEXT_TEXT=(context_text or ""),
         TERM_HINTS=(term_hints_text or ""),
+        SOURCE_CONTEXT_BLOCK=source_block,
     )
 
     # Build request parameters, honoring config temperature/top_p when provided
@@ -257,6 +267,7 @@ def main():
     ap.add_argument("--retry-attempts", type=int, default=None, help="Retry failed LLM requests up to N times (1 = no retry)")
     ap.add_argument("--chunks", type=str, default=None, help="Process only specified chunks, e.g. '1,3,7-9' (1-based indices)")
     ap.add_argument("--use-context-overlap", dest="use_context_overlap", choices=["raw","cleaned","none"], help="Source of overlap: raw ASR tail, cleaned previous tail, or none")
+    ap.add_argument("--context-file", type=str, default=None, help="Path to file with per-input context to prepend to system prompt")
     ap.add_argument("--include-timecodes", dest="include_timecodes", action="store_true", default=None, help="Append timecodes to headings when available")
     args = ap.parse_args()
 
@@ -436,6 +447,11 @@ def main():
         # Fallback to legacy system.md
         spath = base / "prompts" / "system.md"
     system_prompt = spath.read_text(encoding="utf-8")
+    # If provided, read file-specific context (injected into user prompt, not system)
+    source_file_context = ""
+    if args.context_file:
+        with open(args.context_file, "r", encoding="utf-8") as f:
+            source_file_context = f.read().strip()
 
     outdir = Path(args.outdir)
     outdir.mkdir(parents=True, exist_ok=True)
@@ -535,6 +551,7 @@ def main():
                     label=f"chunk {idx}/{total_chunks} (attempt {attempt_i}/{attempts})",
                     context_text=context_text,
                     term_hints_text=term_hints_text,
+                    source_context_text=source_file_context,
                 )
                 # consider empty response as failure deserving a retry
                 if not (cleaned or "").strip():

@@ -145,6 +145,7 @@ These flags are passed to `scripts/run_pipeline.py` via the `.sh` wrappers.
 * `--request-delay <seconds>` — delay between LLM requests (0 disables)
 * `--chunks <spec>` — process only specific chunks; spec example: `1,3,7-9,23` (1-based indices)
 * `--retry-attempts <N>` — retry failed LLM requests up to N times (1 = no retry)
+* `--context-file <path>` — file with per-input context appended to the user prompt right after the generic "Context" sentence (affects all chunks)
 
 **Examples**
 

@@ -146,6 +146,7 @@ Diese Parameter werden über die `.sh`-Skripte an `scripts/run_pipeline.py` übe
 * `--request-delay <Sekunden>` — Verzögerung zwischen LLM-Anfragen (0 = aus)
 * `--chunks <Spezifikation>` — nur bestimmte Blöcke verarbeiten; z. B. `1,3,7-9,23` (1-basiert)
 * `--retry-attempts <N>` — fehlgeschlagene LLM-Anfragen bis zu N‑mal erneut versuchen (1 = kein Retry)
+* `--context-file <Pfad>` — Datei mit dateispezifischem Kontext; wird im Benutzer‑Prompt direkt nach dem allgemeinen "Context"‑Satz eingefügt (gilt für alle Blöcke)
 
 **Beispiele**
 
