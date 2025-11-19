@@ -49,7 +49,7 @@ FRAGMENT (EDIT AND OUTPUT ONLY):
 >>>
 
 After the fragment, append zero or more HTML comments documenting edits (comments only; no visible text after them):
-- <!-- fixed: ... --> objective punctuation/casing/duplicate-word fixes.
+- <!-- fixed: ... --> objective fixes: meaning-impacting edits **only**, using the shortest spans (not whole sentences). **Do NOT** report micro-edits (punctuation, casing/diacritics, spacing, hyphenation, quote style, trivial filler cleanup).
 - <!-- filler_removed: ... --> safely removed fillers (language-dependent).
 - <!-- merged_terms: "variant1, variant2" -> "normalized_term"; ... --> (normal/creative; optional in normal).
 - <!-- rephrased: ... --> (normal/creative).
