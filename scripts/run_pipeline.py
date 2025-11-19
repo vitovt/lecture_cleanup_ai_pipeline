@@ -248,8 +248,7 @@ def main():
     ap = argparse.ArgumentParser(
         description=(
             "Turn long lecture transcripts into clean Markdown with CONTEXT-overlap, "
-            "mode-specific editing (normal/strict/creative), and stitching dedup. "
-            "All config.yaml options can be overridden via dedicated flags or --set KEY=VALUE (supports dotted keys)."
+            "mode-specific editing (normal/strict/creative), and stitching dedup."
         )
     )
     ap.add_argument("--input", required=True, help="Path to .srt or .txt")
@@ -471,7 +470,6 @@ def main():
     ok_count = 0
     fail_count = 0
     # Accumulate normalized term variants across chunks
-    from copy import deepcopy
     from scripts.utils import coalesce_term_map, build_alias_index, remap_keys_to_canonical
     known_terms = {}
     prev_raw_fragment = ""

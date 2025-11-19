@@ -3,8 +3,7 @@
 
 language: ru            # one of: ru, uk, en, de
 
-# LLM settings (new, provider-aware). Backward-compatible with legacy
-# top-level model/temperature/top_p below.
+# LLM settings (provider-aware). Configure provider and per-provider settings here.
 llm:
   provider: gemini      # openai | gemini | dummy | ...
   # Optional delay (seconds) between consecutive LLM requests (chunks and summary).
