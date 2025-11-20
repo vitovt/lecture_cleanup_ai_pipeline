@@ -247,9 +247,10 @@ def call_llm_summary(adapter: LLMAdapter, model: str, system_prompt: str, full_m
 def main():
     ap = argparse.ArgumentParser(
         description=(
-            "Turn long lecture transcripts into clean Markdown with CONTEXT-overlap, "
+            "Turn long lecture transcripts into clean Markdown with CONTEXT-overlap,\n"
             "mode-specific editing (normal/strict/creative), and stitching dedup."
-        )
+        ),
+        formatter_class=argparse.RawTextHelpFormatter,
     )
     ap.add_argument("--input", required=True, help="Path to .srt or .txt")
     ap.add_argument("--format", choices=["srt", "txt"], help="Force input format (otherwise inferred)")
@@ -266,7 +267,17 @@ def main():
     ap.add_argument("--retry-attempts", type=int, default=None, help="Retry failed LLM requests up to N times (1 = no retry)")
     ap.add_argument("--chunks", type=str, default=None, help="Process only specified chunks, e.g. '1,3,7-9' (1-based indices)")
     ap.add_argument("--use-context-overlap", dest="use_context_overlap", choices=["raw","cleaned","none"], help="Source of overlap: raw ASR tail, cleaned previous tail, or none")
-    ap.add_argument("--context-file", type=str, default=None, help="Path to file with per-input context to prepend to system prompt")
+    # Per-input context files (user-level context). Can be passed multiple times; concatenated in order.
+    ap.add_argument(
+        "--context-file",
+        dest="context_files",
+        action="append",
+        default=None,
+        help=(
+            "Path to a file with per-input context to inject into the USER prompt right after the generic 'Context'\n"
+            "sentence. Can be provided multiple times; blocks are concatenated in the given order."
+        ),
+    )
     ap.add_argument("--include-timecodes", dest="include_timecodes", action="store_true", default=None, help="Append timecodes to headings when available")
     args = ap.parse_args()
 
@@ -359,7 +370,7 @@ def main():
         ext = in_path.suffix.lower()
         fmt = "srt" if ext == ".srt" else "txt"
     if debug:
-        print(f"[DEBUG] Input: {in_path} | format={fmt} | outdir={outdir if 'outdir' in locals() else args.outdir}")
+        print(f"[DEBUG] Input: {in_path} | format={fmt} | outdir={args.outdir}")
 
     # Prepare chunks
     input_text = load_text(str(in_path))
@@ -446,11 +457,18 @@ def main():
         # Fallback to legacy system.md
         spath = base / "prompts" / "system.md"
     system_prompt = spath.read_text(encoding="utf-8")
-    # If provided, read file-specific context (injected into user prompt, not system)
+    # If provided, read one or more per-input context files (injected into USER prompt, not system)
     source_file_context = ""
-    if args.context_file:
-        with open(args.context_file, "r", encoding="utf-8") as f:
-            source_file_context = f.read().strip()
+    if args.context_files:
+        parts: List[str] = []
+        for p in args.context_files:
+            with open(p, "r", encoding="utf-8") as f:
+                t = f.read().strip()
+                if t:
+                    parts.append(t)
+        if parts:
+            # Keep order; join with a blank line between contexts
+            source_file_context = "\n\n".join(parts)
 
     outdir = Path(args.outdir)
     outdir.mkdir(parents=True, exist_ok=True)
