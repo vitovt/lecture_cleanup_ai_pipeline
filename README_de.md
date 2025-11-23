@@ -15,7 +15,7 @@ Außerdem fügt es eine einfache Struktur hinzu und sorgt für konsistente Termi
 2. Teilt den Text in Blöcke mit Überlappung, ohne nach Möglichkeit Zeilen zu trennen.
 3. Fügt „Kontext“ aus dem vorherigen Fragment hinzu (nur lesend) — `raw`, `cleaned` oder `none`.
 4. Sendet den Block mit strikten Prompts an OpenAI.
-5. Bei `.txt`-Dateien mit Zeitstempeln werden diese in die Überschriften eingefügt (ein gemeinsamer Zeitstempel pro Block).
+5. Bei `.txt`-Dateien mit Zeitstempeln werden diese in Überschriften eingefügt. Standard: Zeitstempel des Blockanfangs für alle Überschriften; optional `--process-timecodes-by-ai`, dann setzt das Modell pro Überschrift einen Zeitcode anhand der gelieferten Stempel.
 6. Entfernt doppelte Textstellen an den Blockgrenzen.
 7. Erfasst Informationen über „merged_terms“ und übergibt sie an folgende Blöcke (`<!-- merged_terms: ... -->`, nur neue Änderungen).
 8. Fügt alle Blöcke zu einer endgültigen Markdown-Datei zusammen; optional wird am Ende eine automatisch erzeugte Zusammenfassung hinzugefügt.
@@ -37,7 +37,7 @@ Außerdem fügt es eine einfache Struktur hinzu und sorgt für konsistente Termi
 
 * **Eingabezeilen:**
 
-  * TXT: Jede Zeile bleibt erhalten. Zeilen im Format `[HH:MM:SS,mmm] Text` erzeugen Zeitüberschriften.
+  * TXT: Jede Zeile bleibt erhalten. Zeilen im Format `[HH:MM:SS,mmm] Text` liefern Zeitcodes; standardmäßig wird der Blockstart an alle Überschriften gehängt, oder die Rohstempel werden mit `--process-timecodes-by-ai` an das Modell gegeben, damit es pro Überschrift einen Zeitcode setzt.
   * SRT: Nur der Text wird übernommen, Zeitcodes nicht. Empfehlung: SRT → zeilenbasiertes TXT mit Zeitstempeln konvertieren, um alle Funktionen zu nutzen.
 * **Chunking (zeilenbasiert):**
 
@@ -55,7 +55,7 @@ Außerdem fügt es eine einfache Struktur hinzu und sorgt für konsistente Termi
   * Im Kommentar des aktuellen Blocks werden nur neue Begriffe aufgeführt.
 * **Zeitcodes:**
 
-  * Für TXT-Dateien mit Zeitangabe werden `[HH:MM:SS]` oder `[#t=HH:MM:SS]` an Überschriften angehängt.
+  * Für TXT-Dateien mit Zeitangabe: Standard ist der Blockstart als `[HH:MM:SS](#t=HH:MM:SS)` an jeder Überschrift. Optional `--process-timecodes-by-ai`: Rohzeitstempel bleiben im Prompt, das Modell setzt pro Überschrift einen Zeitcode und entfernt die Rohmarker aus dem Text.
 * **Deduplizierung:**
 
   * Vergleicht das Ende des vorherigen und den Anfang des nächsten Blocks im Fenster `stitch_dedup_window_chars`; entfernt Duplikate.
@@ -140,6 +140,7 @@ Diese Parameter werden über die `.sh`-Skripte an `scripts/run_pipeline.py` übe
 * `--txt-chunk-chars` — Blockgröße in Zeichen (überschreibt Konfigurationswert)
 * `--txt-overlap-chars` — Überlappung in Zeichen
 * `--include-timecodes` — Zeitcodes in Überschriften einfügen (für TXT)
+* `--process-timecodes-by-ai` / `--no-process-timecodes-by-ai` — Rohzeitstempel an das Modell geben, damit es pro Überschrift Zeitcodes setzt (TXT mit Zeilen `[HH:MM:SS,mmm] ...`)
 * `--use-context-overlap {raw,cleaned,none}` — Quelle des Kontexts für den nächsten Block
 * `--debug` — Debug-Logs (ohne vollständige Prompts/Antworten)
 * `--trace` — sehr ausführlich; druckt vollständige LLM-Prompts und -Antworten
@@ -167,6 +168,9 @@ Diese Parameter werden über die `.sh`-Skripte an `scripts/run_pipeline.py` übe
 # Mit Glossar und Zeitcodes
 ./lecture_cleanup.sh --input input/lec1.txt --lang uk --glossary data/my_glossary.txt --include-timecodes
 
+# Zeitcodes werden vom Modell pro Überschrift anhand der Rohstempel gesetzt
+./lecture_cleanup.sh --input input/lec1.txt --lang uk --include-timecodes --process-timecodes-by-ai
+
 # Debug-Modus aktivieren (ohne vollständige Texte)
 ./lecture_cleanup.sh --input input/lec1.txt --lang uk --debug
 
@@ -186,6 +190,7 @@ Allgemein
 - `use_context_overlap`: `raw`, `cleaned` oder `none` (Standard `raw`)
 - `stitch_dedup_window_chars`: Fenster zur Deduplizierung (null = wie Überlappung, 0 = aus)
 - `include_timecodes_in_headings`: Zeitcodes in Überschriften (für TXT)
+- `process_timecodes_by_ai`: Rohzeitcodes im Prompt lassen und das Modell pro Überschrift Zeitcodes setzen lassen (TXT mit Zeitstempeln)
 - `content_mode`: `strict` / `normal` / `creative`
 
   * `strict`: nur minimale Oberflächenkorrekturen
@@ -255,7 +260,7 @@ LLM
   * Zukünftig wird ein Standardisierer implementiert, der alle SRT-Dateien in ein einheitliches TXT-Format mit Zeitstempeln konvertiert.
 * Terminologiekontrolle basiert auf Kommentaren des Modells; wenn keine Normalisierung erkannt wurde, fehlt der Hinweis.
 * Unterstützte Sprachen: RU / UK / EN / DE (mit Füllwortlisten). Andere Sprachen funktionieren ohne Wörterlisten.
-* Zeitcodes sind nur annähernd; sie beziehen sich auf den Beginn jedes Blocks. Für präzisere Ergebnisse kleinere Blockgrößen verwenden.
+* Zeitcodes sind nur annähernd (Beginn jedes Blocks), sofern `--process-timecodes-by-ai` nicht aktiv ist. Für genauere Ergebnisse kleinere Blockgrößen oder AI-Zeitcode-Modus verwenden.
 * Bei der Zusammenfassung wird der gesamte bereinigte Text auf einmal gesendet:
 
   * verdoppelt die Token-Nutzung

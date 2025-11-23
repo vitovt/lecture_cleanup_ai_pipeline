@@ -28,9 +28,7 @@ Term normalization hints (DO NOT OUTPUT):
 >>>
 
 Timecodes policy (if applicable):
-- Add timecodes only to headings generated from the FRAGMENT itself.
-- Never add or duplicate timecodes for headings that exist only in CONTEXT.
-- Do not place timecodes elsewhere.
+{TIMECODES_POLICY}
 
 Output: Markdown ONLY (no prefixes, no explanations, no context echoes).
 

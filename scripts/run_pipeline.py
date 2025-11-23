@@ -71,7 +71,7 @@ def load_env_from_env_file(root: Path) -> bool:
         pass
     return loaded_any
 
-def build_user_prompt(lang: str, parasites: List[str], aside_style: str) -> str:
+def build_user_prompt(lang: str, parasites: List[str], aside_style: str, timecodes_policy: str) -> str:
     # load template
     tmpl_path = Path(__file__).parent.parent / "prompts" / "user_template.md"
     with open(tmpl_path, "r", encoding="utf-8") as f:
@@ -136,6 +136,28 @@ def _extract_retry_after_seconds(msg: str) -> Optional[float]:
             return None
     return None
 
+def _build_timecodes_policy_text(include_timecodes: bool, ai_handles: bool, has_timecodes: bool) -> str:
+    """
+    Build the timecode policy block for the prompt based on settings and input availability.
+    """
+    base_rules = (
+        "- Never add or duplicate timecodes for headings that exist only in CONTEXT.\n"
+        "- Do not place timecodes elsewhere."
+    )
+    if not include_timecodes:
+        return "- Timecodes are not requested for this fragment."
+    if not has_timecodes:
+        return "- No timecodes detected in this fragment."
+    if ai_handles:
+        return (
+            "- Timecodes are present in the FRAGMENT; use them to timestamp every heading you output.\n"
+            "- Append the matching timecode at the end of each heading as: — [HH:MM:SS](#t=HH:MM:SS).\n"
+            "- Pick the timestamp closest to the heading's content (if multiple, choose the earliest within that span).\n"
+            "- Remove raw [HH:MM:SS,mmm] markers from the body text; do not invent timecodes when none apply.\n"
+            + base_rules
+        )
+    return "- Add timecodes only to headings generated from the FRAGMENT itself.\n" + base_rules
+
 def call_llm(
     adapter: LLMAdapter,
     model: str,
@@ -145,6 +167,7 @@ def call_llm(
     parasites: List[str],
     aside_style: str,
     glossary: List[str],
+    timecodes_policy: str,
     temperature: float = 1.0,
     top_p: float = None,
     debug: bool = False,
@@ -155,7 +178,7 @@ def call_llm(
     source_context_text: str = "",
 ) -> str:
     # fill template
-    template = build_user_prompt(lang, parasites, aside_style)
+    template = build_user_prompt(lang, parasites, aside_style, timecodes_policy)
 
     # Map aside style to prompt-friendly label
     aside_map = {
@@ -187,6 +210,7 @@ def call_llm(
         CONTEXT_TEXT=(context_text or ""),
         TERM_HINTS=(term_hints_text or ""),
         SOURCE_CONTEXT_BLOCK=source_block,
+        TIMECODES_POLICY=timecodes_policy,
     )
 
     # Build request parameters, honoring config temperature/top_p when provided
@@ -279,6 +303,21 @@ def main():
         ),
     )
     ap.add_argument("--include-timecodes", dest="include_timecodes", action="store_true", default=None, help="Append timecodes to headings when available")
+    tc_group = ap.add_mutually_exclusive_group()
+    tc_group.add_argument(
+        "--process-timecodes-by-ai",
+        dest="process_timecodes_by_ai",
+        action="store_true",
+        default=None,
+        help="Let the LLM consume timestamps and add per-heading timecodes itself (TXT with timestamps)",
+    )
+    tc_group.add_argument(
+        "--no-process-timecodes-by-ai",
+        dest="process_timecodes_by_ai",
+        action="store_false",
+        help="Disable LLM-side timecode handling; rely on post-processing instead",
+    )
+    tc_group.set_defaults(process_timecodes_by_ai=None)
     args = ap.parse_args()
 
     base = Path(__file__).parent.parent
@@ -302,6 +341,7 @@ def main():
     if args.txt_chunk_chars: cfg["txt_chunk_chars"] = args.txt_chunk_chars
     if args.txt_overlap_chars: cfg["txt_overlap_chars"] = args.txt_overlap_chars
     if args.include_timecodes is not None: cfg["include_timecodes_in_headings"] = bool(args.include_timecodes)
+    if args.process_timecodes_by_ai is not None: cfg["process_timecodes_by_ai"] = bool(args.process_timecodes_by_ai)
 
     lang = args.lang
     # Resolve provider + effective model params with backward compatibility
@@ -337,6 +377,7 @@ def main():
         attempts = max(1, int(args.retry_attempts))
     pause_between_attempts = float(cfg_retry_provider.get("pause_seconds", cfg_retry_global.get("pause_seconds", 0.0)) or 0.0)
     include_timecodes = bool(cfg.get("include_timecodes_in_headings", True))
+    process_timecodes_by_ai = bool(cfg.get("process_timecodes_by_ai", False))
     aside_style = cfg.get("highlight_asides_style", "italic")
     # Overlap source (assumes validated config)
     overlap_source = str(cfg.get("use_context_overlap", "raw")).lower()
@@ -349,7 +390,7 @@ def main():
     suppress_edit_comments = bool(cfg.get("suppress_edit_comments", True))
     if debug:
         print(f"[DEBUG] Settings -> provider={_llm['provider']}, model={model}, temperature={temperature}, top_p={top_p}, lang={lang}, delay={request_delay}s, retries={attempts} x pause {pause_between_attempts}s")
-        print(f"[DEBUG] Options -> include_timecodes={include_timecodes}, aside_style={aside_style}")
+        print(f"[DEBUG] Options -> include_timecodes={include_timecodes}, process_timecodes_by_ai={process_timecodes_by_ai}, aside_style={aside_style}")
         print(f"[DEBUG] Overlap -> source={overlap_source}, sentence_delimiters={sentence_delimiters!r}, stitch_dedup_window_chars={stitch_dedup_window}")
         print(f"[DEBUG] Content mode -> {content_mode}; suppress_edit_comments={suppress_edit_comments}")
 
@@ -381,13 +422,17 @@ def main():
     src_lines: List[str] = []
     per_line_time: List[Optional[float]] = []
     has_line_timestamps = False
+    timecodes_available = False
+    timecodes_handled_by_ai = False
     if fmt == "txt":
-        parsed_lines = parse_timestamped_txt_lines(input_text)
+        parsed_lines = parse_timestamped_txt_lines(input_text, keep_raw=True)
         has_line_timestamps = any(item["time"] is not None for item in parsed_lines)
-        src_lines = [item["text"] for item in parsed_lines]
+        timecodes_available = has_line_timestamps
+        timecodes_handled_by_ai = bool(include_timecodes and process_timecodes_by_ai and timecodes_available)
+        src_lines = [item.get("raw", item["text"]) if timecodes_handled_by_ai else item["text"] for item in parsed_lines]
         per_line_time = [item["time"] for item in parsed_lines]
         if debug:
-            print(f"[DEBUG] TXT lines: {len(src_lines)} | timestamped={has_line_timestamps}")
+            print(f"[DEBUG] TXT lines: {len(src_lines)} | timestamped={has_line_timestamps} | ai_timecodes={timecodes_handled_by_ai}")
     else:  # srt -> extract text lines only
         for raw in input_text.splitlines():
             ln = raw.strip("\ufeff")
@@ -407,6 +452,8 @@ def main():
     if not any(l.strip() for l in src_lines):
         print("ERROR: input contains no textual content after preprocessing.", file=sys.stderr)
         sys.exit(1)
+
+    timecodes_policy_text = _build_timecodes_policy_text(include_timecodes, timecodes_handled_by_ai, timecodes_available)
 
     # Chunk (line-preserving)
     chunks = chunk_text_line_preserving(
@@ -560,6 +607,7 @@ def main():
                     parasites=parasites,
                     aside_style=aside_style,
                     glossary=glossary,
+                    timecodes_policy=timecodes_policy_text,
                     temperature=temperature,
                     top_p=top_p,
                     debug=debug,
@@ -626,8 +674,8 @@ def main():
                 # Accumulate into known_terms and keep coalesced keys for future hints
                 merge_term_maps(known_terms, current_map)
                 known_terms = coalesce_term_map(known_terms)
-        # For TXT inputs that had per-line timestamps, add link-style stamp
-        if include_timecodes and fmt == "txt" and has_line_timestamps and ch.get("start") is not None:
+        # For TXT inputs that had per-line timestamps, add link-style stamp (unless AI handled timecodes itself)
+        if include_timecodes and not timecodes_handled_by_ai and fmt == "txt" and has_line_timestamps and ch.get("start") is not None:
             if debug:
                 print(f"[DEBUG] Adding timecodes to chunk`s headings; start: {ch['start']}")
             cleaned = add_timecodes_to_headings(cleaned, ch["start"], as_link=True)

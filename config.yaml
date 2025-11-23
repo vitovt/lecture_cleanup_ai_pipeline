@@ -56,6 +56,7 @@ stitch_dedup_window_chars: null        # if null, defaults to txt_overlap_chars
 
 # Output / behavior
 include_timecodes_in_headings: true   # append timecodes to headings when available
+process_timecodes_by_ai: true        # if true, keep timestamps in the prompt and ask the LLM to add per-heading timecodes
 
 # Content optimization mode:
 # - normal   : balanced cleanup (default). Keeps meaning; light structure.

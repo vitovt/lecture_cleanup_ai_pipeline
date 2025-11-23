@@ -14,7 +14,7 @@ It preserves the content without loss, corrects punctuation, capitalization, and
 2. Splits the text into chunks with overlap, avoiding line breaks when possible.
 3. Adds “context” from the previous fragment (read-only) — can be `raw`, `cleaned`, or `none`.
 4. Sends the fragment to OpenAI with strict prompts.
-5. For `.txt` files with timecodes, adds them to fragment headings (same timestamp for all headings within a chunk).
+5. For `.txt` files with timecodes, adds them to fragment headings (default: chunk start for all headings in a chunk; optional: `--process-timecodes-by-ai` lets the LLM assign per-heading stamps using provided timestamps).
 6. Removes duplicates at chunk boundaries during stitching.
 7. Collects “merged terms” info and passes it to the next blocks via comments `<!-- merged_terms: ... -->` (only new changes per block).
 8. Joins all blocks into a final Markdown document; optionally appends a non-authored summary.
@@ -36,7 +36,7 @@ It preserves the content without loss, corrects punctuation, capitalization, and
 
 * **Input lines:**
 
-  * TXT: each line is preserved. Lines of the form `[HH:MM:SS,mmm] text` produce timecode headings.
+  * TXT: each line is preserved. Lines of the form `[HH:MM:SS,mmm] text` supply timecodes; by default the chunk start time is appended to headings, or the raw timestamps are sent to the LLM (`--process-timecodes-by-ai`) to stamp each heading individually.
   * SRT: only text is taken. Timecodes for headings are not added. Recommended: convert SRT → line-based TXT with timestamps for full functionality.
 * **Chunking (line-preserving):**
 
@@ -54,7 +54,7 @@ It preserves the content without loss, corrects punctuation, capitalization, and
   * Keeps only new terms in the current block’s comment.
 * **Timecodes:**
 
-  * For TXT with timestamps — appends `[HH:MM:SS]` or `[#t=HH:MM:SS]` to fragment headings.
+  * For TXT with timestamps — default: append chunk start `[HH:MM:SS](#t=HH:MM:SS)` to fragment headings; optional `--process-timecodes-by-ai` keeps timestamps in the prompt and asks the LLM to add per-heading timecodes, removing raw markers from the body.
 * **Deduplication:**
 
   * Compares the end of the previous chunk and start of the next within a window `stitch_dedup_window_chars`; removes duplicates.
@@ -139,6 +139,7 @@ These flags are passed to `scripts/run_pipeline.py` via the `.sh` wrappers.
 * `--txt-chunk-chars` — chunk size in characters (overrides config)
 * `--txt-overlap-chars` — overlap size in characters
 * `--include-timecodes` — include timecodes in headings (for TXT)
+* `--process-timecodes-by-ai` / `--no-process-timecodes-by-ai` — send raw timestamps to the LLM to add per-heading timecodes (TXT with `[HH:MM:SS,mmm] ...` lines)
 * `--use-context-overlap {raw,cleaned,none}` — type of context for next fragment
 * `--debug` — debug logs (no full prompts/responses)
 * `--trace` — very verbose; prints full LLM prompts and responses (sensitive/large)
@@ -166,6 +167,9 @@ These flags are passed to `scripts/run_pipeline.py` via the `.sh` wrappers.
 # With glossary and timecodes
 ./lecture_cleanup.sh --input input/lec1.txt --lang uk --glossary data/my_glossary.txt --include-timecodes
 
+# Per-heading timecodes added by the LLM from raw timestamps
+./lecture_cleanup.sh --input input/lec1.txt --lang uk --include-timecodes --process-timecodes-by-ai
+
 # Enable debug (no full texts)
 ./lecture_cleanup.sh --input input/lec1.txt --lang uk --debug
 
@@ -185,6 +189,7 @@ General
 - `use_context_overlap`: `raw`, `cleaned`, or `none` (`raw` = default)
 - `stitch_dedup_window_chars`: deduplication window (null = same as overlap, 0 = off)
 - `include_timecodes_in_headings`: add timecodes to headings (for TXT)
+- `process_timecodes_by_ai`: keep raw timestamps in the prompt and ask the LLM to place per-heading timecodes (TXT with timestamps)
 - `content_mode`: `strict` / `normal` / `creative`
 
   * `strict`: minimal surface corrections only
@@ -254,7 +259,7 @@ LLM
   * Will likely include an auto-standardizer to unify formats into timestamped TXT.
 * Terminology matching depends on model output; if normalization not recorded, hint won’t appear.
 * Supported languages: RU / UK / EN / DE (filler-word dictionaries). Others can work without dictionaries.
-* Timecodes are approximate (per chunk start). Use smaller chunks for finer granularity.
+* Timecodes are approximate (per chunk start) unless `--process-timecodes-by-ai` is used; use smaller chunks or enable AI handling for finer granularity.
 * Summary generation sends the full cleaned text at once:
 
   * doubles token usage

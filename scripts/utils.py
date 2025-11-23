@@ -15,10 +15,11 @@ def format_hms(seconds: float) -> str:
     return f"{hh:02d}:{mm:02d}:{ss:02d}"
 
 
-def parse_timestamped_txt_lines(txt: str) -> List[Dict]:
+def parse_timestamped_txt_lines(txt: str, keep_raw: bool = False) -> List[Dict]:
     """
     Parse TXT lines that may start with a timestamp like [HH:MM:SS,mmm].
-    Returns a list of {"time": Optional[float], "text": str} per input line.
+    Returns a list of {"time": Optional[float], "text": str, "raw": Optional[str]} per input line.
+    When keep_raw=True, the original line (without trailing newline) is returned in "raw".
     """
     out: List[Dict] = []
     for raw in txt.splitlines():
@@ -27,9 +28,12 @@ def parse_timestamped_txt_lines(txt: str) -> List[Dict]:
             hh, mm, ss, ms, rest = m.groups()
             hh = int(hh); mm = int(mm); ss = int(ss); ms = int(ms or 0)
             t = hh*3600 + mm*60 + ss + ms/1000.0
-            out.append({"time": t, "text": rest})
+            item = {"time": t, "text": rest}
         else:
-            out.append({"time": None, "text": raw})
+            item = {"time": None, "text": raw}
+        if keep_raw:
+            item["raw"] = raw
+        out.append(item)
     return out
 
 def add_timecodes_to_headings(markdown: str, chunk_start_seconds: float, as_link: bool = False) -> str:
