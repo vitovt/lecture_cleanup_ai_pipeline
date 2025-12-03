@@ -110,6 +110,17 @@ Die Pipeline ist anbieterunabhängig und verwendet eine einheitliche Adapter-Sch
   - `--debug` → Debug-Logs (ohne vollständige Prompts/Antworten)
   - `--trace` → sehr ausführlich; druckt vollständige LLM-Prompts und -Antworten (groß, sensibel)
 
+### YouTube-Autoverarbeitung (`auto_process_youtube.sh`)
+
+```bash
+./auto_process_youtube.sh [--outdir DIR] [--debug] "https://youtu.be/ID"
+```
+
+- Lädt automatische Untertitel per `yt-dlp` nach `input/autoyoutube`, wandelt in TXT um, setzt die Video-URL in den Kontext und ruft `lecture_cleanup.sh` auf.
+- Markdown landet standardmäßig in `output/autoyoutube` (überschreibbar mit `--outdir DIR`); am Anfang der `.md`-Datei wird ein Frontmatter-Block mit `title`, `filename` und `url` eingefügt.
+- `--debug` zeigt die `yt-dlp`-Ausgabe und reicht `--debug` an `lecture_cleanup.sh` weiter.
+- Erfordert ein Video mit automatisch generierten Untertiteln.
+
 * **Einzeldatei:**
 
   ```bash
