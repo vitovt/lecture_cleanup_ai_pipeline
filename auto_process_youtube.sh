@@ -128,6 +128,7 @@ yt-dlp "${YT_DLP_SILENT_FLAGS[@]}" --write-auto-sub --sub-lang "$AUTO_LANG" --co
 base="${filename%.*}"
 SRT_FILE="${base}.${AUTO_LANG}.srt"
 TXT_FILE="${base}.${AUTO_LANG}.txt"
+OUT_MD="$OUTDIR/${TXT_FILE%.txt}.md"
 
 echo "Downloaded: $SRT_FILE"
 #ls -alh  "$SRTOUTDIR/$SRT_FILE"
@@ -152,5 +153,21 @@ ESCAPED_URL=$(printf '%s\n' "$URL" | sed 's/[&/\]/\\&/g')
 sed "s|https://www.youtube.com/watch?v=dQw4w9WgXcQ|$ESCAPED_URL|g" "$TEMPLATE_CTX" > "$TMP_CTX"
 
 "$SCRIPT_DIR/lecture_cleanup.sh" --input "$SRTOUTDIR/$TXT_FILE" --lang="$LANG" --outdir "$OUTDIR" --context-file "$TMP_CTX" --context-file "$SCRIPT_DIR/prompts/custom_context_general/lection-monolog-with-questions.txt" "${LECTURE_DEBUG_FLAG[@]}"
+
+if [[ -f "$OUT_MD" ]]; then
+    tmp_md="$(mktemp)"
+    {
+        printf '%s\n' '---'
+        printf 'title: %s\n' "$base"
+        printf 'filename: %s\n' "$TXT_FILE"
+        printf 'url: %s\n' "$URL"
+        printf '%s\n\n' '---'
+        cat "$OUT_MD"
+    } > "$tmp_md"
+    mv "$tmp_md" "$OUT_MD"
+    echo "[+] Prepended front matter to $OUT_MD"
+else
+    echo "[WARN] Markdown output not found; expected: $OUT_MD"
+fi
 
 exit 0
