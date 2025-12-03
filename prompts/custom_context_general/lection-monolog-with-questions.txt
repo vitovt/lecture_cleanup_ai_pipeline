@@ -1,0 +1,3 @@
+The lecturer is online in the webinar room and spends most of the time delivering a monologue, presenting the topic of the lecture. But sometimes they read questions from the participants and answer them.
+
+Highlight any audience question and its answer as a separate, clearly visible Markdown block (e.g., `***`). Each question must be highlighted separately. Ignore rhetorical questions asked by the lecturer; keep them as regular narrative. If attribution is uncertain, keep the text inline and add <!-- unsure: speaker attribution (Audience vs Lecturer) --> at the end.

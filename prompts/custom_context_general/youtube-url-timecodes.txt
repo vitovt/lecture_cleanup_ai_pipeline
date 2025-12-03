@@ -1,0 +1,7 @@
+-- YOUTUBE URL AND FORMATTING OVERRIDE --
+The source video URL is: https://www.youtube.com/watch?v=dQw4w9WgXcQ
+CRITICAL OVERRIDE RULE:
+- URL Format: Instead of the previous timecode format, for EVERY heading you output, use the YouTube-friendly URL format: [HH:MM:SS](https://www.youtube.com/watch?v=dQw4w9WgXcQ&t=SECONDS)
+- Calculation: You MUST convert the chosen HH:MM:SS timecode into total elapsed seconds (SECONDS) for the URL's &t= parameter.
+- Example: A heading matched to timecode 00:03:42 (which is 222 seconds) must be formatted as: My Heading [00:03:42](https://www.youtube.com/watch?v=dQw4w9WgXcQ&t=222s)
+- Mandatory: The full, clickable markdown link must be appended to ALL generated headings.
