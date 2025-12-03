@@ -60,6 +60,18 @@ if [[ -z "$PLAYLIST_URL" ]]; then
     exit 1
 fi
 
+# Basic YouTube URL validation
+if [[ ! "$PLAYLIST_URL" =~ ^https?://(www\.)?(youtube\.com|youtu\.be)/ ]]; then
+    echo "Error: '$PLAYLIST_URL' is not a valid YouTube URL."
+    exit 1
+fi
+
+# Ensure playlist parameter is present
+if [[ "$PLAYLIST_URL" != *"list="* ]]; then
+    echo "Error: URL does not contain a playlist 'list=' parameter. Please pass a playlist link."
+    exit 1
+fi
+
 YT_DLP_SILENT_FLAGS=()
 CHILD_FLAGS=()
 if [[ "$DEBUG" -ne 1 ]]; then
