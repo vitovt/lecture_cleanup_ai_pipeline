@@ -4,13 +4,18 @@ SCRIPT_PATH="$(readlink -f "$0")"
 SCRIPT_DIR="$(dirname "$SCRIPT_PATH")"
 SRTOUTDIR="$SCRIPT_DIR/input/autoyoutube"
 MDOUTDIR="$SCRIPT_DIR/output/autoyoutube"
+OUTDIR="$MDOUTDIR"
 mkdir -p "$SRTOUTDIR"
 
 #==============================
 #
 print_help() {
     cat <<EOF
-Usage: $0 <youtube_url>
+Usage: $0 [--outdir DIR] <youtube_url>
+
+Options:
+  --outdir DIR   Override the default markdown output dir 
+    default: $MDOUTDIR
 
 Examples:
   $0 "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
@@ -18,21 +23,43 @@ Examples:
 EOF
 }
 
-# No argument -> show help and exit
-if [[ $# -lt 1 ]]; then
+URL=""
+
+# Parse arguments
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -h|--help)
+            print_help
+            exit 0
+            ;;
+        --outdir)
+            if [[ -z "$2" ]]; then
+                echo "Error: --outdir requires a directory path."
+                exit 1
+            fi
+            OUTDIR="$2"
+            shift 2
+            ;;
+        *)
+            if [[ -z "$URL" ]]; then
+                URL="$1"
+                shift
+            else
+                echo "Error: Unexpected argument '$1'."
+                echo
+                print_help
+                exit 1
+            fi
+            ;;
+    esac
+done
+
+if [[ -z "$URL" ]]; then
     echo "Error: No URL provided."
     echo
     print_help
     exit 1
 fi
-
-# Help flag
-if [[ "$1" == "-h" || "$1" == "--help" ]]; then
-    print_help
-    exit 0
-fi
-
-URL="$1"
 
 # remove SI= tracking parameter
 URL="${URL%%?si=*}"
@@ -110,7 +137,6 @@ ESCAPED_URL=$(printf '%s\n' "$URL" | sed 's/[&/\]/\\&/g')
 # Replace the hardcoded URL in the template with the real one
 sed "s|https://www.youtube.com/watch?v=dQw4w9WgXcQ|$ESCAPED_URL|g" "$TEMPLATE_CTX" > "$TMP_CTX"
 
-$SCRIPT_DIR/lecture_cleanup.sh --input "$SRTOUTDIR/$TXT_FILE" --lang=$LANG --outdir "$MDOUTDIR" --context-file "$TMP_CTX" --context-file "$SCRIPT_DIR/prompts/custom_context_general/lection-monolog-with-questions.txt" #--trace
+$SCRIPT_DIR/lecture_cleanup.sh --input "$SRTOUTDIR/$TXT_FILE" --lang=$LANG --outdir "$OUTDIR" --context-file "$TMP_CTX" --context-file "$SCRIPT_DIR/prompts/custom_context_general/lection-monolog-with-questions.txt" #--trace
 
 exit 0
-
