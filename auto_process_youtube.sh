@@ -162,6 +162,7 @@ if [[ -f "$OUT_MD" ]]; then
         printf 'filename: %s\n' "$TXT_FILE"
         printf 'url: %s\n' "$URL"
         printf '%s\n\n' '---'
+        printf '# ' "$base"
         cat "$OUT_MD"
     } > "$tmp_md"
     mv "$tmp_md" "$OUT_MD"
