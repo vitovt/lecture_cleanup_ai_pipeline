@@ -5,17 +5,19 @@ SCRIPT_DIR="$(dirname "$SCRIPT_PATH")"
 SRTOUTDIR="$SCRIPT_DIR/input/autoyoutube"
 MDOUTDIR="$SCRIPT_DIR/output/autoyoutube"
 OUTDIR="$MDOUTDIR"
+DEBUG=0
 mkdir -p "$SRTOUTDIR"
 
 #==============================
 #
 print_help() {
     cat <<EOF
-Usage: $0 [--outdir DIR] <youtube_url>
+Usage: $0 [--outdir DIR] [--debug] <youtube_url>
 
 Options:
   --outdir DIR   Override the default markdown output dir 
     default: $MDOUTDIR
+  --debug        Show yt-dlp output and pass --debug to lecture_cleanup.sh
 
 Examples:
   $0 "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
@@ -40,6 +42,10 @@ while [[ $# -gt 0 ]]; do
             OUTDIR="$2"
             shift 2
             ;;
+        --debug)
+            DEBUG=1
+            shift
+            ;;
         *)
             if [[ -z "$URL" ]]; then
                 URL="$1"
@@ -59,6 +65,15 @@ if [[ -z "$URL" ]]; then
     echo
     print_help
     exit 1
+fi
+
+YT_DLP_SILENT_FLAGS=()
+LECTURE_DEBUG_FLAG=()
+
+if [[ "$DEBUG" -ne 1 ]]; then
+    YT_DLP_SILENT_FLAGS+=(--quiet --no-warnings)
+else
+    LECTURE_DEBUG_FLAG+=(--debug)
 fi
 
 # remove SI= tracking parameter
@@ -90,7 +105,7 @@ fi
 
 # Step 1: List subtitles
 echo "[*] Detecting available subtitles..."
-SUB_INFO=$(yt-dlp  --quiet --no-warnings --list-subs "$URL")
+SUB_INFO=$(yt-dlp "${YT_DLP_SILENT_FLAGS[@]}" --list-subs "$URL")
 
 # Step 2: Extract auto-generated subtitle language code
 AUTO_LANG=$(echo "$SUB_INFO" | grep '(Original)' | awk '{print $1}' | head -n 1)
@@ -105,10 +120,9 @@ LANG="${AUTO_LANG%-orig}"
 echo "[*] Detected auto-sub language: $AUTO_LANG lang: $LANG"
 
 # Step 3: Download the auto-generated subtitles
-filename=$(yt-dlp --print filename --skip-download --quiet --no-warnings --extractor-args "youtube:player_client=default" "$URL")
+filename=$(yt-dlp "${YT_DLP_SILENT_FLAGS[@]}" --print filename --skip-download --extractor-args "youtube:player_client=default" "$URL")
 
-#yt-dlp --write-auto-sub --sub-lang "$AUTO_LANG" --convert-subs srt --skip-download --no-progress --quiet -o "$SRTOUTDIR/%(title)s.%(ext)s" "$URL"
-yt-dlp --write-auto-sub --sub-lang "$AUTO_LANG" --convert-subs srt --skip-download --no-progress --quiet --no-warnings --extractor-args "youtube:player_client=default" -o "$SRTOUTDIR/$filename" "$URL"
+yt-dlp "${YT_DLP_SILENT_FLAGS[@]}" --write-auto-sub --sub-lang "$AUTO_LANG" --convert-subs srt --skip-download --no-progress --extractor-args "youtube:player_client=default" -o "$SRTOUTDIR/$filename" "$URL"
 
 
 base="${filename%.*}"
@@ -137,6 +151,6 @@ ESCAPED_URL=$(printf '%s\n' "$URL" | sed 's/[&/\]/\\&/g')
 # Replace the hardcoded URL in the template with the real one
 sed "s|https://www.youtube.com/watch?v=dQw4w9WgXcQ|$ESCAPED_URL|g" "$TEMPLATE_CTX" > "$TMP_CTX"
 
-$SCRIPT_DIR/lecture_cleanup.sh --input "$SRTOUTDIR/$TXT_FILE" --lang=$LANG --outdir "$OUTDIR" --context-file "$TMP_CTX" --context-file "$SCRIPT_DIR/prompts/custom_context_general/lection-monolog-with-questions.txt" #--trace
+"$SCRIPT_DIR/lecture_cleanup.sh" --input "$SRTOUTDIR/$TXT_FILE" --lang="$LANG" --outdir "$OUTDIR" --context-file "$TMP_CTX" --context-file "$SCRIPT_DIR/prompts/custom_context_general/lection-monolog-with-questions.txt" "${LECTURE_DEBUG_FLAG[@]}"
 
 exit 0
