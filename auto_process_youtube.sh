@@ -41,6 +41,10 @@ URL="${URL%%?si=*}"
 # todo: bulk process playlists
 URL="${URL%%&list=*}"
 
+# remove timecode parameter
+URL="${URL%%?t=*}"
+URL="${URL%%&t=*}"
+
 # Validate YouTube URL
 # Accepts:
 #   - https://www.youtube.com/...
