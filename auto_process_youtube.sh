@@ -34,6 +34,9 @@ fi
 
 URL="$1"
 
+# remove SI= tracking parameter
+URL="${URL%%?si=*}"
+
 # Validate YouTube URL
 # Accepts:
 #   - https://www.youtube.com/...
