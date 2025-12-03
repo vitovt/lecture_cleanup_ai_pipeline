@@ -37,6 +37,10 @@ URL="$1"
 # remove SI= tracking parameter
 URL="${URL%%?si=*}"
 
+# remove playlist data (process only one wide)
+# todo: bulk process playlists
+URL="${URL%%&list=*}"
+
 # Validate YouTube URL
 # Accepts:
 #   - https://www.youtube.com/...
