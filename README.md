@@ -21,12 +21,6 @@ Three editing modes are supported: `strict`, `normal`, `creative`.
 ---
 
 ## 🇩🇪 Deutsch
-
----
-
-Provider selection (adapters): set `llm.provider` in `config.yaml` (default `openai`) or override via `--llm-provider` CLI flag. Put API keys in `.env`:
-- OpenAI: `OPENAI_API_KEY=...`
-- Gemini: `GOOGLE_API_KEY=...`
 **Lecture Cleanup Pipeline** ist ein Tool, das lange Vorlesungstranskripte in gut lesbares Markdown für **Obsidian** und Wissensdatenbanken umwandelt.  
 Es korrigiert Interpunktion, Groß-/Kleinschreibung und typische ASR-Fehler und sorgt für konsistente Terminologie zwischen Textblöcken.  
 Unterstützt drei Bearbeitungsmodi: `strict`, `normal`, `creative`.
