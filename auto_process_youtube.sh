@@ -6,17 +6,19 @@ SRTOUTDIR="$SCRIPT_DIR/input/autoyoutube"
 MDOUTDIR="$SCRIPT_DIR/output/autoyoutube"
 OUTDIR="$MDOUTDIR"
 DEBUG=0
+OVERWRITE=0
 mkdir -p "$SRTOUTDIR"
 
 #==============================
 #
 print_help() {
     cat <<EOF
-Usage: $0 [--outdir DIR] [--debug] <youtube_url>
+Usage: $0 [--outdir DIR] [--overwrite] [--debug] <youtube_url>
 
 Options:
   --outdir DIR   Override the default markdown output dir 
     default: $MDOUTDIR
+  --overwrite    Re-process even if destination .md already exists (default: skip existing)
   --debug        Show yt-dlp output and pass --debug to lecture_cleanup.sh
 
 Examples:
@@ -41,6 +43,10 @@ while [[ $# -gt 0 ]]; do
             fi
             OUTDIR="$2"
             shift 2
+            ;;
+        --overwrite)
+            OVERWRITE=1
+            shift
             ;;
         --debug)
             DEBUG=1
@@ -122,13 +128,17 @@ echo "[*] Detected auto-sub language: $AUTO_LANG lang: $LANG"
 # Step 3: Download the auto-generated subtitles
 filename=$(yt-dlp "${YT_DLP_SILENT_FLAGS[@]}" --print filename --skip-download --extractor-args "youtube:player_client=default" "$URL")
 
-yt-dlp "${YT_DLP_SILENT_FLAGS[@]}" --write-auto-sub --sub-lang "$AUTO_LANG" --convert-subs srt --skip-download --no-progress --extractor-args "youtube:player_client=default" -o "$SRTOUTDIR/$filename" "$URL"
-
-
 base="${filename%.*}"
 SRT_FILE="${base}.${AUTO_LANG}.srt"
 TXT_FILE="${base}.${AUTO_LANG}.txt"
 OUT_MD="$OUTDIR/${TXT_FILE%.txt}.md"
+
+if [[ -f "$OUT_MD" && "$OVERWRITE" -ne 1 ]]; then
+    echo "[WARN] Output exists, skipping: $OUT_MD (use --overwrite to reprocess)"
+    exit 0
+fi
+
+yt-dlp "${YT_DLP_SILENT_FLAGS[@]}" --write-auto-sub --sub-lang "$AUTO_LANG" --convert-subs srt --skip-download --no-progress --extractor-args "youtube:player_client=default" -o "$SRTOUTDIR/$filename" "$URL"
 
 echo "Downloaded: $SRT_FILE"
 #ls -alh  "$SRTOUTDIR/$SRT_FILE"
