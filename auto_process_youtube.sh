@@ -2,12 +2,19 @@
 
 SCRIPT_PATH="$(readlink -f "$0")"
 SCRIPT_DIR="$(dirname "$SCRIPT_PATH")"
-SRTOUTDIR="$SCRIPT_DIR/input/autoyoutube"
-MDOUTDIR="$SCRIPT_DIR/output/autoyoutube"
+SRTOUTDIR_DEFAULT="$SCRIPT_DIR/input/autoyoutube"
+MDOUTDIR_DEFAULT="$SCRIPT_DIR/output/autoyoutube"
+
+if [[ -f "$SCRIPT_DIR/.env" ]]; then
+    # shellcheck disable=SC1091
+    source "$SCRIPT_DIR/.env"
+fi
+
+SRTOUTDIR="${AUTOYOUTUBE_SRTOUTDIR:-$SRTOUTDIR_DEFAULT}"
+MDOUTDIR="${AUTOYOUTUBE_MDOUTDIR:-$MDOUTDIR_DEFAULT}"
 OUTDIR="$MDOUTDIR"
 DEBUG=0
 OVERWRITE=0
-mkdir -p "$SRTOUTDIR"
 
 # External helper for URL normalization
 YOUTUBE_NORMALIZER="$SCRIPT_DIR/subtitle-utils/normalize_youtube_url.py"
@@ -66,13 +73,15 @@ normalize_youtube_url() {
 #
 print_help() {
     cat <<EOF
-Usage: $0 [--outdir DIR] [--overwrite] [--debug] <youtube_url>
+Usage: $0 [--outdir DIR] [--srtoutdir DIR] [--overwrite] [--debug] <youtube_url>
 
 Options:
-  --outdir DIR   Override the default markdown output dir 
-    default: $MDOUTDIR
-  --overwrite    Re-process even if destination .md already exists (default: skip existing)
-  --debug        Show yt-dlp output and pass --debug to lecture_cleanup.sh
+  --outdir DIR     Override the markdown output dir (default or in .env: AUTOYOUTUBE_MDOUTDIR)
+    default: $MDOUTDIR;
+  --srtoutdir DIR  Override the subtitles download dir (default or in .env:  AUTOYOUTUBE_SRTOUTDIR)
+    default: $SRTOUTDIR; 
+  --overwrite      Re-process even if destination .md already exists (default: skip existing)
+  --debug          Show yt-dlp output and pass --debug to lecture_cleanup.sh
 
 Examples:
   $0 "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
@@ -95,6 +104,14 @@ while [[ $# -gt 0 ]]; do
                 exit 1
             fi
             OUTDIR="$2"
+            shift 2
+            ;;
+        --srtoutdir)
+            if [[ -z "$2" ]]; then
+                echo "Error: --srtoutdir requires a directory path."
+                exit 1
+            fi
+            SRTOUTDIR="$2"
             shift 2
             ;;
         --overwrite)
@@ -171,6 +188,8 @@ if [[ -f "$OUT_MD" && "$OVERWRITE" -ne 1 ]]; then
     echo "[WARN] Output exists, skipping: $OUT_MD (use --overwrite to reprocess)"
     exit 0
 fi
+
+mkdir -p "$SRTOUTDIR" "$OUTDIR"
 
 yt-dlp "${YT_DLP_SILENT_FLAGS[@]}" --write-auto-sub --sub-lang "$AUTO_LANG" --convert-subs srt --skip-download --no-progress --extractor-args "youtube:player_client=default" -o "$SRTOUTDIR/$filename" "$URL"
 

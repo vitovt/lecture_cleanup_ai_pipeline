@@ -6,6 +6,7 @@ SCRIPT_PATH="$(readlink -f "$0")"
 SCRIPT_DIR="$(dirname "$SCRIPT_PATH")"
 
 OUTDIR=""
+SRT_OUTDIR=""
 DEBUG=0
 PLAYLIST_URL=""
 VIDEOS_SPEC=""
@@ -13,12 +14,13 @@ OVERWRITE=0
 
 print_help() {
     cat <<EOF
-Usage: $0 [--outdir DIR] [--videos SPEC] [--overwrite] [--debug] <youtube_playlist_url>
+Usage: $0 [--outdir DIR] [--srtoutdir DIR] [--videos SPEC] [--overwrite] [--debug] <youtube_playlist_url>
 
 Expands a YouTube playlist and runs auto_process_youtube.sh for each video.
 
 Options:
-  --outdir DIR   Override markdown output dir for all videos (default: auto_process_youtube.sh default)
+  --outdir DIR   Override markdown output dir for all videos (default: auto_process_youtube.sh\`s default)
+  --srtoutdir DIR Override subtitles download dir for all videos (default: auto_process_youtube.sh\`s default)
   --videos SPEC  Process only selected items (1-based). Examples: 1-6 | 2,4,6 | 1-3,5,7,9-11,13
   --overwrite    Re-process even if destination .md already exists (default: skip existing)
   --debug        Show yt-dlp output and pass --debug to auto_process_youtube.sh
@@ -37,6 +39,14 @@ while [[ $# -gt 0 ]]; do
                 exit 1
             fi
             OUTDIR="$2"
+            shift 2
+            ;;
+        --srtoutdir)
+            if [[ -z "${2-}" ]]; then
+                echo "Error: --srtoutdir requires a directory path."
+                exit 1
+            fi
+            SRT_OUTDIR="$2"
             shift 2
             ;;
         --videos)
@@ -100,6 +110,9 @@ if [[ "$OVERWRITE" -eq 1 ]]; then
 fi
 if [[ -n "$OUTDIR" ]]; then
     CHILD_FLAGS+=(--outdir "$OUTDIR")
+fi
+if [[ -n "$SRT_OUTDIR" ]]; then
+    CHILD_FLAGS+=(--srtoutdir "$SRT_OUTDIR")
 fi
 
 echo "[*] Fetching playlist items…"
