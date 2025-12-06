@@ -9,6 +9,59 @@ DEBUG=0
 OVERWRITE=0
 mkdir -p "$SRTOUTDIR"
 
+# External helper for URL normalization
+YOUTUBE_NORMALIZER="$SCRIPT_DIR/subtitle-utils/normalize_youtube_url.py"
+
+# Simple bash fallback if the Python helper is missing or fails
+normalize_youtube_url_fallback() {
+    local raw="$1"
+    local url="$raw"
+    [[ -z "$url" ]] && return 1
+
+    if [[ ! "$url" =~ ^https?:// ]]; then
+        url="https://$url"
+    fi
+
+    local id=""
+    if [[ "$url" =~ youtu\.be/([^?&#/]+) ]]; then
+        id="${BASH_REMATCH[1]}"
+    elif [[ "$url" =~ youtube\.com/(shorts|embed|live|v)/([^?&#/]+) ]]; then
+        id="${BASH_REMATCH[2]}"
+    elif [[ "$url" =~ v=([^&#/]+) ]]; then
+        id="${BASH_REMATCH[1]}"
+    fi
+
+    if [[ -z "$id" ]]; then
+        return 1
+    fi
+
+    id="${id%%\?*}"
+    id="${id%%&*}"
+    id="${id%%#*}"
+    echo "https://youtu.be/$id"
+    return 0
+}
+
+# Normalize incoming YouTube URLs using the Python helper when available
+normalize_youtube_url() {
+    local raw="$1"
+    local helper="$YOUTUBE_NORMALIZER"
+    local normalized=""
+
+    if [[ -f "$helper" ]]; then
+        if normalized=$(python3 "$helper" "$raw" 2>/dev/null); then
+            echo "$normalized"
+            return 0
+        else
+            echo "[WARN] URL helper failed, using fallback parser." >&2
+        fi
+    else
+        echo "[WARN] URL helper missing ($helper), using fallback parser." >&2
+    fi
+
+    normalize_youtube_url_fallback "$raw"
+}
+
 #==============================
 #
 print_help() {
@@ -82,32 +135,13 @@ else
     LECTURE_DEBUG_FLAG+=(--debug)
 fi
 
-# remove SI= tracking parameter
-URL="${URL%%?si=*}"
-
-# remove playlist data (process only one wide)
-# todo: bulk process playlists
-URL="${URL%%&list=*}"
-
-# remove timecode parameter
-URL="${URL%%?t=*}"
-URL="${URL%%&t=*}"
-
-# Validate YouTube URL
-# Accepts:
-#   - https://www.youtube.com/...
-#   - http://youtube.com/...
-#   - https://youtu.be/...
-if [[ ! "$URL" =~ ^https?://(www\.)?(youtube\.com|youtu\.be)/ ]]; then
-    echo "Error: '$URL' is not a valid YouTube URL."
+# Normalize and validate the URL regardless of parameter order
+RAW_URL="$URL"
+if ! URL=$(normalize_youtube_url "$RAW_URL"); then
+    echo "Error: '$RAW_URL' is not a recognized YouTube video URL."
     exit 1
 fi
-
-# Enforce "watch?v="
-if [[ ! "$URL" =~ ^https?://(www\.)?youtube\.com/watch\?v=.+ && ! "$URL" =~ ^https?://youtu\.be/.+ ]]; then
-    echo "Error: '$URL' is not a recognized YouTube video URL format."
-    exit 1
-fi
+echo "[*] Normalized URL: $URL"
 
 # Step 1: List subtitles
 echo "[*] Detecting available subtitles..."
