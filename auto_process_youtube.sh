@@ -180,7 +180,7 @@ printf 'Download dir: %s\n' "$SRTOUTDIR"
 
 # Step 4: Convert .srt to .txt
 echo 'Converting srt to txt:'
-$SCRIPT_DIR/subtitle-utils/srt_to_custom.py "$SRTOUTDIR/$SRT_FILE" > "$SRTOUTDIR/$TXT_FILE"
+"$SCRIPT_DIR/subtitle-utils/srt_to_custom.py" "$SRTOUTDIR/$SRT_FILE" > "$SRTOUTDIR/$TXT_FILE"
 echo "[✓] Subtitles saved as plain text: $TXT_FILE"
 
 echo "Starting AI processing"

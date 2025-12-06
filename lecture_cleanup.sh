@@ -15,6 +15,7 @@ if [[ ! -d "$VENV_DIR" ]]; then
 fi
 
 # Activate venv
+#shellcheck disable=SC1091
 source "$VENV_DIR/bin/activate"
 
 # Run the Python script with arguments passed to this script

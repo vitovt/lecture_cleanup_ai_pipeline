@@ -13,5 +13,6 @@ echo 'Creating .venv python3 environment...'
 python3 -m venv $DIRECTORY
 
 # Activate venv
+#shellcheck disable=SC1091
 source "$DIRECTORY/bin/activate"
 pip install pyyaml openai google-generativeai

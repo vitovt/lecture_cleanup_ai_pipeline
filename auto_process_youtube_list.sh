@@ -151,7 +151,6 @@ if (( PLAN_TOTAL == 0 )); then
     exit 1
 fi
 
-TOTAL=${#VIDEO_IDS[@]}
 SUCCESS=0
 FAIL=0
 
