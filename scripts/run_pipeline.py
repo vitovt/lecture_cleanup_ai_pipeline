@@ -447,6 +447,17 @@ def main():
     if debug:
         log_debug(f"Input: {in_path} | format={fmt} | outdir={args.outdir}")
 
+    if not in_path.exists():
+        log_error(f"Input file not found: {in_path}")
+        sys.exit(1)
+    try:
+        file_size = in_path.stat().st_size
+    except Exception:
+        file_size = 0
+    if file_size < 150:
+        log_error("input text is too small, there is nothing to format in so small text.")
+        sys.exit(1)
+
     # Prepare chunks
     input_text = load_text(str(in_path))
     if not input_text.strip():
