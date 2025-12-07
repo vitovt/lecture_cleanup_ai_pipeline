@@ -238,20 +238,22 @@ def call_llm(
         print("===== TRACE: LLM response END =====")
     return out_text
 
-def call_llm_summary(adapter: LLMAdapter, model: str, system_prompt: str, full_markdown: str, temperature: float = 1.0, top_p: float = None, debug: bool = False, trace: bool = False, label: str = None) -> str:
+def call_llm_summary(adapter: LLMAdapter, model: str, full_markdown: str, temperature: float = 1.0, top_p: float = None, debug: bool = False, trace: bool = False, label: str = None) -> str:
     from pathlib import Path
-    summary_tmpl_path = Path(__file__).parent.parent / "prompts" / "summary_prompt.md"
-    with open(summary_tmpl_path, "r", encoding="utf-8") as f:
-        sum_prompt = f.read()
+    base = Path(__file__).parent.parent
+    summary_system_path = base / "prompts" / "summary_system.md"
+    summary_user_path = base / "prompts" / "summary_user.md"
+    summary_system_content = summary_system_path.read_text(encoding="utf-8")
+    summary_user_content = summary_user_path.read_text(encoding="utf-8")
     messages = [
-        {"role": "system", "content": system_prompt},
-        {"role": "user", "content": sum_prompt + "\n\n<<<\n" + full_markdown + "\n>>>"},
+        {"role": "system", "content": summary_system_content},
+        {"role": "user", "content": summary_user_content + "\n\n<<<\n" + full_markdown + "\n>>>"},
     ]
     if trace:
         print("===== TRACE: Summary request BEGIN" + (f" [{label}]" if label else "") + " =====")
         print(f"Model: {model} | temperature: {temperature} | top_p: {top_p}")
-        from pathlib import Path as _Path
-        print("-- User prompt (summary) --\n" + (open((_Path(__file__).parent.parent / "prompts" / "summary_prompt.md"), "r", encoding="utf-8").read()))
+        print("-- System prompt (summary) --\n" + summary_system_content)
+        print("-- User prompt (summary) --\n" + summary_user_content)
         print("-- Document (full markdown) --\n" + full_markdown)
         print("===== TRACE: Summary request END =====")
     out_text = adapter.generate(
@@ -729,7 +731,7 @@ def main():
                         print(f"[DEBUG] Sleeping {request_delay}s before summary request")
                     time.sleep(request_delay)
                 summary = call_llm_summary(
-                    adapter, model, system_prompt, strip_edit_comments(full_markdown),
+                    adapter, model, strip_edit_comments(full_markdown),
                     temperature=temperature, top_p=top_p,
                     debug=debug, trace=trace, label=f"summary (attempt {attempt_i}/{attempts})",
                 )
