@@ -22,6 +22,36 @@ from scripts.utils import (
     strip_all_html_comments,
 )
 
+def _log(prefix: str, message: str, *, stream=None) -> None:
+    """Print a message with a uniform prefix; preserves multi-line content."""
+    if message is None:
+        return
+    if stream is None:
+        stream = sys.stdout
+    lines = str(message).splitlines() or [""]
+    for line in lines:
+        print(f"{prefix} {line}", file=stream)
+
+def log_debug(message: str) -> None:
+    _log("[DEBUG]", message)
+
+def log_info(message: str) -> None:
+    _log("[INFO]", message)
+
+def log_warn(message: str) -> None:
+    _log("[WARN]", message, stream=sys.stderr)
+
+def log_error(message: str) -> None:
+    _log("[ERROR]", message, stream=sys.stderr)
+
+def log_trace(message: str) -> None:
+    _log("[TRACE]", message)
+
+def log_trace_block(title: str, body: str) -> None:
+    log_trace(f"{title} BEGIN")
+    _log("[TRACE]", body)
+    log_trace(f"{title} END")
+
 def load_text(path: str) -> str:
     with open(path, "r", encoding="utf-8", errors="ignore") as f:
         return f.read()
@@ -218,12 +248,13 @@ def call_llm(
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": prompt},
     ]
+    trace_label = f" [{label}]" if label else ""
     if trace:
-        print("===== TRACE: LLM request BEGIN" + (f" [{label}]" if label else "") + " =====")
-        print(f"Model: {model} | temperature: {temperature} | top_p: {top_p}")
-        print("-- System prompt --\n" + system_prompt)
-        print("-- User prompt --\n" + prompt)
-        print("===== TRACE: LLM request END =====")
+        log_trace(f"LLM request BEGIN{trace_label}")
+        log_trace(f"Model: {model} | temperature: {temperature} | top_p: {top_p}")
+        log_trace_block("System prompt", system_prompt)
+        log_trace_block("User prompt", prompt)
+        log_trace(f"LLM request END{trace_label}")
     out_text = adapter.generate(
         messages,
         model=model,
@@ -233,9 +264,9 @@ def call_llm(
         label=label,
     )
     if trace:
-        print("===== TRACE: LLM response BEGIN" + (f" [{label}]" if label else "") + " =====")
-        print(out_text)
-        print("===== TRACE: LLM response END =====")
+        log_trace(f"LLM response BEGIN{trace_label}")
+        log_trace_block("LLM response", out_text)
+        log_trace(f"LLM response END{trace_label}")
     return out_text
 
 def call_llm_summary(adapter: LLMAdapter, model: str, full_markdown: str, temperature: float = 1.0, top_p: float = None, debug: bool = False, trace: bool = False, label: str = None) -> str:
@@ -249,13 +280,14 @@ def call_llm_summary(adapter: LLMAdapter, model: str, full_markdown: str, temper
         {"role": "system", "content": summary_system_content},
         {"role": "user", "content": summary_user_content + "\n\n<<<\n" + full_markdown + "\n>>>"},
     ]
+    trace_label = f" [{label}]" if label else ""
     if trace:
-        print("===== TRACE: Summary request BEGIN" + (f" [{label}]" if label else "") + " =====")
-        print(f"Model: {model} | temperature: {temperature} | top_p: {top_p}")
-        print("-- System prompt (summary) --\n" + summary_system_content)
-        print("-- User prompt (summary) --\n" + summary_user_content)
-        print("-- Document (full markdown) --\n" + full_markdown)
-        print("===== TRACE: Summary request END =====")
+        log_trace(f"Summary request BEGIN{trace_label}")
+        log_trace(f"Model: {model} | temperature: {temperature} | top_p: {top_p}")
+        log_trace_block("System prompt (summary)", summary_system_content)
+        log_trace_block("User prompt (summary)", summary_user_content)
+        log_trace_block("Document (full markdown)", full_markdown)
+        log_trace(f"Summary request END{trace_label}")
     out_text = adapter.generate(
         messages,
         model=model,
@@ -265,9 +297,9 @@ def call_llm_summary(adapter: LLMAdapter, model: str, full_markdown: str, temper
         label=label,
     )
     if trace:
-        print("===== TRACE: Summary response BEGIN" + (f" [{label}]" if label else "") + " =====")
-        print(out_text)
-        print("===== TRACE: Summary response END =====")
+        log_trace(f"Summary response BEGIN{trace_label}")
+        log_trace_block("Summary response", out_text)
+        log_trace(f"Summary response END{trace_label}")
     return out_text
 
 def main():
@@ -334,7 +366,7 @@ def main():
     debug = (level in ("debug", "trace"))
     trace = (level == "trace")
     if debug:
-        print(f"Debug mode: {level}")
+        log_debug(f"Debug mode: {level}")
 
     # Load .env (keys for any provider); adapter will validate required ones
     load_env_from_env_file(base)
@@ -363,7 +395,7 @@ def main():
     top_p = _llm.get("top_p")
     # Basic validation to catch missing required model setting
     if not model:
-        print("ERROR: Missing model in config under llm.<provider>.model", file=sys.stderr)
+        log_error("Missing model in config under llm.<provider>.model")
         sys.exit(1)
     # Delay between LLM requests (seconds). Config llm.request_delay_seconds; CLI overrides.
     cfg_llm = cfg["llm"]
@@ -391,10 +423,10 @@ def main():
     content_mode = str(cfg.get("content_mode", "normal")).strip().lower()
     suppress_edit_comments = bool(cfg.get("suppress_edit_comments", True))
     if debug:
-        print(f"[DEBUG] Settings -> provider={_llm['provider']}, model={model}, temperature={temperature}, top_p={top_p}, lang={lang}, delay={request_delay}s, retries={attempts} x pause {pause_between_attempts}s")
-        print(f"[DEBUG] Options -> include_timecodes={include_timecodes}, process_timecodes_by_ai={process_timecodes_by_ai}, aside_style={aside_style}")
-        print(f"[DEBUG] Overlap -> source={overlap_source}, sentence_delimiters={sentence_delimiters!r}, stitch_dedup_window_chars={stitch_dedup_window}")
-        print(f"[DEBUG] Content mode -> {content_mode}; suppress_edit_comments={suppress_edit_comments}")
+        log_debug(f"Settings -> provider={_llm['provider']}, model={model}, temperature={temperature}, top_p={top_p}, lang={lang}, delay={request_delay}s, retries={attempts} x pause {pause_between_attempts}s")
+        log_debug(f"Options -> include_timecodes={include_timecodes}, process_timecodes_by_ai={process_timecodes_by_ai}, aside_style={aside_style}")
+        log_debug(f"Overlap -> source={overlap_source}, sentence_delimiters={sentence_delimiters!r}, stitch_dedup_window_chars={stitch_dedup_window}")
+        log_debug(f"Content mode -> {content_mode}; suppress_edit_comments={suppress_edit_comments}")
 
     # Load parasites for the language
     parasites_map = cfg.get("parasites", {})
@@ -413,12 +445,12 @@ def main():
         ext = in_path.suffix.lower()
         fmt = "srt" if ext == ".srt" else "txt"
     if debug:
-        print(f"[DEBUG] Input: {in_path} | format={fmt} | outdir={args.outdir}")
+        log_debug(f"Input: {in_path} | format={fmt} | outdir={args.outdir}")
 
     # Prepare chunks
     input_text = load_text(str(in_path))
     if not input_text.strip():
-        print("ERROR: input file is empty after trimming whitespace.", file=sys.stderr)
+        log_error("Input file is empty after trimming whitespace.")
         sys.exit(1)
 
     src_lines: List[str] = []
@@ -434,7 +466,7 @@ def main():
         src_lines = [item.get("raw", item["text"]) if timecodes_handled_by_ai else item["text"] for item in parsed_lines]
         per_line_time = [item["time"] for item in parsed_lines]
         if debug:
-            print(f"[DEBUG] TXT lines: {len(src_lines)} | timestamped={has_line_timestamps} | ai_timecodes={timecodes_handled_by_ai}")
+            log_debug(f"TXT lines: {len(src_lines)} | timestamped={has_line_timestamps} | ai_timecodes={timecodes_handled_by_ai}")
     else:  # srt -> extract text lines only
         for raw in input_text.splitlines():
             ln = raw.strip("\ufeff")
@@ -449,10 +481,10 @@ def main():
             src_lines.append(ln)
             per_line_time.append(None)
         if debug:
-            print(f"[DEBUG] SRT content lines (without times): {len(src_lines)}")
+            log_debug(f"SRT content lines (without times): {len(src_lines)}")
 
     if not any(l.strip() for l in src_lines):
-        print("ERROR: input contains no textual content after preprocessing.", file=sys.stderr)
+        log_error("Input contains no textual content after preprocessing.")
         sys.exit(1)
 
     timecodes_policy_text = _build_timecodes_policy_text(include_timecodes, timecodes_handled_by_ai, timecodes_available)
@@ -486,14 +518,14 @@ def main():
     total_chunks = len(chunks)
     print(f"Prepared {total_chunks} chunk(s). Starting processing…")
     if debug and total_chunks:
-        print(f"[DEBUG] First chunk length={len(chunks[0].get('text',''))}; last chunk length={len(chunks[-1].get('text',''))}; count={len(chunks)}")
+        log_debug(f"First chunk length={len(chunks[0].get('text',''))}; last chunk length={len(chunks[-1].get('text',''))}; count={len(chunks)}")
 
     # Optional selection of specific chunks to process
     selected_chunks: Optional[set[int]] = None
     if args.chunks:
         selected_chunks = _parse_chunks_spec(args.chunks, total_chunks)
         if debug:
-            print(f"[DEBUG] Chunk selection spec='{args.chunks}' -> {sorted(selected_chunks or [])}")
+            log_debug(f"Chunk selection spec='{args.chunks}' -> {sorted(selected_chunks or [])}")
 
     # Load system prompt according to mode
     mode_to_file = {
@@ -526,9 +558,9 @@ def main():
     try:
         adapter = create_llm_adapter(cfg, provider_override=args.llm_provider, project_root=base)
         if debug:
-            print(f"[DEBUG] Using LLM adapter: {adapter.name()}")
+            log_debug(f"Using LLM adapter: {adapter.name()}")
     except Exception as e:
-        print(f"ERROR: Failed to initialize LLM adapter: {e}", file=sys.stderr)
+        log_error(f"Failed to initialize LLM adapter: {e}")
         sys.exit(1)
 
     # Process chunks
@@ -570,12 +602,14 @@ def main():
             # we fallback to raw to keep continuity with immediately preceding text.
             prev_chunk_processed = (selected_chunks is None or (idx - 1) in (selected_chunks or set()))
             if used_source == "cleaned" and not prev_chunk_processed:
-                print("\n[WARN] cleaned overlap requested but previous chunk was skipped; using raw overlap instead", file=sys.stderr)
+                print()
+                log_warn("Cleaned overlap requested but previous chunk was skipped; using raw overlap instead")
                 used_source = "raw"
             elif used_source == "cleaned" and not cleaned_available:
                 # Check after stripping comments too
                 if not (strip_all_html_comments(last_cleaned_fragment or "").strip()):
-                    print("\n[WARN] cleaned overlap requested but empty; falling back to raw", file=sys.stderr)
+                    print()
+                    log_warn("Cleaned overlap requested but empty; falling back to raw")
                     used_source = "raw"
             context_text = build_context_overlap(
                 prev_raw_text=prev_raw_fragment or "",
@@ -585,7 +619,8 @@ def main():
                 sentence_delimiters=sentence_delimiters,
             )
         if debug and idx > 1:
-            print(f"\n[DEBUG] Chunk {idx}: overlap_source={used_source}; prev_raw_len={len(prev_raw_fragment)}; prev_cleaned_len={len(last_cleaned_fragment)}; CONTEXT chars={len(context_text)}; FRAGMENT chars={len(fragment_text)}")
+            print()
+            log_debug(f"Chunk {idx}: overlap_source={used_source}; prev_raw_len={len(prev_raw_fragment)}; prev_cleaned_len={len(last_cleaned_fragment)}; CONTEXT chars={len(context_text)}; FRAGMENT chars={len(fragment_text)}")
         # Build term-hints block from previously observed merges
         # Present coalesced, single-canonical-per-cluster hints to the model
         coalesced_for_hints = coalesce_term_map(known_terms)
@@ -598,7 +633,8 @@ def main():
                 # Optional delay before the first attempt on this chunk (inter-request pacing)
                 if attempt_i == 1 and request_delay > 0 and idx > 1:
                     if debug:
-                        print(f"\n[DEBUG] Sleeping {request_delay}s before first attempt for chunk {idx}")
+                        print()
+                        log_debug(f"Sleeping {request_delay}s before first attempt for chunk {idx}")
                     time.sleep(request_delay)
                 cleaned = call_llm(
                     adapter=adapter,
@@ -627,7 +663,7 @@ def main():
                 provider_name = adapter.name()
                 is_last = (attempt_i >= attempts)
                 if debug:
-                    traceback.print_exc()
+                    log_debug(traceback.format_exc().rstrip())
                 # Determine if retriable based on exception type
                 retriable = isinstance(e, (Exception,))  # placeholder, refined below
                 from aiadapters.base import LLMAuthError, LLMRateLimitError, LLMConnectionError, LLMUnknownError
@@ -639,7 +675,8 @@ def main():
                     # other exceptions (including RuntimeError for empty text) -> retryable
                     retriable = True
                 if not retriable or is_last:
-                    print(f"\n[ERROR] {provider_name} failed on chunk {idx}/{total_chunks} (attempt {attempt_i}/{attempts}): {e}", file=sys.stderr)
+                    print()
+                    log_error(f"{provider_name} failed on chunk {idx}/{total_chunks} (attempt {attempt_i}/{attempts}): {e}")
                     cleaned = ""
                     break
                 else:
@@ -648,7 +685,8 @@ def main():
                         wait_for = suggested + (pause_between_attempts or 0.0)
                     else:
                         wait_for = pause_between_attempts
-                    print(f"\n[WARN] {provider_name} error on chunk {idx}/{total_chunks} (attempt {attempt_i}/{attempts}): {e}. Retrying after {wait_for or 0}s…", file=sys.stderr)
+                    print()
+                    log_warn(f"{provider_name} error on chunk {idx}/{total_chunks} (attempt {attempt_i}/{attempts}): {e}. Retrying after {wait_for or 0}s…")
                     if wait_for and wait_for > 0:
                         time.sleep(wait_for)
                     attempt_i += 1
@@ -679,14 +717,14 @@ def main():
         # For TXT inputs that had per-line timestamps, add link-style stamp (unless AI handled timecodes itself)
         if include_timecodes and not timecodes_handled_by_ai and fmt == "txt" and has_line_timestamps and ch.get("start") is not None:
             if debug:
-                print(f"[DEBUG] Adding timecodes to chunk`s headings; start: {ch['start']}")
+                log_debug(f"Adding timecodes to chunk`s headings; start: {ch['start']}")
             cleaned = add_timecodes_to_headings(cleaned, ch["start"], as_link=True)
         # Stitch-time deduplication against previous output (use plain previous text)
         if prev_for_dedup and stitch_dedup_window > 0:
             prev = prev_for_dedup
             deduped, removed, mode = dedup_overlapping_boundary(prev, cleaned, stitch_dedup_window)
             if removed > 0 and debug:
-                print(f"[DEBUG] Dedup removed {removed} {('lines' if mode=='lines' else mode)} from start of chunk {idx} before stitching")
+                log_debug(f"Dedup removed {removed} {('lines' if mode=='lines' else mode)} from start of chunk {idx} before stitching")
             cleaned = deduped
         # Optionally strip edit comments in the final output
         if suppress_edit_comments:
@@ -728,7 +766,7 @@ def main():
                 # Optional delay before the first attempt on summary
                 if attempt_i == 1 and request_delay > 0:
                     if debug:
-                        print(f"[DEBUG] Sleeping {request_delay}s before summary request")
+                        log_debug(f"Sleeping {request_delay}s before summary request")
                     time.sleep(request_delay)
                 summary = call_llm_summary(
                     adapter, model, strip_edit_comments(full_markdown),
@@ -742,15 +780,15 @@ def main():
                 provider_name = adapter.name()
                 is_last = (attempt_i >= attempts)
                 if debug:
-                    traceback.print_exc()
+                    log_debug(traceback.format_exc().rstrip())
                 from aiadapters.base import LLMAuthError, LLMRateLimitError, LLMConnectionError, LLMUnknownError
                 if isinstance(e, (LLMAuthError, LLMUnknownError)):
-                    print(f"[ERROR] {provider_name} summary generation failed (attempt {attempt_i}/{attempts}): {e}", file=sys.stderr)
+                    log_error(f"{provider_name} summary generation failed (attempt {attempt_i}/{attempts}): {e}")
                     summary = ""
                     break
                 elif isinstance(e, (LLMRateLimitError, LLMConnectionError)):
                     if is_last:
-                        print(f"[ERROR] {provider_name} summary generation failed (attempt {attempt_i}/{attempts}): {e}", file=sys.stderr)
+                        log_error(f"{provider_name} summary generation failed (attempt {attempt_i}/{attempts}): {e}")
                         summary = ""
                         break
                     suggested = _extract_retry_after_seconds(str(e)) if isinstance(e, (LLMRateLimitError,)) else None
@@ -758,19 +796,19 @@ def main():
                         wait_for = suggested + (pause_between_attempts or 0.0)
                     else:
                         wait_for = pause_between_attempts
-                    print(f"[WARN] {provider_name} summary error (attempt {attempt_i}/{attempts}): {e}. Retrying after {wait_for or 0}s…", file=sys.stderr)
+                    log_warn(f"{provider_name} summary error (attempt {attempt_i}/{attempts}): {e}. Retrying after {wait_for or 0}s…")
                     if wait_for and wait_for > 0:
                         time.sleep(wait_for)
                     attempt_i += 1
                 else:
-                    print(f"[ERROR] {provider_name} summary generation failed (attempt {attempt_i}/{attempts}): {e}", file=sys.stderr)
+                    log_error(f"{provider_name} summary generation failed (attempt {attempt_i}/{attempts}): {e}")
                     summary = ""
                     break
         if summary.strip():
             summary_heading = cfg.get("summary_heading", "## Non-authorial AI generated summary")
             full_markdown = full_markdown.rstrip() + "\n\n" + summary_heading + "\n\n" + summary + "\n"
         else:
-            print("Summary generation returned empty output.")
+            log_warn("Summary generation returned empty output.")
 
     # Write outputs
     outfile_md = outdir / f"{in_path.stem}.md"
