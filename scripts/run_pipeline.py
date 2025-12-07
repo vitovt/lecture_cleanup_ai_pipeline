@@ -5,6 +5,15 @@ from pathlib import Path
 
 from aiadapters.factory import create_llm_adapter
 from aiadapters.base import LLMAdapter
+from scripts.logging_helper import (
+    set_log_level,
+    log_debug,
+    log_info,
+    log_warn,
+    log_error,
+    log_trace,
+    log_trace_block,
+)
 
 from scripts.utils import (
     add_timecodes_to_headings,
@@ -21,36 +30,6 @@ from scripts.utils import (
     build_context_overlap,
     strip_all_html_comments,
 )
-
-def _log(prefix: str, message: str, *, stream=None) -> None:
-    """Print a message with a uniform prefix; preserves multi-line content."""
-    if message is None:
-        return
-    if stream is None:
-        stream = sys.stdout
-    lines = str(message).splitlines() or [""]
-    for line in lines:
-        print(f"{prefix} {line}", file=stream)
-
-def log_debug(message: str) -> None:
-    _log("[DEBUG]", message)
-
-def log_info(message: str) -> None:
-    _log("[INFO]", message)
-
-def log_warn(message: str) -> None:
-    _log("[WARN]", message, stream=sys.stderr)
-
-def log_error(message: str) -> None:
-    _log("[ERROR]", message, stream=sys.stderr)
-
-def log_trace(message: str) -> None:
-    _log("[TRACE]", message)
-
-def log_trace_block(title: str, body: str) -> None:
-    log_trace(f"{title} BEGIN")
-    _log("[TRACE]", body)
-    log_trace(f"{title} END")
 
 def load_text(path: str) -> str:
     with open(path, "r", encoding="utf-8", errors="ignore") as f:
@@ -365,6 +344,7 @@ def main():
 
     debug = (level in ("debug", "trace"))
     trace = (level == "trace")
+    set_log_level(level)
     if debug:
         log_debug(f"Debug mode: {level}")
 
@@ -527,7 +507,7 @@ def main():
             ch["start"] = start_time
 
     total_chunks = len(chunks)
-    print(f"Prepared {total_chunks} chunk(s). Starting processing…")
+    log_info(f"Prepared {total_chunks} chunk(s). Starting processing…")
     if debug and total_chunks:
         log_debug(f"First chunk length={len(chunks[0].get('text',''))}; last chunk length={len(chunks[-1].get('text',''))}; count={len(chunks)}")
 
@@ -596,12 +576,12 @@ def main():
 
         # Skip chunks not in selection (if provided). Maintain prev_raw_fragment for better context continuity.
         if selected_chunks is not None and idx not in selected_chunks:
-            print(f"[{idx}/{total_chunks}] Skipping…", flush=True)
+            log_info(f"[{idx}/{total_chunks}] Skipping…")
             # Advance raw fragment for potential future context even if not processed
             prev_raw_fragment = fragment_text
             continue
 
-        print(f"[{idx}/{total_chunks}] Processing…", end="", flush=True)
+        log_info(f"[{idx}/{total_chunks}] Processing…")
         # Build context from tail of previous fragment/output
         if idx == 1:
             context_text = ""
@@ -613,13 +593,11 @@ def main():
             # we fallback to raw to keep continuity with immediately preceding text.
             prev_chunk_processed = (selected_chunks is None or (idx - 1) in (selected_chunks or set()))
             if used_source == "cleaned" and not prev_chunk_processed:
-                print()
                 log_warn("Cleaned overlap requested but previous chunk was skipped; using raw overlap instead")
                 used_source = "raw"
             elif used_source == "cleaned" and not cleaned_available:
                 # Check after stripping comments too
                 if not (strip_all_html_comments(last_cleaned_fragment or "").strip()):
-                    print()
                     log_warn("Cleaned overlap requested but empty; falling back to raw")
                     used_source = "raw"
             context_text = build_context_overlap(
@@ -630,7 +608,6 @@ def main():
                 sentence_delimiters=sentence_delimiters,
             )
         if debug and idx > 1:
-            print()
             log_debug(f"Chunk {idx}: overlap_source={used_source}; prev_raw_len={len(prev_raw_fragment)}; prev_cleaned_len={len(last_cleaned_fragment)}; CONTEXT chars={len(context_text)}; FRAGMENT chars={len(fragment_text)}")
         # Build term-hints block from previously observed merges
         # Present coalesced, single-canonical-per-cluster hints to the model
@@ -644,7 +621,6 @@ def main():
                 # Optional delay before the first attempt on this chunk (inter-request pacing)
                 if attempt_i == 1 and request_delay > 0 and idx > 1:
                     if debug:
-                        print()
                         log_debug(f"Sleeping {request_delay}s before first attempt for chunk {idx}")
                     time.sleep(request_delay)
                 cleaned = call_llm(
@@ -686,7 +662,6 @@ def main():
                     # other exceptions (including RuntimeError for empty text) -> retryable
                     retriable = True
                 if not retriable or is_last:
-                    print()
                     log_error(f"{provider_name} failed on chunk {idx}/{total_chunks} (attempt {attempt_i}/{attempts}): {e}")
                     cleaned = ""
                     break
@@ -696,7 +671,6 @@ def main():
                         wait_for = suggested + (pause_between_attempts or 0.0)
                     else:
                         wait_for = pause_between_attempts
-                    print()
                     log_warn(f"{provider_name} error on chunk {idx}/{total_chunks} (attempt {attempt_i}/{attempts}): {e}. Retrying after {wait_for or 0}s…")
                     if wait_for and wait_for > 0:
                         time.sleep(wait_for)
@@ -758,7 +732,7 @@ def main():
             "change_ratio": round(1.0 - sim, 4),
         })
         remaining = total_chunks - idx
-        print(f" {status} | done: {ok_count}, failed: {fail_count}, left: {remaining}")
+        log_info(f"{status} | done: {ok_count}, failed: {fail_count}, left: {remaining}")
         # Update previous fragments for next-iteration overlap
         prev_raw_fragment = fragment_text
         if status == "OK":
@@ -769,7 +743,7 @@ def main():
 
     # Append summary
     if cfg.get("append_summary", True):
-        print("Generating summary…")
+        log_info("Generating summary…")
         summary = ""
         attempt_i = 1
         while attempt_i <= attempts:
@@ -833,11 +807,11 @@ def main():
             w.writerow(r)
 
     if fail_count == 0:
-        print("All chunks processed successfully.")
+        log_info("All chunks processed successfully.")
     else:
-        print(f"Completed with {fail_count} failure(s) out of {total_chunks} chunk(s).")
-    print(f"Done. Markdown: {outfile_md}")
-    print(f"QC report: {qc_path}")
+        log_warn(f"Completed with {fail_count} failure(s) out of {total_chunks} chunk(s).")
+    log_info(f"Done. Markdown: {outfile_md}")
+    log_info(f"QC report: {qc_path}")
 
 if __name__ == "__main__":
     main()
