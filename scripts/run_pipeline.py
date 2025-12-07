@@ -690,8 +690,8 @@ def main():
         if suppress_edit_comments:
             cleaned = strip_edit_comments(cleaned)
         # Wrap each part with start/end comments
-        start_comment = f"<!-- STARTING processing; Chunk size: {effective_chunk_chars}; Part [{idx}/{total_chunks}] -->"
-        end_comment = f"<!-- END of part [{idx}/{total_chunks}] -->"
+        start_comment = f"<!-- STARTING: processing; Chunk size: {effective_chunk_chars}; Part [{idx}/{total_chunks}] -->"
+        end_comment = f"<!-- END: of part [{idx}/{total_chunks}] -->"
         wrapped = f"{start_comment}\n{cleaned}\n{end_comment}"
         cleaned_blocks.append(wrapped)
         # Update previous-plain text for next dedup window
@@ -729,7 +729,7 @@ def main():
                         print(f"[DEBUG] Sleeping {request_delay}s before summary request")
                     time.sleep(request_delay)
                 summary = call_llm_summary(
-                    adapter, model, system_prompt, full_markdown,
+                    adapter, model, system_prompt, strip_edit_comments(full_markdown),
                     temperature=temperature, top_p=top_p,
                     debug=debug, trace=trace, label=f"summary (attempt {attempt_i}/{attempts})",
                 )

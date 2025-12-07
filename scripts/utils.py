@@ -426,6 +426,8 @@ _EDIT_COMMENT_TAGS = (
     "genearalised",
     "structure_changed",
     "typos_fixed",
+    "STARTING",
+    "END",
 )
 
 _EDIT_COMMENT_RE = re.compile(
