@@ -543,7 +543,15 @@ def main():
             source_file_context = "\n\n".join(parts)
 
     outdir = Path(args.outdir)
-    outdir.mkdir(parents=True, exist_ok=True)
+    try:
+        outdir.mkdir(parents=True, exist_ok=True)
+        probe = outdir / ".write_test.tmp"
+        with open(probe, "w", encoding="utf-8") as f:
+            f.write("ok")
+        probe.unlink(missing_ok=True)
+    except Exception as e:
+        log_error(f"Output directory is not writable: {outdir} ({e})")
+        sys.exit(1)
 
     # Select adapter
     try:
