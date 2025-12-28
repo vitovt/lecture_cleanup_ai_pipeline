@@ -28,6 +28,15 @@ LANG_OVERRIDE=""
 
 # External helper for URL normalization
 YOUTUBE_NORMALIZER="$SCRIPT_DIR/subtitle-utils/normalize_youtube_url.py"
+SANITIZE_HELPER="$SCRIPT_DIR/subtitle-utils/sanitize_filename.sh"
+
+if [[ -f "$SANITIZE_HELPER" ]]; then
+    # shellcheck disable=SC1091
+    source "$SANITIZE_HELPER"
+else
+    echo "[WARN] Filename sanitizer missing ($SANITIZE_HELPER); filenames may be unsafe." >&2
+    sanitize_filename() { printf '%s' "$1"; }
+fi
 
 # Simple bash fallback if the Python helper is missing or fails
 normalize_youtube_url_fallback() {
@@ -207,7 +216,8 @@ if [[ -z "$LANG" ]]; then
 fi
 
 filename=$(yt-dlp "${YT_DLP_SILENT_FLAGS[@]}" --print filename --skip-download --extractor-args "youtube:player_client=default" "$URL")
-base="${filename%.*}"
+base_raw="${filename%.*}"
+base="$(sanitize_filename "$base_raw")"
 MP3_FILE="${base}.mp3"
 RAW_TXT_FILE="${base}.txt"
 
@@ -321,7 +331,7 @@ if [[ -f "$OUT_MD" ]]; then
     fi
     {
         printf '%s\n' '---'
-        printf 'title: %s\n' "$base"
+        printf 'title: %s\n' "$base_raw"
         printf 'filename: %s\n' "$TXT_FILE"
         printf 'url: %s\n' "$URL"
         printf 'transcription_source: %s\n' "speechcore-ai"
@@ -329,7 +339,7 @@ if [[ -f "$OUT_MD" ]]; then
         printf 'language: %s\n' "$LANG"
         printf 'transcribe_url: %s\n' "$TRANSCRIBE_URL"
         printf '%s\n\n' '---'
-        printf '# %s\n' "$base"
+        printf '# %s\n' "$base_raw"
         cat "$OUT_MD"
     } > "$tmp_md"
     mv "$tmp_md" "$OUT_MD"

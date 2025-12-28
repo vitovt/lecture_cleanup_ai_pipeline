@@ -18,6 +18,15 @@ OVERWRITE=0
 
 # External helper for URL normalization
 YOUTUBE_NORMALIZER="$SCRIPT_DIR/subtitle-utils/normalize_youtube_url.py"
+SANITIZE_HELPER="$SCRIPT_DIR/subtitle-utils/sanitize_filename.sh"
+
+if [[ -f "$SANITIZE_HELPER" ]]; then
+    # shellcheck disable=SC1091
+    source "$SANITIZE_HELPER"
+else
+    echo "[WARN] Filename sanitizer missing ($SANITIZE_HELPER); filenames may be unsafe." >&2
+    sanitize_filename() { printf '%s' "$1"; }
+fi
 
 # Simple bash fallback if the Python helper is missing or fails
 normalize_youtube_url_fallback() {
@@ -178,8 +187,8 @@ echo "[*] Detected auto-sub language: $AUTO_LANG lang: $LANG"
 
 # Step 3: Download the auto-generated subtitles
 filename=$(yt-dlp "${YT_DLP_SILENT_FLAGS[@]}" --print filename --skip-download --extractor-args "youtube:player_client=default" "$URL")
-
-base="${filename%.*}"
+base_raw="${filename%.*}"
+base="$(sanitize_filename "$base_raw")"
 SRT_FILE="${base}.${AUTO_LANG}.srt"
 TXT_FILE="${base}.${AUTO_LANG}.txt"
 OUT_MD="$OUTDIR/${TXT_FILE%.txt}.md"
@@ -191,7 +200,7 @@ fi
 
 mkdir -p "$SRTOUTDIR" "$OUTDIR"
 
-yt-dlp "${YT_DLP_SILENT_FLAGS[@]}" --write-auto-sub --sub-lang "$AUTO_LANG" --convert-subs srt --skip-download --no-progress --extractor-args "youtube:player_client=default" -o "$SRTOUTDIR/$filename" "$URL"
+yt-dlp "${YT_DLP_SILENT_FLAGS[@]}" --write-auto-sub --sub-lang "$AUTO_LANG" --convert-subs srt --skip-download --no-progress --extractor-args "youtube:player_client=default" -o "$SRTOUTDIR/${base}.%(ext)s" "$URL"
 
 echo "Downloaded: $SRT_FILE"
 #ls -alh  "$SRTOUTDIR/$SRT_FILE"
@@ -222,14 +231,14 @@ if [[ -f "$OUT_MD" ]]; then
     TRANSCRIPTION_DATE="$(date '+%Y-%m-%d_%H-%M')"
     {
         printf '%s\n' '---'
-        printf 'title: %s\n' "$base"
+        printf 'title: %s\n' "$base_raw"
         printf 'filename: %s\n' "$TXT_FILE"
         printf 'url: %s\n' "$URL"
         printf 'transcription_source: %s\n' "youtube-auto"
         printf 'transcription_date: %s\n' "$TRANSCRIPTION_DATE"
         printf 'language: %s\n' "$LANG"
         printf '%s\n\n' '---'
-        printf '# %s\n' "$base"
+        printf '# %s\n' "$base_raw"
         cat "$OUT_MD"
     } > "$tmp_md"
     mv "$tmp_md" "$OUT_MD"
