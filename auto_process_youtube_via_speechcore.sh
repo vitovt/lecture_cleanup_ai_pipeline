@@ -300,12 +300,15 @@ sed "s|https://www.youtube.com/watch?v=dQw4w9WgXcQ|$ESCAPED_URL|g" "$TEMPLATE_CT
 
 if [[ -f "$OUT_MD" ]]; then
     tmp_md="$(mktemp)"
+    TRANSCRIPTION_DATE="$(date '+%Y-%m-%d_%H-%M')"
     {
         printf '%s\n' '---'
         printf 'title: %s\n' "$base"
         printf 'filename: %s\n' "$TXT_FILE"
         printf 'url: %s\n' "$URL"
         printf 'transcription_source: %s\n' "speechcore-ai"
+        printf 'transcription_date: %s\n' "$TRANSCRIPTION_DATE"
+        printf 'language: %s\n' "$LANG"
         printf '%s\n\n' '---'
         printf '# %s\n' "$base"
         cat "$OUT_MD"
