@@ -262,7 +262,11 @@ else
         echo "[ERROR] SpeechcoreAI CLI not found: $SPEECHCORE_CLI"
         exit 1
     fi
-    SPEECHCORE_ARGS=(--input-file "$MP3_PATH" --output-dir "$SRTOUTDIR")
+    TASK_ID_FILE="$SRTOUTDIR/${base}.speechcore_task_id"
+    if [[ -f "$TASK_ID_FILE" && "$OVERWRITE" -eq 1 ]]; then
+        rm -f "$TASK_ID_FILE"
+    fi
+    SPEECHCORE_ARGS=(--input-file "$MP3_PATH" --output-dir "$SRTOUTDIR" --task-output "$TASK_ID_FILE")
     case "$LANG" in
         ru|uk|en|de) SPEECHCORE_ARGS+=(--language "$LANG") ;;
     esac
@@ -301,6 +305,20 @@ sed "s|https://www.youtube.com/watch?v=dQw4w9WgXcQ|$ESCAPED_URL|g" "$TEMPLATE_CT
 if [[ -f "$OUT_MD" ]]; then
     tmp_md="$(mktemp)"
     TRANSCRIPTION_DATE="$(date '+%Y-%m-%d_%H-%M')"
+    TASK_ID_FILE="$SRTOUTDIR/${base}.speechcore_task_id"
+    TRANSCRIBE_URL=""
+    if [[ -f "$TASK_ID_FILE" ]]; then
+        MP3_NAME="$(basename "$MP3_PATH")"
+        TASK_ID="$(awk -v name="$MP3_NAME" -F '\t' '$1==name{tid=$2} END{print tid}' "$TASK_ID_FILE")"
+        if [[ -z "$TASK_ID" ]]; then
+            TASK_ID="$(tail -n 1 "$TASK_ID_FILE" | awk -F '\t' '{print $2}')"
+        fi
+        TASK_ID="$(printf '%s' "$TASK_ID" | tr -d '[:space:]')"
+        if [[ -n "$TASK_ID" ]]; then
+            SPEECHCORE_BASE_URL="${SPEECHCOREAI_BASE_URL:-https://speechcoreai.com}"
+            TRANSCRIBE_URL="${SPEECHCORE_BASE_URL%/}/transcribe/${TASK_ID}"
+        fi
+    fi
     {
         printf '%s\n' '---'
         printf 'title: %s\n' "$base"
@@ -309,6 +327,7 @@ if [[ -f "$OUT_MD" ]]; then
         printf 'transcription_source: %s\n' "speechcore-ai"
         printf 'transcription_date: %s\n' "$TRANSCRIPTION_DATE"
         printf 'language: %s\n' "$LANG"
+        printf 'transcribe_url: %s\n' "$TRANSCRIBE_URL"
         printf '%s\n\n' '---'
         printf '# %s\n' "$base"
         cat "$OUT_MD"
