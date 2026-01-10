@@ -59,9 +59,13 @@ include_timecodes_in_headings: true   # append timecodes to headings when availa
 process_timecodes_by_ai: true        # if true, keep timestamps in the prompt and ask the LLM to add per-heading timecodes
 
 # Content optimization mode:
+# Provide file name relative to prompts/system_ (without .md).
+#
+# Predefined modes:
 # - normal   : balanced cleanup (default). Keeps meaning; light structure.
 # - strict   : no reordering; only punctuation/casing; remove safe fillers.
 # - creative : allows stronger rephrasing/merging short sentences; normalizes term variants.
+# - creativedetailed : allows stronger rephrasing/merging short sentences; normalizes term variants but keep verbosity and original mood.
 content_mode: creative
 
 # Edit comments emitted at end of each output block (HTML comments like <!-- fixed: ... -->, <!-- merged_terms: ... -->).

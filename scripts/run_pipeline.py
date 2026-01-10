@@ -520,15 +520,10 @@ def main():
             log_debug(f"Chunk selection spec='{args.chunks}' -> {sorted(selected_chunks or [])}")
 
     # Load system prompt according to mode
-    mode_to_file = {
-        "normal": base / "prompts" / "system_normal.md",
-        "strict": base / "prompts" / "system_strict.md",
-        "creative": base / "prompts" / "system_creative.md",
-    }
-    spath = mode_to_file.get(content_mode)
-    if spath is None or not spath.exists():
-        # Fallback to legacy system.md
-        spath = base / "prompts" / "system.md"
+    spath = base / "prompts" / f"system_{content_mode}.md"
+    if not spath.is_file():
+        log_error(f"System prompt file not found for content_mode='{content_mode}': {spath}")
+        sys.exit(1)
     system_prompt = spath.read_text(encoding="utf-8")
     # If provided, read one or more per-input context files (injected into USER prompt, not system)
     source_file_context = ""
