@@ -25,8 +25,8 @@ Formatting intent (reader- and search-friendly):
 Temperature = 0; top_p = 1.
 
 End-of-block comments (comments only):
-- <!-- fixed: ... -->
-- <!-- filler_removed: ... -->
-- <!-- merged_terms: "variant1, variant2" -> "chosen_form" --> (optional, when normalization was trivial and safe)
+- <!-- merged_terms: [{"canonical":"Term","variants":["therm","termn"],"evidence":["domain: chess","collocation: мат"],"confidence":"high"}, ...] -->
 - <!-- rephrased: ... --> (where fragments were minimally merged/split for clarity)
+- <!-- typos_fixed: ... -->
+- <!-- filler_removed: ... -->
 - <!-- unsure: ... -->
