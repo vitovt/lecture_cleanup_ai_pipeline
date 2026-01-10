@@ -95,11 +95,12 @@
 ### YouTube-обробка (`auto_process_youtube.sh`)
 
 ```bash
-./auto_process_youtube.sh [--outdir DIR] [--debug] "https://youtu.be/ID"
+./auto_process_youtube.sh [--outdir DIR] [--context-file FILE] [--debug] "https://youtu.be/ID"
 ```
 
 - Скачує автогенеровані субтитри через `yt-dlp` у `input/autoyoutube`, конвертує в TXT, підставляє URL у контекст і викликає `lecture_cleanup.sh`.
 - Markdown зберігається в `output/autoyoutube` (можна змінити через `--outdir DIR`); на початку файлу додається front matter з `title`, `filename`, `url`.
+- `--context-file FILE` передає додаткові контекстні файли у `lecture_cleanup.sh` (можна вказувати кілька разів).
 - `--debug` показує лог `yt-dlp` і прокидує `--debug` у `lecture_cleanup.sh`.
 - Потрібно, щоб у відео були автогенеровані субтитри.
 

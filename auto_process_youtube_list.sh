@@ -11,10 +11,11 @@ DEBUG=0
 PLAYLIST_URL=""
 VIDEOS_SPEC=""
 OVERWRITE=0
+CONTEXT_FILES=()
 
 print_help() {
     cat <<EOF
-Usage: $0 [--outdir DIR] [--srtoutdir DIR] [--videos SPEC] [--overwrite] [--debug] <youtube_playlist_url>
+Usage: $0 [--outdir DIR] [--srtoutdir DIR] [--videos SPEC] [--context-file FILE] [--overwrite] [--debug] <youtube_playlist_url>
 
 Expands a YouTube playlist and runs auto_process_youtube.sh for each video.
 
@@ -22,6 +23,7 @@ Options:
   --outdir DIR   Override markdown output dir for all videos (default: auto_process_youtube.sh\`s default)
   --srtoutdir DIR Override subtitles download dir for all videos (default: auto_process_youtube.sh\`s default)
   --videos SPEC  Process only selected items (1-based). Examples: 1-6 | 2,4,6 | 1-3,5,7,9-11,13
+  --context-file FILE  Additional context file(s) passed to auto_process_youtube.sh (can be repeated)
   --overwrite    Re-process even if destination .md already exists (default: skip existing)
   --debug        Show yt-dlp output and pass --debug to auto_process_youtube.sh
 EOF
@@ -55,6 +57,14 @@ while [[ $# -gt 0 ]]; do
                 exit 1
             fi
             VIDEOS_SPEC="$2"
+            shift 2
+            ;;
+        --context-file)
+            if [[ -z "${2-}" ]]; then
+                echo "Error: --context-file requires a filename."
+                exit 1
+            fi
+            CONTEXT_FILES+=("$2")
             shift 2
             ;;
         --overwrite)
@@ -113,6 +123,11 @@ if [[ -n "$OUTDIR" ]]; then
 fi
 if [[ -n "$SRT_OUTDIR" ]]; then
     CHILD_FLAGS+=(--srtoutdir "$SRT_OUTDIR")
+fi
+if [[ ${#CONTEXT_FILES[@]} -gt 0 ]]; then
+    for ctx in "${CONTEXT_FILES[@]}"; do
+        CHILD_FLAGS+=(--context-file "$ctx")
+    done
 fi
 
 echo "[*] Fetching playlist items…"

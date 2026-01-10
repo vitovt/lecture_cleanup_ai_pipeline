@@ -82,7 +82,7 @@ normalize_youtube_url() {
 #
 print_help() {
     cat <<EOF
-Usage: $0 [--outdir DIR] [--srtoutdir DIR] [--overwrite] [--debug] <youtube_url>
+Usage: $0 [--outdir DIR] [--srtoutdir DIR] [--context-file FILE] [--overwrite] [--debug] <youtube_url>
 
 Options:
   --outdir DIR     Override the markdown output dir (default or in .env: AUTOYOUTUBE_MDOUTDIR)
@@ -91,6 +91,7 @@ Options:
     default: $SRTOUTDIR; 
   --overwrite      Re-process even if destination .md already exists (default: skip existing)
   --debug          Show yt-dlp output and pass --debug to lecture_cleanup.sh
+  --context-file FILE  Additional context file(s) passed to lecture_cleanup.sh (can be repeated)
 
 Examples:
   $0 "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
@@ -99,6 +100,7 @@ EOF
 }
 
 URL=""
+CONTEXT_FLAGS=()
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
@@ -121,6 +123,14 @@ while [[ $# -gt 0 ]]; do
                 exit 1
             fi
             SRTOUTDIR="$2"
+            shift 2
+            ;;
+        --context-file)
+            if [[ -z "$2" ]]; then
+                echo "Error: --context-file requires a filename."
+                exit 1
+            fi
+            CONTEXT_FLAGS+=(--context-file "$2")
             shift 2
             ;;
         --overwrite)
@@ -224,7 +234,7 @@ ESCAPED_URL=$(printf '%s\n' "$URL" | sed 's/[&/\]/\\&/g')
 # Replace the hardcoded URL in the template with the real one
 sed "s|https://www.youtube.com/watch?v=dQw4w9WgXcQ|$ESCAPED_URL|g" "$TEMPLATE_CTX" > "$TMP_CTX"
 
-"$SCRIPT_DIR/lecture_cleanup.sh" --input "$SRTOUTDIR/$TXT_FILE" --lang="$LANG" --outdir "$OUTDIR" --context-file "$TMP_CTX" --context-file "$SCRIPT_DIR/prompts/custom_context_general/lection-monolog-with-questions.txt" "${LECTURE_DEBUG_FLAG[@]}"
+"$SCRIPT_DIR/lecture_cleanup.sh" --input "$SRTOUTDIR/$TXT_FILE" --lang="$LANG" --outdir "$OUTDIR" --context-file "$TMP_CTX" --context-file "$SCRIPT_DIR/prompts/custom_context_general/lection-monolog-with-questions.txt" "${CONTEXT_FLAGS[@]}" "${LECTURE_DEBUG_FLAG[@]}"
 
 if [[ -f "$OUT_MD" ]]; then
     tmp_md="$(mktemp)"

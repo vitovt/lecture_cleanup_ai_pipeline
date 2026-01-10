@@ -112,11 +112,12 @@ The core pipeline is provider-agnostic and talks to a unified adapter interface.
 ### YouTube auto-processing (`auto_process_youtube.sh`)
 
 ```bash
-./auto_process_youtube.sh [--outdir DIR] [--debug] "https://youtu.be/ID"
+./auto_process_youtube.sh [--outdir DIR] [--context-file FILE] [--debug] "https://youtu.be/ID"
 ```
 
 - Downloads auto-generated subtitles with `yt-dlp` into `input/autoyoutube`, converts to TXT, injects the video URL into context, and calls `lecture_cleanup.sh`.
 - Markdown output goes to `output/autoyoutube` by default; override with `--outdir DIR`. The resulting `.md` file gets front matter with `title`, `filename`, and `url`.
+- `--context-file FILE` passes additional context file(s) to `lecture_cleanup.sh` (can be repeated).
 - `--debug` shows `yt-dlp` output and forwards `--debug` to `lecture_cleanup.sh`.
 - Requires the video to have auto-generated subtitles enabled.
 
