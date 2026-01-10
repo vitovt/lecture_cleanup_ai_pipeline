@@ -799,6 +799,19 @@ def main():
         else:
             log_warn("Summary generation returned empty output.")
 
+    # Append info comments if not suppressed
+    if not suppress_edit_comments:
+        now_str = datetime.now().strftime("%Y-%m-%d_%H-%M")
+        eff_overlap = int(cfg.get("txt_overlap_chars", 500) or 0)
+        info_block = (
+            f"\n<!-- llm_provider: {_llm['provider']} -->\n"
+            f"<!-- model: {model} -->\n"
+            f"<!-- content_mode: {content_mode} -->\n"
+            f"<!-- txt_overlap_chars: {eff_overlap} -->\n"
+            f"<!-- processsing_time: {now_str} -->\n"
+        )
+        full_markdown += info_block
+
     # Write outputs
     outfile_md = outdir / f"{in_path.stem}.md"
     outfile_md.write_text(full_markdown, encoding="utf-8")
