@@ -15,6 +15,7 @@ MDOUTDIR="${AUTOYOUTUBE_MDOUTDIR:-$MDOUTDIR_DEFAULT}"
 OUTDIR="$MDOUTDIR"
 DEBUG=0
 OVERWRITE=0
+EXTRA_CONTEXT_FLAGS=()
 
 # Optional YouTube URL (used only for filename + timecode context replacement)
 URL=""
@@ -85,7 +86,7 @@ normalize_youtube_url() {
 
 print_help() {
   cat <<EOF
-Usage: $0 --input FILE --lang LANG [--url YOUTUBE_URL] [--outdir DIR] [--overwrite] [--debug]
+Usage: $0 --input FILE --lang LANG [--url YOUTUBE_URL] [--outdir DIR] [--context-file FILE] [--overwrite] [--debug]
 
 Mandatory:
   --input FILE     Input subtitles text file (already prepared; no downloading here)
@@ -98,6 +99,7 @@ Optional:
                    - enable YouTube timecode context URL replacement
   --outdir DIR     Markdown output dir (default or in .env: AUTOYOUTUBE_MDOUTDIR)
     default: $OUTDIR
+  --context-file FILE  Additional context file(s) passed to lecture_cleanup.sh (can be repeated)
   --overwrite      Re-process even if destination .md already exists (default: skip existing)
   --debug          Show yt-dlp output (when --url is used) and pass --debug to lecture_cleanup.sh
 
@@ -132,6 +134,11 @@ while [[ $# -gt 0 ]]; do
     --outdir)
       [[ -n "${2:-}" ]] || { echo "Error: --outdir requires a directory path."; exit 1; }
       OUTDIR="$2"
+      shift 2
+      ;;
+    --context-file)
+      [[ -n "${2:-}" ]] || { echo "Error: --context-file requires a filename."; exit 1; }
+      EXTRA_CONTEXT_FLAGS+=(--context-file "$2")
       shift 2
       ;;
     --overwrite)
@@ -242,6 +249,9 @@ if [[ -n "$NORMALIZED_URL" ]]; then
   sed "s|https://www.youtube.com/watch?v=dQw4w9WgXcQ|$ESCAPED_URL|g" "$TEMPLATE_CTX" > "$TMP_CTX"
 
   CONTEXT_ARGS+=(--context-file "$TMP_CTX")
+fi
+if [[ ${#EXTRA_CONTEXT_FLAGS[@]} -gt 0 ]]; then
+  CONTEXT_ARGS+=("${EXTRA_CONTEXT_FLAGS[@]}")
 fi
 
 echo "[*] Starting AI processing"
