@@ -114,6 +114,7 @@ EOF
 
 URL=""
 CONTEXT_FLAGS=()
+CONTEXT_FILES=()
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
@@ -152,6 +153,7 @@ while [[ $# -gt 0 ]]; do
                 exit 1
             fi
             CONTEXT_FLAGS+=(--context-file "$2")
+            CONTEXT_FILES+=("$2")
             shift 2
             ;;
         --overwrite)
@@ -181,6 +183,15 @@ if [[ -z "$URL" ]]; then
     echo
     print_help
     exit 1
+fi
+
+if [[ ${#CONTEXT_FILES[@]} -gt 0 ]]; then
+    for ctx in "${CONTEXT_FILES[@]}"; do
+        if [[ ! -f "$ctx" ]]; then
+            echo "Error: context file not found: $ctx"
+            exit 1
+        fi
+    done
 fi
 
 YT_DLP_SILENT_FLAGS=()

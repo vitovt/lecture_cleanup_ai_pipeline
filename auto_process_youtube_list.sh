@@ -108,6 +108,15 @@ if [[ "$PLAYLIST_URL" != *"list="* ]]; then
     exit 1
 fi
 
+if [[ ${#CONTEXT_FILES[@]} -gt 0 ]]; then
+    for ctx in "${CONTEXT_FILES[@]}"; do
+        if [[ ! -f "$ctx" ]]; then
+            echo "Error: context file not found: $ctx"
+            exit 1
+        fi
+    done
+fi
+
 YT_DLP_SILENT_FLAGS=()
 CHILD_FLAGS=()
 if [[ "$DEBUG" -ne 1 ]]; then

@@ -16,6 +16,7 @@ OUTDIR="$MDOUTDIR"
 DEBUG=0
 OVERWRITE=0
 EXTRA_CONTEXT_FLAGS=()
+EXTRA_CONTEXT_FILES=()
 
 # Optional YouTube URL (used only for filename + timecode context replacement)
 URL=""
@@ -139,6 +140,7 @@ while [[ $# -gt 0 ]]; do
     --context-file)
       [[ -n "${2:-}" ]] || { echo "Error: --context-file requires a filename."; exit 1; }
       EXTRA_CONTEXT_FLAGS+=(--context-file "$2")
+      EXTRA_CONTEXT_FILES+=("$2")
       shift 2
       ;;
     --overwrite)
@@ -169,6 +171,15 @@ fi
 if [[ ! -f "$INPUT_FILE" ]]; then
   echo "Error: Input file not found: $INPUT_FILE"
   exit 1
+fi
+
+if [[ ${#EXTRA_CONTEXT_FILES[@]} -gt 0 ]]; then
+  for ctx in "${EXTRA_CONTEXT_FILES[@]}"; do
+    if [[ ! -f "$ctx" ]]; then
+      echo "Error: context file not found: $ctx"
+      exit 1
+    fi
+  done
 fi
 
 mkdir -p "$OUTDIR"
