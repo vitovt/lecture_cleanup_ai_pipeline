@@ -68,24 +68,19 @@ It preserves the content without loss, corrects punctuation, capitalization, and
 ## Installation
 
 1. Install Python 3.10 or newer.
-2. Create a `.env` file in the project root (or copy it):
-
-   ```bash
-   cp .env_default .env
-   ```
-
-   Then set your key:
-
-   ```env
-   OPENAI_API_KEY=your_key
-   ```
-3. Run environment initialization once:
+2. Run the first-time setup (idempotent):
 
    ```bash
    ./init_once.sh
    ```
 
-   This script creates `.venv` and installs dependencies (`pyyaml`, `openai`, `google-generativeai`).
+   This creates `.env` from `.env_default`, `config.yaml` from `config.yaml.example`, and sets up `.venv` with dependencies.
+3. Set your keys in `.env`:
+
+   ```env
+   OPENAI_API_KEY=your_key
+   ```
+4. Put any local config overrides into `config.yaml` (do **not** edit `config.default.yaml`).
 
 ## Usage
 
@@ -94,7 +89,7 @@ It’s recommended to run via provided `.sh` wrappers — they activate `.venv` 
 
 ### Choosing LLM provider (adapters)
 
-- Configure the provider in `config.yaml` under `llm.provider` (default: `openai`).
+- Configure the provider in `config.yaml` (local overrides) under `llm.provider` (default comes from `config.default.yaml`).
 - Override via CLI using `--llm-provider openai|gemini|dummy|...`.
 - Place provider API keys in `.env` at project root:
   - OpenAI: `OPENAI_API_KEY=...`
@@ -104,7 +99,7 @@ The core pipeline is provider-agnostic and talks to a unified adapter interface.
 
 ### Logging verbosity
 
-- Config: set `logging.level` in `config.yaml` to `info`, `debug`, or `trace`.
+- Config: set `logging.level` in `config.yaml` (local overrides) to `info`, `debug`, or `trace`.
 - CLI overrides:
   - `--debug` → debug logs (no full prompts/responses)
   - `--trace` → very verbose; prints full LLM prompts and responses (sensitive/large)
@@ -189,7 +184,14 @@ These flags are passed to `scripts/run_pipeline.py` via the `.sh` wrappers.
 ./lecture_cleanup.sh --input input/lec1.txt --lang uk --trace
 ```
 
-## Configuration (`config.yaml`)
+## Configuration (`config.default.yaml` + `config.yaml`)
+
+**Do not edit** `config.default.yaml`. It is the tracked default config.  
+Create `config.yaml` from `config.yaml.example` for local overrides (it is gitignored).
+
+Load order: `config.default.yaml` → `config.yaml` (deep-merge; dicts merge recursively, lists replace whole).
+
+Secrets stay in `.env` (copy from `.env_default`).
 
 Most options can be overridden via CLI flags.
 
@@ -239,6 +241,7 @@ LLM
   2. If too long — cut by sentences (`.!?…`)
   3. If first sentence still too long — cut by words; if word too long — tail within budget
 * No service markers; natural order; total length ≤ budget.
+
 
 ## Terminology Control Between Blocks
 

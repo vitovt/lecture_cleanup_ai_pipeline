@@ -69,24 +69,19 @@ Außerdem fügt es eine einfache Struktur hinzu und sorgt für konsistente Termi
 ## Installation
 
 1. Python 3.10 oder höher installieren.
-2. Eine `.env`-Datei im Projektverzeichnis erstellen (oder kopieren):
-
-   ```bash
-   cp .env_default .env
-   ```
-
-   Danach den Schlüssel eintragen:
-
-   ```env
-   OPENAI_API_KEY=dein_schlüssel
-   ```
-3. Einmalige Initialisierung ausführen:
+2. Einmaliges Setup ausführen (idempotent):
 
    ```bash
    ./init_once.sh
    ```
 
-   Dieses Skript erstellt `.venv` und installiert Abhängigkeiten (`pyyaml`, `openai`, `google-generativeai`).
+   Das Skript erstellt `.env` aus `.env_default`, `config.yaml` aus `config.yaml.example` und richtet `.venv` mit Abhängigkeiten ein.
+3. API-Schlüssel in `.env` eintragen:
+
+   ```env
+   OPENAI_API_KEY=dein_schlüssel
+   ```
+4. Lokale Overrides in `config.yaml` pflegen (bitte **nicht** `config.default.yaml` bearbeiten).
 
 ## Verwendung
 
@@ -95,7 +90,7 @@ Es wird empfohlen, die `.sh`-Wrapper zu verwenden, da sie `.venv` aktivieren und
 
 ### LLM-Provider wählen (Adapter)
 
-- Den Provider in `config.yaml` unter `llm.provider` setzen (Standard: `openai`).
+- Den Provider in `config.yaml` (lokale Overrides) unter `llm.provider` setzen (Standard in `config.default.yaml`).
 - Per CLI überschreiben mit `--llm-provider openai|gemini|dummy|...`.
 - API-Schlüssel in `.env` im Projektverzeichnis ablegen:
   - OpenAI: `OPENAI_API_KEY=...`
@@ -105,7 +100,7 @@ Die Pipeline ist anbieterunabhängig und verwendet eine einheitliche Adapter-Sch
 
 ### Protokollierungsstufe
 
-- Konfiguration: `logging.level` in `config.yaml` auf `info`, `debug` oder `trace` setzen.
+- Konfiguration: `logging.level` in `config.yaml` (lokale Overrides) auf `info`, `debug` oder `trace` setzen.
 - CLI-Überschreibungen:
   - `--debug` → Debug-Logs (ohne vollständige Prompts/Antworten)
   - `--trace` → sehr ausführlich; druckt vollständige LLM-Prompts und -Antworten (groß, sensibel)
@@ -190,7 +185,14 @@ Diese Parameter werden über die `.sh`-Skripte an `scripts/run_pipeline.py` übe
 ./lecture_cleanup.sh --input input/lec1.txt --lang uk --trace
 ```
 
-## Konfiguration (`config.yaml`)
+## Konfiguration (`config.default.yaml` + `config.yaml`)
+
+**Nicht bearbeiten:** `config.default.yaml` enthält die getrackten Standardwerte.  
+Erstelle `config.yaml` aus `config.yaml.example` für lokale Overrides (Git ignoriert diese Datei).
+
+Ladereihenfolge: `config.default.yaml` → `config.yaml` (Deep-Merge; Dicts rekursiv, Listen ersetzen vollständig).
+
+Secrets gehören in `.env` (Kopie aus `.env_default`).
 
 Die meisten Optionen können über CLI-Parameter überschrieben werden.
 

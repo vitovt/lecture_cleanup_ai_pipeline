@@ -1,0 +1,15 @@
+# Local overrides for lecture cleanup pipeline.
+# Copy this file to config.yaml and edit. Do NOT edit config.default.yaml.
+# Only include keys you want to override.
+
+llm:
+  provider: openai
+  openai:
+    model: gpt-5-mini
+
+logging:
+  level: info
+
+# txt_chunk_chars: 6500
+# txt_overlap_chars: 500
+# include_timecodes_in_headings: true

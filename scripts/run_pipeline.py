@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-import os, argparse, yaml, sys, csv, traceback, time, re
+import os, argparse, sys, csv, traceback, time, re
 from datetime import datetime
 from typing import List, Optional, Dict
 from pathlib import Path
 
 from aiadapters.factory import create_llm_adapter
 from aiadapters.base import LLMAdapter
+from scripts.config_loader import load_effective_config
 from scripts.logging_helper import (
     set_log_level,
     log_debug,
@@ -46,10 +47,6 @@ def load_list(path: str) -> List[str]:
             if ln:
                 out.append(ln)
     return out
-
-def read_config(cfg_path: str) -> dict:
-    with open(cfg_path, "r", encoding="utf-8") as f:
-        return yaml.safe_load(f)
 
 def load_env_from_env_file(root: Path) -> bool:
     """Load key=value pairs from a .env file into process environment.
@@ -335,7 +332,13 @@ def main():
     args = ap.parse_args()
 
     base = Path(__file__).parent.parent
-    cfg = read_config(str(base / "config.yaml"))
+    try:
+        cfg, has_local_cfg = load_effective_config(base)
+    except Exception as exc:
+        log_error(f"Failed to load config.default.yaml: {exc}")
+        sys.exit(2)
+    if not has_local_cfg:
+        log_warn("config.yaml not found; using only config.default.yaml")
     # Resolve logging verbosity from config and CLI
     level = str(cfg["logging"]["level"]).strip().lower()
     if args.debug:
