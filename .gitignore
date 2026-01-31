@@ -4,3 +4,4 @@ input/
 output/
 .env
 *.sqp
+speechcoreai-api/
