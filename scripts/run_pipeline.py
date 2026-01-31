@@ -78,6 +78,17 @@ def load_env_from_env_file(root: Path) -> bool:
         pass
     return loaded_any
 
+def _ensure_writable_dir(path: Path, label: str) -> None:
+    try:
+        path.mkdir(parents=True, exist_ok=True)
+        probe = path / ".write_test.tmp"
+        with open(probe, "w", encoding="utf-8") as f:
+            f.write("ok")
+        probe.unlink(missing_ok=True)
+    except Exception as e:
+        log_error(f"{label} is not writable: {path} ({e})")
+        sys.exit(1)
+
 def build_user_prompt(lang: str, parasites: List[str], aside_style: str, timecodes_policy: str) -> str:
     # load template
     tmpl_path = Path(__file__).parent.parent / "prompts" / "user_template.md"
@@ -290,6 +301,13 @@ def main():
     ap.add_argument("--input", required=True, help="Path to .srt or .txt")
     ap.add_argument("--format", choices=["srt", "txt"], help="Force input format (otherwise inferred)")
     ap.add_argument("--outdir", default="output", help="Output directory")
+    ap.add_argument(
+        "--qc-report",
+        dest="qc_report_mode",
+        choices=["outdir", "default_outdir", "off"],
+        default=None,
+        help="QC report output: outdir|default_outdir|off",
+    )
     ap.add_argument("--lang", required=True, choices=["ru", "uk", "en", "de"], help="Language of the lecture")
     ap.add_argument("--glossary", default=None, help="Path to glossary terms (one per line)")
     # effective chunking params
@@ -360,6 +378,12 @@ def main():
     if args.txt_overlap_chars: cfg["txt_overlap_chars"] = args.txt_overlap_chars
     if args.include_timecodes is not None: cfg["include_timecodes_in_headings"] = bool(args.include_timecodes)
     if args.process_timecodes_by_ai is not None: cfg["process_timecodes_by_ai"] = bool(args.process_timecodes_by_ai)
+    qc_report_mode = str(cfg.get("qc_report_mode", "outdir")).strip().lower()
+    if args.qc_report_mode:
+        qc_report_mode = args.qc_report_mode
+    if qc_report_mode not in ("outdir", "default_outdir", "off"):
+        log_warn(f"Unknown qc_report_mode='{qc_report_mode}', falling back to 'outdir'")
+        qc_report_mode = "outdir"
 
     lang = args.lang
     # Resolve provider + effective model params with backward compatibility
@@ -542,15 +566,7 @@ def main():
             source_file_context = "\n\n".join(parts)
 
     outdir = Path(args.outdir)
-    try:
-        outdir.mkdir(parents=True, exist_ok=True)
-        probe = outdir / ".write_test.tmp"
-        with open(probe, "w", encoding="utf-8") as f:
-            f.write("ok")
-        probe.unlink(missing_ok=True)
-    except Exception as e:
-        log_error(f"Output directory is not writable: {outdir} ({e})")
-        sys.exit(1)
+    _ensure_writable_dir(outdir, "Output directory")
 
     # Select adapter
     try:
@@ -819,19 +835,34 @@ def main():
     outfile_md = outdir / f"{in_path.stem}.md"
     outfile_md.write_text(full_markdown, encoding="utf-8")
     # QC report
-    qc_path = outdir / f"{in_path.stem}_qc_report.csv"
-    with open(qc_path, "w", newline="", encoding="utf-8") as f:
-        w = csv.DictWriter(f, fieldnames=["chunk_id","start","end","orig_len","cleaned_len","similarity","change_ratio"])
-        w.writeheader()
-        for r in qc_rows:
-            w.writerow(r)
+    qc_path = None
+    if qc_report_mode != "off":
+        if qc_report_mode == "default_outdir":
+            qc_dir = base / "output"
+            try:
+                same_dir = qc_dir.resolve() == outdir.resolve()
+            except Exception:
+                same_dir = (qc_dir == outdir)
+            if not same_dir:
+                _ensure_writable_dir(qc_dir, "QC report directory")
+        else:
+            qc_dir = outdir
+        qc_path = qc_dir / f"{in_path.stem}_qc_report.csv"
+        with open(qc_path, "w", newline="", encoding="utf-8") as f:
+            w = csv.DictWriter(f, fieldnames=["chunk_id","start","end","orig_len","cleaned_len","similarity","change_ratio"])
+            w.writeheader()
+            for r in qc_rows:
+                w.writerow(r)
 
     if fail_count == 0:
         log_info("All chunks processed successfully.")
     else:
         log_warn(f"Completed with {fail_count} failure(s) out of {total_chunks} chunk(s).")
     log_info(f"Done. Markdown: {outfile_md}")
-    log_info(f"QC report: {qc_path}")
+    if qc_path:
+        log_info(f"QC report: {qc_path}")
+    else:
+        log_info("QC report: skipped (qc_report_mode=off)")
 
 if __name__ == "__main__":
     main()

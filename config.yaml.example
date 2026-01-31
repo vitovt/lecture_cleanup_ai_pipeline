@@ -13,3 +13,4 @@ logging:
 # txt_chunk_chars: 6500
 # txt_overlap_chars: 500
 # include_timecodes_in_headings: true
+# qc_report_mode: outdir

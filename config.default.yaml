@@ -57,6 +57,11 @@ stitch_dedup_window_chars: null        # if null, defaults to txt_overlap_chars
 # Output / behavior
 include_timecodes_in_headings: true   # append timecodes to headings when available
 process_timecodes_by_ai: true        # if true, keep timestamps in the prompt and ask the LLM to add per-heading timecodes
+# QC report output:
+# - outdir         : write next to the .md output (current behavior)
+# - default_outdir : always write to ./output regardless of --outdir
+# - off            : do not create a QC report
+qc_report_mode: outdir
 
 # Content optimization mode:
 # Provide file name relative to prompts/system_ (without .md).
