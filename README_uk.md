@@ -220,6 +220,18 @@ LLM
 - `llm.gemini.top_p`: число або null.
 - `llm.request_delay_seconds`: пауза між LLM-запитами (секунди); допомагає уникати лімітів; 0 вимикає.
 
+### Config doctor (diff/doctor)
+
+Перевірити перевизначення та дрейф можна так:
+
+```bash
+python scripts/config_doctor.py report
+python scripts/config_doctor.py effective
+```
+
+Типові сценарії:
+- Після `git pull`: `report` показує нові ключі дефолту та застарілі локальні ключі.
+- Для діагностики: `effective` показує фінальну конфігурацію, яку використовує застосунок.
 
 ### Overlap (Звідки брати текст для контекстного перекриття - Overlap)
 - Бюджет `txt_overlap_chars` визначає максимальну довжину контексту.

@@ -242,6 +242,18 @@ LLM
   3. If first sentence still too long — cut by words; if word too long — tail within budget
 * No service markers; natural order; total length ≤ budget.
 
+### Config doctor (diff/doctor utility)
+
+Use the helper to inspect overrides and drift:
+
+```bash
+python scripts/config_doctor.py report
+python scripts/config_doctor.py effective
+```
+
+Typical workflows:
+- After `git pull`: run `report` to see new default keys and stale local keys.
+- Debug config issues: run `effective` to see the merged config the app uses.
 
 ## Terminology Control Between Blocks
 

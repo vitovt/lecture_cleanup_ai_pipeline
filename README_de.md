@@ -232,6 +232,19 @@ LLM
 - `llm.gemini.temperature`: Zahl
 - `llm.gemini.top_p`: Zahl oder null
 
+### Config doctor (Diff/Doctor)
+
+Zum Prüfen von Overrides und Drift:
+
+```bash
+python scripts/config_doctor.py report
+python scripts/config_doctor.py effective
+```
+
+Typische Workflows:
+- Nach `git pull`: `report` zeigt neue Default-Keys und veraltete lokale Keys.
+- Debugging: `effective` zeigt die zusammengeführte Konfiguration.
+
 ### Überlappungs-Kontext (Overlap)
 
 * `txt_overlap_chars` definiert die maximale Kontextlänge.
