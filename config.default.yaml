@@ -5,7 +5,12 @@ language: ru            # one of: ru, uk, en, de
 
 # LLM settings (provider-aware). Configure provider and per-provider settings here.
 llm:
-  provider: gemini      # openai | gemini | dummy | ...
+  provider: gemini      # openai | gemini | kie | dummy | ...
+  # Kie.ai usage example:
+  # - set `provider: kie`
+  # - put `KIE_API_KEY=...` into `.env`
+  # - choose a Kie model slug in `llm.kie.model` (examples below)
+  # The Kie adapter calls: https://api.kie.ai/<model>/v1/chat/completions
   # Optional delay (seconds) between consecutive LLM requests (chunks and summary).
   # Helps to avoid provider rate limits. 0 disables. CLI flag: --request-delay
   request_delay_seconds: 120
@@ -18,10 +23,21 @@ llm:
       attempts: 2        # 1 = no retry, 2..N = number of attempts per request
       pause_seconds: 10.0 # extra pause added to provider-suggested retry delay; if none, used alone
   gemini:
-    model: gemini-2.5-pro   # model like: gemini-2.5-pro, gemini-2.5-flash, gemini-2.5-flash-lite https://ai.google.dev/gemini-api/docs/models
+    model: gemini-3-flash-preview   # model like: gemini-2.5-pro, gemini-2.5-flash, gemini-2.5-flash-lite https://ai.google.dev/gemini-api/docs/models
     temperature: 1
     top_p: 1.0
     # Retry settings specific to Gemini (override global defaults below).
+    retry:
+      attempts: 3        # 1 = no retry, 2..N = number of attempts per request
+      pause_seconds: 60.0 # extra pause added to provider-suggested retry delay; if none, used alone
+  kie:
+    model: gemini-2.5-pro   # Kie Gemini text model slug (ready to use). Alternative: gemini-3-pro
+    # The adapter automatically builds the Kie endpoint from this model name:
+    # https://api.kie.ai/<model>/v1/chat/completions
+    # Examples tested by Kie docs: gemini-2.5-pro, gemini-3-pro
+    temperature: 1
+    top_p: 1.0
+    # Retry settings specific to Kie (override global defaults below).
     retry:
       attempts: 3        # 1 = no retry, 2..N = number of attempts per request
       pause_seconds: 60.0 # extra pause added to provider-suggested retry delay; if none, used alone

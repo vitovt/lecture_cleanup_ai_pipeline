@@ -44,9 +44,10 @@ def _effective_provider_and_config(cfg: Dict, provider_override: Optional[str]) 
 
     Assumes validated config with:
       llm:
-        provider: openai|gemini|...
+        provider: openai|gemini|kie|...
         openai: { model, temperature, top_p, ... }
         gemini: { model, temperature, top_p, ... }
+        kie: { model, temperature, top_p, ... }
     """
     llm_section = cfg["llm"]
     provider = (provider_override or llm_section["provider"]).strip().lower()
@@ -74,6 +75,9 @@ def create_llm_adapter(cfg: Dict, *, provider_override: Optional[str], project_r
     elif provider == "gemini":
         from .gemini_adapter import GeminiAdapter
         adapter = GeminiAdapter(model=model, temperature=temperature, top_p=top_p)
+    elif provider == "kie":
+        from .kie_adapter import KieAdapter
+        adapter = KieAdapter(model=model, temperature=temperature, top_p=top_p)
     elif provider == "dummy":
         from .dummy_adapter import DummyAdapter
         adapter = DummyAdapter(model=model, temperature=temperature, top_p=top_p)
@@ -88,6 +92,8 @@ def create_llm_adapter(cfg: Dict, *, provider_override: Optional[str], project_r
         if provider == "openai":
             raise
         if provider == "gemini":
+            raise
+        if provider == "kie":
             raise
         raise
     return adapter
