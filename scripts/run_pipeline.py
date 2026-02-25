@@ -290,7 +290,7 @@ def call_llm_summary(adapter: LLMAdapter, model: str, full_markdown: str, temper
         log_trace(f"Summary response END{trace_label}")
     return out_text
 
-def main():
+def main() -> int:
     ap = argparse.ArgumentParser(
         description=(
             "Turn long lecture transcripts into clean Markdown with CONTEXT-overlap,\n"
@@ -833,7 +833,9 @@ def main():
 
     # Write outputs
     outfile_md = outdir / f"{in_path.stem}.md"
-    outfile_md.write_text(full_markdown, encoding="utf-8")
+    write_markdown = (fail_count == 0)
+    if write_markdown:
+        outfile_md.write_text(full_markdown, encoding="utf-8")
     # QC report
     qc_path = None
     if qc_report_mode != "off":
@@ -858,11 +860,15 @@ def main():
         log_info("All chunks processed successfully.")
     else:
         log_warn(f"Completed with {fail_count} failure(s) out of {total_chunks} chunk(s).")
-    log_info(f"Done. Markdown: {outfile_md}")
+    if write_markdown:
+        log_info(f"Done. Markdown: {outfile_md}")
+    else:
+        log_warn(f"Markdown output skipped due to processing failures (target would be: {outfile_md})")
     if qc_path:
         log_info(f"QC report: {qc_path}")
     else:
         log_info("QC report: skipped (qc_report_mode=off)")
+    return 0 if fail_count == 0 else 1
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

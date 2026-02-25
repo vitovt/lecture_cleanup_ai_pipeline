@@ -213,6 +213,10 @@ base="$(sanitize_filename "$base_raw")"
 SRT_FILE="${base}.${AUTO_LANG}.srt"
 TXT_FILE="${base}.${AUTO_LANG}.txt"
 OUT_MD="$OUTDIR/${TXT_FILE%.txt}.md"
+OUT_MD_EXISTED_BEFORE=0
+if [[ -f "$OUT_MD" ]]; then
+    OUT_MD_EXISTED_BEFORE=1
+fi
 
 if [[ -f "$OUT_MD" && "$OVERWRITE" -ne 1 ]]; then
     echo "[WARN] Output exists, skipping: $OUT_MD (use --overwrite to reprocess)"
@@ -246,6 +250,17 @@ ESCAPED_URL=$(printf '%s\n' "$URL" | sed 's/[&/\]/\\&/g')
 sed "s|https://www.youtube.com/watch?v=dQw4w9WgXcQ|$ESCAPED_URL|g" "$TEMPLATE_CTX" > "$TMP_CTX"
 
 "$SCRIPT_DIR/lecture_cleanup.sh" --input "$SRTOUTDIR/$TXT_FILE" --lang="$LANG" --outdir "$OUTDIR" --context-file "$TMP_CTX" --context-file "$SCRIPT_DIR/prompts/custom_context_general/lection-monolog-with-questions.txt" "${CONTEXT_FLAGS[@]}" "${LECTURE_DEBUG_FLAG[@]}"
+cleanup_status=$?
+
+if [[ "$cleanup_status" -ne 0 ]]; then
+    if [[ "$OUT_MD_EXISTED_BEFORE" -eq 1 ]]; then
+        echo "[WARN] Output .md already existed before this run and was not post-processed: $OUT_MD"
+    elif [[ -f "$OUT_MD" ]]; then
+        echo "[WARN] Output .md exists after failed run (possible leftover from earlier behavior): $OUT_MD"
+    fi
+    echo "[ERROR] AI processing failed (exit=$cleanup_status). Markdown front matter step skipped."
+    exit "$cleanup_status"
+fi
 
 if [[ -f "$OUT_MD" ]]; then
     tmp_md="$(mktemp)"
