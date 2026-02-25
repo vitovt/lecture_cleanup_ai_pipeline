@@ -764,8 +764,8 @@ def main() -> int:
     # Merge
     full_markdown = "\n\n".join(cleaned_blocks)
 
-    # Append summary
-    if cfg.get("append_summary", True):
+    # Append summary (only when all chunks succeeded)
+    if cfg.get("append_summary", True) and fail_count == 0:
         log_info("Generating summary…")
         summary = ""
         attempt_i = 1
@@ -817,6 +817,8 @@ def main() -> int:
             full_markdown = full_markdown.rstrip() + "\n\n" + summary_heading + "\n\n" + summary + "\n"
         else:
             log_warn("Summary generation returned empty output.")
+    elif cfg.get("append_summary", True) and fail_count > 0:
+        log_warn(f"Skipping summary because {fail_count} chunk(s) failed.")
 
     # Append info comments if not suppressed
     if not suppress_edit_comments:
