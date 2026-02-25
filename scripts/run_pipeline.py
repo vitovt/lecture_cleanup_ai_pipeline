@@ -315,7 +315,7 @@ def main() -> int:
     ap.add_argument("--txt-overlap-chars", type=int, default=None)
     ap.add_argument("--debug", action="store_true", help="Enable debug logging (no full prompts/responses)")
     ap.add_argument("--trace", action="store_true", help="Enable trace logging: print full LLM prompts and responses (large, sensitive)")
-    ap.add_argument("--llm-provider", default=None, help="Override LLM provider: openai|gemini|kie|dummy|...")
+    ap.add_argument("--llm-provider", default=None, help="Override LLM provider: openai|gemini|kie|evolink|dummy|...")
     ap.add_argument("--request-delay", type=float, default=None, help="Delay in seconds between LLM requests (0 = no delay)")
     ap.add_argument("--retry-attempts", type=int, default=None, help="Retry failed LLM requests up to N times (1 = no retry)")
     ap.add_argument("--chunks", type=str, default=None, help="Process only specified chunks, e.g. '1,3,7-9' (1-based indices)")

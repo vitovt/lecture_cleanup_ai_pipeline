@@ -5,7 +5,7 @@ language: ru            # one of: ru, uk, en, de
 
 # LLM settings (provider-aware). Configure provider and per-provider settings here.
 llm:
-  provider: gemini      # openai | gemini | kie | dummy | ...
+  provider: gemini      # openai | gemini | kie | evolink | dummy | ...
   # Kie.ai usage example:
   # - set `provider: kie`
   # - put `KIE_API_KEY=...` into `.env`
@@ -38,6 +38,19 @@ llm:
     temperature: 1
     top_p: 1.0
     # Retry settings specific to Kie (override global defaults below).
+    retry:
+      attempts: 3        # 1 = no retry, 2..N = number of attempts per request
+      pause_seconds: 60.0 # extra pause added to provider-suggested retry delay; if none, used alone
+  evolink:
+    # EvoLink Gemini Native API (Google Native API format).
+    # Default/reference quickstart:
+    # https://docs.evolink.ai/en/api-manual/language-series/gemini-2.5-pro/native-api/native-api-quickstart
+    model: gemini-2.5-pro
+    method: generateContent   # path suffix in native endpoint: /v1beta/models/<model>:generateContent
+    api_base_url: https://api.evolink.ai   # usually keep default
+    temperature: 1
+    top_p: 1.0
+    # Retry settings specific to EvoLink (override global defaults below).
     retry:
       attempts: 3        # 1 = no retry, 2..N = number of attempts per request
       pause_seconds: 60.0 # extra pause added to provider-suggested retry delay; if none, used alone
