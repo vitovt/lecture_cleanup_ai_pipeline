@@ -277,11 +277,24 @@ class KieAdapter(LLMAdapter):
 
     def _raise_mapped_error(self, message: str, *, status: Optional[int], debug: bool) -> None:
         err_str = (message or "").lower()
-        if status == 429 or any(k in err_str for k in ("rate limit", "too many requests", "429", "retry_after", "retry in")):
+        # Prefer explicit status classification first (Kie may use non-standard 433 for quota/points).
+        if status in (401, 402, 403, 433):
+            if debug:
+                print(f"[DEBUG] {self.name()} mapped status={status} -> LLMAuthError")
+            raise LLMAuthError(message)
+        if status == 429:
             if debug:
                 print(f"[DEBUG] {self.name()} mapped status={status} -> LLMRateLimitError")
             raise LLMRateLimitError(message)
-        if status in (401, 402, 403) or any(k in err_str for k in ("unauthorized", "invalid api key", "forbidden", "permission", "401", "402", "403", "billing", "payment", "subscription", "credit")):
+        if any(k in err_str for k in ("rate limit", "too many requests", "retry_after", "retry in")):
+            if debug:
+                print(f"[DEBUG] {self.name()} mapped text match -> LLMRateLimitError")
+            raise LLMRateLimitError(message)
+        if any(k in err_str for k in (
+            "unauthorized", "invalid api key", "forbidden", "permission", "401", "402", "403",
+            "billing", "payment", "subscription", "credit",
+            "usage points", "exceeded the total limit", "quota exceeded", "insufficient quota",
+        )):
             # Kie sometimes returns generic 403/empty "Forbidden" style errors.
             # Add common Kie-specific causes to make troubleshooting actionable.
             generic_403 = status == 403 and (not message or message.strip().lower() in {
@@ -319,7 +332,7 @@ class KieAdapter(LLMAdapter):
         if code == 200:
             return
         msg = self._extract_error_message(parsed) or f"Kie API error code={code}"
-        # Preserve semantics: Kie app-level 5xx should be treated as transient.
+        # Preserve semantics: app-level 5xx are transient; app-level 4xx/433 are auth/billing/quota-like.
         status = code if code >= 400 else None
         self._raise_mapped_error(msg, status=status, debug=debug)
 
@@ -331,6 +344,57 @@ class KieAdapter(LLMAdapter):
         if len(text) > 800:
             return text[:800] + "…"
         return text
+
+    @staticmethod
+    def _status_hint(status: Optional[int]) -> str:
+        """Human-friendly hints for common proxy/CDN non-standard statuses."""
+        hints = {
+            520: "Cloudflare unknown origin error",
+            522: "Cloudflare connection timeout (origin did not connect in time)",
+            523: "Cloudflare origin unreachable",
+            524: "Cloudflare timeout (origin took too long to respond)",
+            525: "Cloudflare SSL handshake failed",
+            526: "Cloudflare invalid SSL certificate",
+            530: "Cloudflare origin error",
+        }
+        if status is None:
+            return ""
+        return hints.get(int(status), "")
+
+    def _format_http_error_message(
+        self,
+        *,
+        status: Optional[int],
+        http_error: Exception,
+        provider_msg: Optional[str],
+        err_body: bytes,
+    ) -> str:
+        if provider_msg:
+            return provider_msg
+
+        reason = ""
+        try:
+            raw_reason = getattr(http_error, "reason", None)
+            if raw_reason is not None:
+                reason = str(raw_reason).strip()
+        except Exception:
+            reason = ""
+
+        hint = self._status_hint(status)
+        if status is not None:
+            if reason:
+                base = f"Kie HTTP error {status}: {reason}"
+            elif hint:
+                base = f"Kie HTTP error {status}: {hint}"
+            else:
+                base = f"Kie HTTP error {status}"
+        else:
+            base = f"Kie HTTP error: {http_error}"
+
+        preview = self._short_body_preview(err_body)
+        if preview:
+            return f"{base} | body: {preview}"
+        return base
 
     def _build_sdk_params(
         self,
@@ -387,9 +451,10 @@ class KieAdapter(LLMAdapter):
                     maybe_dumped = resp.model_dump()  # type: ignore[attr-defined]
                     if isinstance(maybe_dumped, dict):
                         dumped = maybe_dumped
-                        self._raise_if_kie_envelope_error(dumped, debug=debug)
                 except Exception:
                     dumped = None
+            if dumped is not None:
+                self._raise_if_kie_envelope_error(dumped, debug=debug)
             choices = getattr(resp, "choices", None) or []
             if choices:
                 first = choices[0]
@@ -487,7 +552,12 @@ class KieAdapter(LLMAdapter):
                     print(f"[DEBUG] {self.name()} HTTP {status} body: {preview}")
             parsed = self._json_loads_bytes(err_body)
             provider_msg = self._extract_error_message(parsed)
-            message = provider_msg or f"Kie HTTP error {status}: {e.reason or e}"
+            message = self._format_http_error_message(
+                status=status,
+                http_error=e,
+                provider_msg=provider_msg,
+                err_body=err_body,
+            )
             self._raise_mapped_error(message, status=status, debug=debug)
             raise  # pragma: no cover
         except urllib_error.URLError as e:
