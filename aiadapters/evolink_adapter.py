@@ -80,6 +80,50 @@ class EvoLinkAdapter(LLMAdapter):
         return text
 
     @staticmethod
+    def _status_hint(status: Optional[int]) -> str:
+        hints = {
+            520: "Cloudflare unknown origin error",
+            522: "Cloudflare connection timeout (origin did not connect in time)",
+            523: "Cloudflare origin unreachable",
+            524: "Cloudflare timeout (origin took too long to respond)",
+            525: "Cloudflare SSL handshake failed",
+            526: "Cloudflare invalid SSL certificate",
+            530: "Cloudflare origin error",
+        }
+        if status is None:
+            return ""
+        return hints.get(int(status), "")
+
+    def _format_http_error_message(
+        self,
+        *,
+        status: Optional[int],
+        http_error: Exception,
+        provider_msg: Optional[str],
+        err_body: bytes,
+    ) -> str:
+        if provider_msg:
+            return provider_msg
+        raw_reason = getattr(http_error, "reason", None)
+        reason = str(raw_reason).strip() if raw_reason is not None else ""
+        if reason.lower() == "<none>":
+            reason = ""
+        hint = self._status_hint(status)
+        if status is not None:
+            if reason:
+                base = f"EvoLink HTTP error {status}: {reason}"
+            elif hint:
+                base = f"EvoLink HTTP error {status}: {hint}"
+            else:
+                base = f"EvoLink HTTP error {status}"
+        else:
+            base = f"EvoLink HTTP error: {http_error}"
+        preview = self._short_body_preview(err_body)
+        if preview:
+            return f"{base} | body: {preview}"
+        return base
+
+    @staticmethod
     def _extract_error_message(parsed: Optional[Dict[str, Any]]) -> Optional[str]:
         if not parsed:
             return None
@@ -317,7 +361,12 @@ class EvoLinkAdapter(LLMAdapter):
                 if preview:
                     print(f"[DEBUG] {self.name()} HTTP {status} body: {preview}")
             parsed = self._json_loads_bytes(err_body)
-            msg = self._extract_error_message(parsed) or f"EvoLink HTTP error {status}: {e.reason or e}"
+            msg = self._format_http_error_message(
+                status=status,
+                http_error=e,
+                provider_msg=self._extract_error_message(parsed),
+                err_body=err_body,
+            )
             self._raise_mapped_error(msg, status=status, debug=debug)
             raise  # pragma: no cover
         except urllib_error.URLError as e:
