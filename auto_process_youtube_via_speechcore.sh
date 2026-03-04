@@ -25,6 +25,7 @@ OUTDIR="$MDOUTDIR"
 DEBUG=0
 OVERWRITE=0
 LANG_OVERRIDE=""
+YOUTUBE_UPLOAD_DATE=""
 
 # External helper for URL normalization
 YOUTUBE_NORMALIZER="$SCRIPT_DIR/subtitle-utils/normalize_youtube_url.py"
@@ -219,9 +220,15 @@ if [[ -n "$LANG_OVERRIDE" ]]; then
     AUTO_LANG="$LANG_OVERRIDE"
 else
     echo "[*] Detecting available subtitles..."
-    SUB_INFO=$(yt-dlp "${YT_DLP_SILENT_FLAGS[@]}" --list-subs "$URL")
+    SUB_INFO=$(yt-dlp "${YT_DLP_SILENT_FLAGS[@]}" --print "%(upload_date)s" --list-subs "$URL")
 
     AUTO_LANG=$(echo "$SUB_INFO" | grep '(Original)' | awk '{print $1}' | head -n 1)
+    YOUTUBE_UPLOAD_DATE_RAW=$(printf '%s\n' "$SUB_INFO" | awk '/^[0-9]{8}$/ {print; exit}')
+    if [[ "$YOUTUBE_UPLOAD_DATE_RAW" =~ ^([0-9]{4})([0-9]{2})([0-9]{2})$ ]]; then
+        YOUTUBE_UPLOAD_DATE="${BASH_REMATCH[1]}-${BASH_REMATCH[2]}-${BASH_REMATCH[3]}"
+    elif [[ -n "$YOUTUBE_UPLOAD_DATE_RAW" ]]; then
+        YOUTUBE_UPLOAD_DATE="$YOUTUBE_UPLOAD_DATE_RAW"
+    fi
     if [[ -z "$AUTO_LANG" ]]; then
         echo "[!] No auto-generated subtitles found."
         echo "[!] Provide --lang to continue without YouTube subtitles."
@@ -236,7 +243,22 @@ if [[ -z "$LANG" ]]; then
     exit 1
 fi
 
-filename=$(yt-dlp "${YT_DLP_SILENT_FLAGS[@]}" --print filename --skip-download --extractor-args "youtube:player_client=default" "$URL")
+if [[ -z "$YOUTUBE_UPLOAD_DATE" ]]; then
+    # When --lang is provided, no --list-subs call is made; reuse the existing filename metadata call instead.
+    YT_META_INFO=$(yt-dlp "${YT_DLP_SILENT_FLAGS[@]}" --print "%(upload_date)s" --print filename --skip-download --extractor-args "youtube:player_client=default" "$URL")
+    YOUTUBE_UPLOAD_DATE_RAW=$(printf '%s\n' "$YT_META_INFO" | awk '/^[0-9]{8}$/ {print; exit}')
+    if [[ "$YOUTUBE_UPLOAD_DATE_RAW" =~ ^([0-9]{4})([0-9]{2})([0-9]{2})$ ]]; then
+        YOUTUBE_UPLOAD_DATE="${BASH_REMATCH[1]}-${BASH_REMATCH[2]}-${BASH_REMATCH[3]}"
+    elif [[ -n "$YOUTUBE_UPLOAD_DATE_RAW" ]]; then
+        YOUTUBE_UPLOAD_DATE="$YOUTUBE_UPLOAD_DATE_RAW"
+    fi
+fi
+
+if [[ -n "${YT_META_INFO:-}" ]]; then
+    filename=$(printf '%s\n' "$YT_META_INFO" | tail -n 1)
+else
+    filename=$(yt-dlp "${YT_DLP_SILENT_FLAGS[@]}" --print filename --skip-download --extractor-args "youtube:player_client=default" "$URL")
+fi
 base_raw="${filename%.*}"
 base="$(sanitize_filename "$base_raw")"
 MP3_FILE="${base}.mp3"
@@ -355,6 +377,7 @@ if [[ -f "$OUT_MD" ]]; then
         printf 'title: %s\n' "$base_raw"
         printf 'filename: %s\n' "$TXT_FILE"
         printf 'url: %s\n' "$URL"
+        printf 'youtube_upload_date: "%s"\n' "$YOUTUBE_UPLOAD_DATE"
         printf 'transcription_source: %s\n' "speechcore-ai"
         printf 'transcription_date: %s\n' "$TRANSCRIPTION_DATE"
         printf 'language: %s\n' "$LANG"

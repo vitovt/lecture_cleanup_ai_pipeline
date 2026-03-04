@@ -15,6 +15,7 @@ MDOUTDIR="${AUTOYOUTUBE_MDOUTDIR:-$MDOUTDIR_DEFAULT}"
 OUTDIR="$MDOUTDIR"
 DEBUG=0
 OVERWRITE=0
+YOUTUBE_UPLOAD_DATE=""
 
 # External helper for URL normalization
 YOUTUBE_NORMALIZER="$SCRIPT_DIR/subtitle-utils/normalize_youtube_url.py"
@@ -192,10 +193,16 @@ echo "[*] Normalized URL: $URL"
 
 # Step 1: List subtitles
 echo "[*] Detecting available subtitles..."
-SUB_INFO=$(yt-dlp "${YT_DLP_SILENT_FLAGS[@]}" --list-subs "$URL")
+SUB_INFO=$(yt-dlp "${YT_DLP_SILENT_FLAGS[@]}" --print "%(upload_date)s" --list-subs "$URL")
 
 # Step 2: Extract auto-generated subtitle language code
 AUTO_LANG=$(echo "$SUB_INFO" | grep '(Original)' | awk '{print $1}' | head -n 1)
+YOUTUBE_UPLOAD_DATE_RAW=$(printf '%s\n' "$SUB_INFO" | awk '/^[0-9]{8}$/ {print; exit}')
+if [[ "$YOUTUBE_UPLOAD_DATE_RAW" =~ ^([0-9]{4})([0-9]{2})([0-9]{2})$ ]]; then
+    YOUTUBE_UPLOAD_DATE="${BASH_REMATCH[1]}-${BASH_REMATCH[2]}-${BASH_REMATCH[3]}"
+elif [[ -n "$YOUTUBE_UPLOAD_DATE_RAW" ]]; then
+    YOUTUBE_UPLOAD_DATE="$YOUTUBE_UPLOAD_DATE_RAW"
+fi
 
 if [ -z "$AUTO_LANG" ]; then
     echo "[!] No auto-generated subtitles found."
@@ -270,6 +277,7 @@ if [[ -f "$OUT_MD" ]]; then
         printf 'title: %s\n' "$base_raw"
         printf 'filename: %s\n' "$TXT_FILE"
         printf 'url: %s\n' "$URL"
+        printf 'youtube_upload_date: "%s"\n' "$YOUTUBE_UPLOAD_DATE"
         printf 'transcription_source: %s\n' "youtube-auto"
         printf 'transcription_date: %s\n' "$TRANSCRIPTION_DATE"
         printf 'language: %s\n' "$LANG"

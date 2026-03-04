@@ -20,6 +20,7 @@ EXTRA_CONTEXT_FILES=()
 
 # Optional YouTube URL (used only for filename + timecode context replacement)
 URL=""
+YOUTUBE_UPLOAD_DATE=""
 
 # Mandatory inputs
 INPUT_FILE=""
@@ -216,7 +217,14 @@ if [[ -n "$URL" ]]; then
   fi
 
   if command -v yt-dlp >/dev/null 2>&1; then
-    if filename="$(yt-dlp "${YT_DLP_FLAGS[@]}" --print filename --skip-download --extractor-args "youtube:player_client=default" "$NORMALIZED_URL" 2>/dev/null)"; then
+    if YT_META_INFO="$(yt-dlp "${YT_DLP_FLAGS[@]}" --print "%(upload_date)s" --print filename --skip-download --extractor-args "youtube:player_client=default" "$NORMALIZED_URL" 2>/dev/null)"; then
+      filename="$(printf '%s\n' "$YT_META_INFO" | tail -n 1)"
+      YOUTUBE_UPLOAD_DATE_RAW="$(printf '%s\n' "$YT_META_INFO" | awk '/^[0-9]{8}$/ {print; exit}')"
+      if [[ "$YOUTUBE_UPLOAD_DATE_RAW" =~ ^([0-9]{4})([0-9]{2})([0-9]{2})$ ]]; then
+        YOUTUBE_UPLOAD_DATE="${BASH_REMATCH[1]}-${BASH_REMATCH[2]}-${BASH_REMATCH[3]}"
+      elif [[ -n "$YOUTUBE_UPLOAD_DATE_RAW" ]]; then
+        YOUTUBE_UPLOAD_DATE="$YOUTUBE_UPLOAD_DATE_RAW"
+      fi
       BASE_FOR_TITLE="$(sanitize_filename "${filename%.*}")"
       # Match old behavior: include language suffix in the output stem when URL-based naming is used
       OUT_STEM="${BASE_FOR_TITLE}.${LANG}"
@@ -297,6 +305,7 @@ if [[ -f "$OUT_MD" ]]; then
     if [[ -n "$NORMALIZED_URL" ]]; then
       printf 'url: %s\n' "$NORMALIZED_URL"
     fi
+    printf 'youtube_upload_date: "%s"\n' "$YOUTUBE_UPLOAD_DATE"
     printf '%s\n\n' '---'
     printf '# %s\n' "$BASE_FOR_TITLE"
     cat "$OUT_MD"
