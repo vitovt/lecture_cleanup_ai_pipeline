@@ -1,7 +1,7 @@
 # Global configuration for the lecture cleanup pipeline
 # You can override most of these via CLI flags in run_pipeline.py
 
-language: ru            # one of: ru, uk, en, de
+language: ru            # two-letter ISO-639-1 code; e.g. ru, uk, en, de, pl, es
 
 # LLM settings (provider-aware). Configure provider and per-provider settings here.
 llm:
@@ -128,7 +128,9 @@ parasites:
   de: data/parasites_de.txt
 
 # Logging verbosity controls how much the pipeline prints:
-#   - info  : concise progress + errors only; no stack traces; never prints full
+#   - quiet : prints nothing, including errors.
+#   - error : prints errors only.
+#   - info  : concise progress and errors; no stack traces; never prints full
 #             LLM prompts/responses. Suitable for normal runs.
 #   - debug : adds diagnostics (provider, model, temperature/top_p, chunk/overlap info)
 #             and stack traces on errors; still does NOT print full prompts/responses.
@@ -136,6 +138,7 @@ parasites:
 #             for chunks and summary. This can be large and may contain sensitive
 #             content. Use only for troubleshooting.
 # You can override this via CLI flags:
+#   --log-level LEVEL -> sets any of the five levels
 #   --debug  -> sets level=debug
 #   --trace  -> sets level=trace (implies debug)
 logging:

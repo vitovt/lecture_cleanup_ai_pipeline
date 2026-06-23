@@ -41,6 +41,7 @@ def set_log_level(level: str) -> None:
     """Set logger level based on config/CLI string."""
     lvl = str(level or "").strip().lower()
     mapping = {
+        "quiet": logging.CRITICAL + 1,
         "trace": TRACE_LEVEL,
         "debug": logging.DEBUG,
         "info": logging.INFO,

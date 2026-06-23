@@ -308,13 +308,23 @@ def main() -> int:
         default=None,
         help="QC report output: outdir|default_outdir|off",
     )
-    ap.add_argument("--lang", required=True, choices=["ru", "uk", "en", "de"], help="Language of the lecture")
+    ap.add_argument(
+        "--lang",
+        required=True,
+        help="Two-letter ISO-639-1 language code for the lecture",
+    )
     ap.add_argument("--glossary", default=None, help="Path to glossary terms (one per line)")
     # effective chunking params
     ap.add_argument("--txt-chunk-chars", type=int, default=None)
     ap.add_argument("--txt-overlap-chars", type=int, default=None)
     ap.add_argument("--debug", action="store_true", help="Enable debug logging (no full prompts/responses)")
     ap.add_argument("--trace", action="store_true", help="Enable trace logging: print full LLM prompts and responses (large, sensitive)")
+    ap.add_argument(
+        "--log-level",
+        choices=["quiet", "error", "info", "debug", "trace"],
+        default=None,
+        help="Console verbosity; overrides config logging.level",
+    )
     ap.add_argument("--llm-provider", default=None, help="Override LLM provider: openai|gemini|kie|evolink|dummy|...")
     ap.add_argument("--request-delay", type=float, default=None, help="Delay in seconds between LLM requests (0 = no delay)")
     ap.add_argument("--retry-attempts", type=int, default=None, help="Retry failed LLM requests up to N times (1 = no retry)")
@@ -348,6 +358,15 @@ def main() -> int:
     )
     tc_group.set_defaults(process_timecodes_by_ai=None)
     args = ap.parse_args()
+    if args.log_level:
+        set_log_level(args.log_level)
+    elif args.trace:
+        set_log_level("trace")
+    elif args.debug:
+        set_log_level("debug")
+    args.lang = args.lang.strip().lower()
+    if not re.fullmatch(r"[a-z]{2}", args.lang):
+        ap.error("--lang must be a two-letter ISO-639-1 code")
 
     base = Path(__file__).parent.parent
     try:
@@ -359,6 +378,8 @@ def main() -> int:
         log_warn("config.yaml not found; using only config.default.yaml")
     # Resolve logging verbosity from config and CLI
     level = str(cfg["logging"]["level"]).strip().lower()
+    if args.log_level:
+        level = args.log_level
     if args.debug:
         level = "debug"
     if args.trace:
