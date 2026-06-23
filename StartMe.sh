@@ -7,14 +7,98 @@ SCRIPT_DIR="$(dirname "$SCRIPT_PATH")"
 PROGRAM="./$(basename "$0")"
 TARGET=""
 HELP_KIND="delegate"
+COLOR_MODE="auto"
+COLOR_ENABLED=0
+C_RESET=""
+C_SECTION=""
+C_MODE=""
+C_EXAMPLE=""
+C_ERROR=""
+
+init_colors() {
+    case "$COLOR_MODE" in
+        always)
+            COLOR_ENABLED=1
+            ;;
+        never)
+            COLOR_ENABLED=0
+            ;;
+        auto)
+            local color_count=0
+            if [[ -t 1 && -z "${NO_COLOR:-}" && "${TERM:-dumb}" != "dumb" ]] \
+                && command -v tput >/dev/null 2>&1; then
+                color_count="$(tput colors 2>/dev/null || printf '0')"
+                if [[ "$color_count" =~ ^[0-9]+$ && "$color_count" -ge 8 ]]; then
+                    COLOR_ENABLED=1
+                fi
+            fi
+            ;;
+    esac
+
+    if [[ "$COLOR_ENABLED" -eq 1 ]]; then
+        C_RESET=$'\033[0m'
+        C_SECTION=$'\033[1;36m'
+        C_MODE=$'\033[1;32m'
+        C_EXAMPLE=$'\033[33m'
+        C_ERROR=$'\033[1;31m'
+    fi
+}
+
+colorize_help() {
+    local help_type="${1:-detail}"
+    if [[ "$COLOR_ENABLED" -ne 1 ]]; then
+        cat
+        return
+    fi
+
+    awk \
+        -v reset="$C_RESET" \
+        -v section="$C_SECTION" \
+        -v mode_color="$C_MODE" \
+        -v example="$C_EXAMPLE" \
+        -v help_type="$help_type" '
+        function colored(color, text) { return color text reset }
+        /^(Usage:.*|usage:.*|Global color options.*:|Typical flow:|More help:|Options:|Examples?:|Description:|Mandatory:|Optional:|Notes:|Input modes.*:|Preflight:|Language:|Pipeline options:|Groq options:|Forwarded pipeline options:|Forwarded Groq options:|Selection and language:|Detailed command help:|Commands:)$/ {
+            print colored(section, $0); next
+        }
+        /^(Transcript cleanup|YouTube subtitles.*|SpeechCore transcription.*|Groq transcription.*|Provider-level tools|Setup and maintenance|Utilities)$/ {
+            print colored(section, $0); next
+        }
+        help_type == "overview" && /^  [a-z][a-z-]*$/ {
+            print colored(mode_color, $0); next
+        }
+        help_type == "overview" && /^    Example:/ {
+            print colored(example, $0); next
+        }
+        help_type == "overview" && /^  \.\/StartMe\.sh/ {
+            print colored(example, $0); next
+        }
+        help_type == "detail" && /^  (-[^ ]|--[^ ])/ {
+            print colored(mode_color, $0); next
+        }
+        /^Example:/ { print colored(section, $0); in_example=1; next }
+        in_example && /^  / { print colored(example, $0); next }
+        { in_example=0; print }
+    '
+}
+
+print_error() {
+    printf '%sError:%s %s\n' "$C_ERROR" "$C_RESET" "$*" >&2
+}
 
 print_overview() {
-    cat <<EOF
+    cat <<EOF | colorize_help overview
 Usage:
   $PROGRAM
   $PROGRAM help
   $PROGRAM help MODE
   $PROGRAM MODE [MODE_ARGUMENTS...]
+
+Global color options (place before help or MODE):
+  --color                 Force colors, including redirected output
+  --no-color              Disable colors
+  --color=auto|always|never
+                          Select automatic, forced, or disabled colors
 
 This is the main entry point for the lecture cleanup project. It does not
 reimplement any processing workflow: it explains the available modes and then
@@ -164,7 +248,7 @@ resolve_mode() {
 print_custom_help() {
     case "$HELP_KIND" in
         setup-main)
-            cat <<EOF
+            cat <<EOF | colorize_help detail
 Usage: $PROGRAM setup-main
 
 Runs init_once.sh. It creates the main .venv, installs the cleanup pipeline's
@@ -174,7 +258,7 @@ it exits when .venv already exists.
 EOF
             ;;
         download-subtitles)
-            cat <<EOF
+            cat <<EOF | colorize_help detail
 Usage: $PROGRAM download-subtitles <youtube_url>
 
 Detects the video's original auto-generated subtitle language, downloads SRT
@@ -186,7 +270,7 @@ Example:
 EOF
             ;;
         extract-audio)
-            cat <<EOF
+            cat <<EOF | colorize_help detail
 Usage: $PROGRAM extract-audio [--debug]
 
 Scans the current working directory for *.mp4 files and extracts each first
@@ -198,7 +282,7 @@ Example:
 EOF
             ;;
         docx-to-markdown)
-            cat <<EOF
+            cat <<EOF | colorize_help detail
 Usage: $PROGRAM docx-to-markdown <file.docx>
 
 Converts one DOCX document to Markdown using pandoc and writes extracted media
@@ -215,7 +299,7 @@ EOF
 show_mode_help() {
     local mode="$1"
     if ! resolve_mode "$mode"; then
-        printf 'Error: unknown mode %q.\n' "$mode" >&2
+        print_error "unknown mode $(printf '%q' "$mode")."
         printf 'Run %s to list available modes.\n' "$PROGRAM" >&2
         return 2
     fi
@@ -224,11 +308,37 @@ show_mode_help() {
         return
     fi
     if [[ ! -x "$TARGET" ]]; then
-        printf 'Error: mode script is missing or not executable: %s\n' "$TARGET" >&2
+        print_error "mode script is missing or not executable: $TARGET"
         return 2
     fi
-    exec "$TARGET" --help
+    "$TARGET" --help | colorize_help detail
 }
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --color)
+            COLOR_MODE="always"
+            shift
+            ;;
+        --no-color)
+            COLOR_MODE="never"
+            shift
+            ;;
+        --color=auto|--color=always|--color=never)
+            COLOR_MODE="${1#--color=}"
+            shift
+            ;;
+        --color=*)
+            printf 'Error: --color expects auto, always, or never.\n' >&2
+            exit 2
+            ;;
+        *)
+            break
+            ;;
+    esac
+done
+
+init_colors
 
 if [[ $# -eq 0 ]]; then
     print_overview
@@ -243,7 +353,7 @@ case "$1" in
         elif [[ $# -eq 1 ]]; then
             show_mode_help "$1"
         else
-            printf 'Error: help accepts at most one MODE.\n' >&2
+            print_error "help accepts at most one MODE."
             exit 2
         fi
         exit 0
@@ -253,12 +363,12 @@ esac
 MODE="$1"
 shift
 if ! resolve_mode "$MODE"; then
-    printf 'Error: unknown mode %q.\n' "$MODE" >&2
+    print_error "unknown mode $(printf '%q' "$MODE")."
     printf 'Run %s to list available modes.\n' "$PROGRAM" >&2
     exit 2
 fi
 if [[ ! -x "$TARGET" ]]; then
-    printf 'Error: mode script is missing or not executable: %s\n' "$TARGET" >&2
+    print_error "mode script is missing or not executable: $TARGET"
     exit 2
 fi
 
