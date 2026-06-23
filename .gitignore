@@ -6,3 +6,5 @@ output/
 config.yaml
 *.sqp
 speechcoreai-api/
+groq-api/
+pyannote-diarization/
