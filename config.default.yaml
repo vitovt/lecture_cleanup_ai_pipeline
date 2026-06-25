@@ -5,12 +5,17 @@ language: ru            # two-letter ISO-639-1 code; e.g. ru, uk, en, de, pl, es
 
 # LLM settings (provider-aware). Configure provider and per-provider settings here.
 llm:
-  provider: gemini      # openai | gemini | kie | evolink | dummy | ...
+  provider: gemini      # openai | gemini | kie | evolink | groq | dummy | ...
   # Kie.ai usage example:
   # - set `provider: kie`
   # - put `KIE_API_KEY=...` into `.env`
   # - choose a Kie model slug in `llm.kie.model` (examples below)
   # The Kie adapter calls: https://api.kie.ai/<model>/v1/chat/completions
+  # Groq usage example:
+  # - set provider: groq
+  # - put GROQ_API_KEY=... into .env
+  # - choose a Groq model slug in llm.groq.model (examples below)
+  # The Groq adapter calls: https://api.groq.com/openai/v1/chat/completions
   # Optional delay (seconds) between consecutive LLM requests (chunks and summary).
   # Helps to avoid provider rate limits. 0 disables. CLI flag: --request-delay
   request_delay_seconds: 120
@@ -51,6 +56,29 @@ llm:
     temperature: 1
     top_p: 1.0
     # Retry settings specific to EvoLink (override global defaults below).
+    retry:
+      attempts: 3        # 1 = no retry, 2..N = number of attempts per request
+      pause_seconds: 60.0 # extra pause added to provider-suggested retry delay; if none, used alone
+  groq:
+    # Groq OpenAI-compatible Chat Completions API.
+    # Default/reference docs: https://console.groq.com/docs/openai
+    # Examples:
+    # - openai/gpt-oss-120b: supports reasoning_effort low|medium|high.
+    # - qwen/qwen3.6-27b: supports reasoning_effort default|none.
+    model: openai/gpt-oss-120b
+    api_base_url: https://api.groq.com/openai/v1   # usually keep default
+    # For transcript cleanup, keep output stable and hide reasoning from final Markdown.
+    temperature: 0.3
+    top_p: 1.0
+    reasoning_effort: medium # low medium high
+    reasoning_format: hidden
+    # Alternative for Qwen 3.6 27B thinking mode:
+    # model: qwen/qwen3.6-27b
+    # temperature: 0.6
+    # top_p: 0.95
+    # reasoning_effort: default # none or default
+    # reasoning_format: hidden
+    # Retry settings specific to Groq (override global defaults below).
     retry:
       attempts: 3        # 1 = no retry, 2..N = number of attempts per request
       pause_seconds: 60.0 # extra pause added to provider-suggested retry delay; if none, used alone
