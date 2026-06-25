@@ -4,6 +4,10 @@ from datetime import datetime
 from typing import List, Optional, Dict
 from pathlib import Path
 
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
 from aiadapters.factory import create_llm_adapter
 from aiadapters.base import LLMAdapter
 from scripts.config_loader import load_effective_config
@@ -325,7 +329,7 @@ def main() -> int:
         default=None,
         help="Console verbosity; overrides config logging.level",
     )
-    ap.add_argument("--llm-provider", default=None, help="Override LLM provider: openai|gemini|kie|evolink|dummy|...")
+    ap.add_argument("--llm-provider", default=None, help="Override LLM provider: openai|gemini|kie|evolink|groq|dummy|...")
     ap.add_argument("--request-delay", type=float, default=None, help="Delay in seconds between LLM requests (0 = no delay)")
     ap.add_argument("--retry-attempts", type=int, default=None, help="Retry failed LLM requests up to N times (1 = no retry)")
     ap.add_argument("--chunks", type=str, default=None, help="Process only specified chunks, e.g. '1,3,7-9' (1-based indices)")
