@@ -5,7 +5,7 @@ language: ru            # two-letter ISO-639-1 code; e.g. ru, uk, en, de, pl, es
 
 # LLM settings (provider-aware). Configure provider and per-provider settings here.
 llm:
-  provider: gemini      # openai | gemini | kie | evolink | groq | dummy | ...
+  provider: gemini      # openai | gemini | kie | evolink | groq | deepseek | dummy | ...
   # Kie.ai usage example:
   # - set `provider: kie`
   # - put `KIE_API_KEY=...` into `.env`
@@ -16,6 +16,11 @@ llm:
   # - put GROQ_API_KEY=... into .env
   # - choose a Groq model slug in llm.groq.model (examples below)
   # The Groq adapter calls: https://api.groq.com/openai/v1/chat/completions
+  # DeepSeek usage example:
+  # - set provider: deepseek
+  # - put DEEPSEEK_API_KEY=... into .env
+  # - choose a DeepSeek model slug in llm.deepseek.model (examples below)
+  # The DeepSeek adapter calls: https://api.deepseek.com/chat/completions
   # Optional delay (seconds) between consecutive LLM requests (chunks and summary).
   # Helps to avoid provider rate limits. 0 disables. CLI flag: --request-delay
   request_delay_seconds: 120
@@ -79,6 +84,34 @@ llm:
     # reasoning_effort: default # none or default
     # reasoning_format: hidden
     # Retry settings specific to Groq (override global defaults below).
+    retry:
+      attempts: 3        # 1 = no retry, 2..N = number of attempts per request
+      pause_seconds: 60.0 # extra pause added to provider-suggested retry delay; if none, used alone
+  deepseek:
+    # DeepSeek OpenAI-compatible Chat Completions API.
+    # Official docs: https://api-docs.deepseek.com/
+    #
+    # Default block: reasoning-first cleanup.
+    # Use this when quality and instruction-following matter more than speed/cost.
+    # Thinking mode does NOT support temperature/top_p; do not add them here.
+    model: deepseek-v4-pro
+    api_base_url: https://api.deepseek.com   # usually keep default
+    thinking: enabled          # enabled | disabled
+    reasoning_effort: high     # high | max (reasoning for thinking)
+    #
+    # Alternative block: faster/cheaper non-thinking cleanup.
+    # Copy this whole block to config.yaml if you want temperature/top_p control.
+    # DeepSeek recommends changing either temperature OR top_p, not both:
+    # - temperature: 0..2. Lower values like 0.2 are more focused/deterministic;
+    #   higher values like 0.8 are more random. For transcript cleanup, try 0.2-0.4.
+    # - top_p: 0..1 nucleus sampling. Lower values are more restrictive; keep 1.0
+    #   unless you deliberately tune top_p instead of temperature.
+    # model: deepseek-v4-flash
+    # api_base_url: https://api.deepseek.com
+    # thinking: disabled
+    # temperature: 0.3
+    # top_p: 1.0
+    # Retry settings specific to DeepSeek (override global defaults below).
     retry:
       attempts: 3        # 1 = no retry, 2..N = number of attempts per request
       pause_seconds: 60.0 # extra pause added to provider-suggested retry delay; if none, used alone

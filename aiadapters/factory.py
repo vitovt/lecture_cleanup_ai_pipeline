@@ -44,12 +44,13 @@ def _effective_provider_and_config(cfg: Dict, provider_override: Optional[str]) 
 
     Assumes validated config with:
       llm:
-        provider: openai|gemini|kie|evolink|groq|...
+        provider: openai|gemini|kie|evolink|groq|deepseek|...
         openai: { model, temperature, top_p, ... }
         gemini: { model, temperature, top_p, ... }
         kie: { model, temperature, top_p, ... }
         evolink: { model, temperature, top_p, method?, api_base_url?, ... }
         groq: { model, temperature, top_p, reasoning_effort?, reasoning_format?, api_base_url?, ... }
+        deepseek: { model, temperature, top_p, thinking?, reasoning_effort?, api_base_url?, ... }
     """
     llm_section = cfg["llm"]
     provider = (provider_override or llm_section["provider"]).strip().lower()
@@ -100,6 +101,17 @@ def create_llm_adapter(cfg: Dict, *, provider_override: Optional[str], project_r
             api_base_url=p_cfg.get("api_base_url"),
             timeout_seconds=p_cfg.get("timeout_seconds"),
         )
+    elif provider == "deepseek":
+        from .deepseek_adapter import DeepSeekAdapter
+        adapter = DeepSeekAdapter(
+            model=model,
+            temperature=temperature,
+            top_p=top_p,
+            thinking=p_cfg.get("thinking"),
+            reasoning_effort=p_cfg.get("reasoning_effort"),
+            api_base_url=p_cfg.get("api_base_url"),
+            timeout_seconds=p_cfg.get("timeout_seconds"),
+        )
     elif provider == "dummy":
         from .dummy_adapter import DummyAdapter
         adapter = DummyAdapter(model=model, temperature=temperature, top_p=top_p)
@@ -120,6 +132,8 @@ def create_llm_adapter(cfg: Dict, *, provider_override: Optional[str], project_r
         if provider == "evolink":
             raise
         if provider == "groq":
+            raise
+        if provider == "deepseek":
             raise
         raise
     return adapter

@@ -329,7 +329,7 @@ def main() -> int:
         default=None,
         help="Console verbosity; overrides config logging.level",
     )
-    ap.add_argument("--llm-provider", default=None, help="Override LLM provider: openai|gemini|kie|evolink|groq|dummy|...")
+    ap.add_argument("--llm-provider", default=None, help="Override LLM provider: openai|gemini|kie|evolink|groq|deepseek|dummy|...")
     ap.add_argument("--request-delay", type=float, default=None, help="Delay in seconds between LLM requests (0 = no delay)")
     ap.add_argument("--retry-attempts", type=int, default=None, help="Retry failed LLM requests up to N times (1 = no retry)")
     ap.add_argument("--chunks", type=str, default=None, help="Process only specified chunks, e.g. '1,3,7-9' (1-based indices)")
@@ -414,7 +414,7 @@ def main() -> int:
     # Resolve provider + effective model params with backward compatibility
     def _effective_llm_params(cfg: Dict, provider_override: Optional[str]) -> Dict:
         llm = cfg["llm"]
-        provider = provider_override or llm["provider"]
+        provider = (provider_override or llm["provider"]).strip().lower()
         p_cfg = llm[provider]
         return {
             "model": p_cfg["model"],
