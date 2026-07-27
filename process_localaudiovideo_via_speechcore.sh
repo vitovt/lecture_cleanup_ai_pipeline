@@ -56,6 +56,7 @@ Options:
   --context-file FILE  Additional context file(s) passed to lecture_cleanup.sh (can be repeated)
   --overwrite      Re-process even if destination .md already exists (default: skip existing)
   --debug          Show ffmpeg output and pass --debug to lecture_cleanup.sh
+  -h, --help       Show this help
 
 Audio input rules:
   - Audio files are processed directly (no video->audio decoding).

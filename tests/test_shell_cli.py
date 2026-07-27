@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -26,6 +27,16 @@ PUBLIC_SHELL_SCRIPTS = (
 
 
 class ShellHelpTests(unittest.TestCase):
+    def _help_options(self, relative_path: str) -> set[str]:
+        result = subprocess.run(
+            [str(PROJECT / relative_path), "--help"],
+            cwd=PROJECT,
+            text=True,
+            capture_output=True,
+            check=True,
+        )
+        return set(re.findall(r"--[a-z][a-z0-9-]*", result.stdout))
+
     def test_public_workflow_scripts_support_help(self) -> None:
         for relative_path in PUBLIC_SHELL_SCRIPTS:
             with self.subTest(script=relative_path):
@@ -72,6 +83,41 @@ class ShellHelpTests(unittest.TestCase):
                 self.assertIn("--lang CODE|auto", result.stdout)
                 self.assertRegex(result.stdout, r"--lang CODE\|auto[^\n]*default: auto")
                 self.assertNotIn("--language", result.stdout)
+
+    def test_single_and_list_wrappers_keep_shared_option_names(self) -> None:
+        pairs = (
+            (
+                "auto_process_youtube_via_groq.sh",
+                "auto_process_youtube_list_via_groq.sh",
+                {"--preflight", "--preflight-output"},
+                {"--videos", "--max-batch-cost-usd"},
+            ),
+            (
+                "process_localaudiovideo_via_groq.sh",
+                "process_localaudiovideo_via_groq_list.sh",
+                {"--preflight", "--preflight-output"},
+                {"--all", "--max-batch-cost-usd"},
+            ),
+            (
+                "auto_process_youtube_via_speechcore.sh",
+                "auto_process_youtube_list_via_speechcore.sh",
+                set(),
+                {"--videos"},
+            ),
+            (
+                "process_localaudiovideo_via_speechcore.sh",
+                "process_localaudiovideo_via_speechcore_list.sh",
+                set(),
+                {"--all"},
+            ),
+        )
+
+        for single, batch, single_only, batch_only in pairs:
+            with self.subTest(single=single, batch=batch):
+                single_options = self._help_options(single)
+                batch_options = self._help_options(batch)
+                self.assertEqual(single_options - batch_options, single_only)
+                self.assertEqual(batch_options - single_options, batch_only)
 
 
 class YoutubeLanguageDefaultTests(unittest.TestCase):
