@@ -17,7 +17,7 @@ MDOUTDIR="${GROQ_YOUTUBE_MDOUTDIR:-${AUTOYOUTUBE_MDOUTDIR:-$MDOUTDIR_DEFAULT}}"
 OUTDIR="$MDOUTDIR"
 
 URL=""
-LANG_OVERRIDE=""
+LANG_OVERRIDE="auto"
 LOG_LEVEL_OVERRIDE=""
 OVERWRITE=0
 PREFLIGHT=0
@@ -79,8 +79,8 @@ Downloads YouTube audio, transcribes it with Groq Whisper, optionally adds
 local pyannote speakers, then runs lecture_cleanup.sh.
 
 Language:
-  --lang CODE|auto       Override YouTube subtitle-language detection
-                         If detection fails, config must permit implicit auto
+  --lang CODE|auto       Recognition language hint (default: auto)
+                         auto lets Groq detect the spoken language
 
 Pipeline options:
   --outdir DIR           Markdown output directory (resolved default: $OUTDIR)
@@ -179,20 +179,7 @@ groq_info "Normalized URL: $URL"
 YT_DLP_FLAGS=()
 (( $(groq_log_rank "$LOG_LEVEL") >= 3 )) || YT_DLP_FLAGS+=(--quiet --no-warnings)
 LANG="$LANG_OVERRIDE"
-AUTO_LANG=""
-if [[ -z "$LANG" ]]; then
-    groq_info "Detecting YouTube subtitle language"
-    SUB_INFO="$(yt-dlp "${YT_DLP_FLAGS[@]}" --list-subs "$URL" || true)"
-    AUTO_LANG="$(printf '%s\n' "$SUB_INFO" | awk '/\(Original\)/ {print $1; exit}')"
-    if [[ -n "$AUTO_LANG" ]]; then
-        LANG="${AUTO_LANG%-orig}"
-        LANG="${LANG%%-*}"
-        groq_info "Detected language: $LANG"
-        groq_info "YouTube language detection complete: $LANG"
-    else
-        groq_warn "YouTube subtitle language unavailable; Groq config must allow implicit auto or pass --lang."
-    fi
-fi
+groq_info "Transcription language: $LANG"
 
 YT_META="$(yt-dlp "${YT_DLP_FLAGS[@]}" --print '%(upload_date)s' --print filename --skip-download --extractor-args 'youtube:player_client=default' "$URL")" || exit 3
 UPLOAD_DATE_RAW="$(printf '%s\n' "$YT_META" | awk '/^[0-9]{8}$/ {print; exit}')"

@@ -8,7 +8,7 @@ CHILD_SCRIPT="$SCRIPT_DIR/auto_process_youtube_via_groq.sh"
 
 PLAYLIST_URL=""
 VIDEOS_SPEC=""
-LANG=""
+LANG="auto"
 OUTDIR=""
 SRT_OUTDIR=""
 OVERWRITE=0
@@ -38,7 +38,8 @@ checks total estimated cost, then invokes auto_process_youtube_via_groq.sh.
 
 Selection and language:
   --videos SPEC          1-based items: 1-6 | 2,4,6 | 1-3,5,7-9
-  --lang CODE|auto       Override per-video YouTube subtitle-language detection
+  --lang CODE|auto       Recognition language for every video (default: auto)
+                         auto lets Groq detect each video's spoken language
 
 Forwarded pipeline options:
   --outdir DIR           Markdown output directory
@@ -128,7 +129,7 @@ groq_apply_log_level
 groq_debug "Effective logging level: $LOG_LEVEL"
 
 CHILD_FLAGS=()
-[[ -n "$LANG" ]] && CHILD_FLAGS+=(--lang "$LANG")
+CHILD_FLAGS+=(--lang "$LANG")
 [[ -n "$OUTDIR" ]] && CHILD_FLAGS+=(--outdir "$OUTDIR")
 [[ -n "$SRT_OUTDIR" ]] && CHILD_FLAGS+=(--srtoutdir "$SRT_OUTDIR")
 [[ -n "$GROQ_CONFIG" ]] && CHILD_FLAGS+=(--groq-config "$GROQ_CONFIG")
