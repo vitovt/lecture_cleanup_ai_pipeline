@@ -24,7 +24,7 @@ MDOUTDIR="${AUTOYOUTUBE_MDOUTDIR:-$MDOUTDIR_DEFAULT}"
 OUTDIR="$MDOUTDIR"
 DEBUG=0
 OVERWRITE=0
-LANG_OVERRIDE=""
+LANG_OVERRIDE="auto"
 YOUTUBE_UPLOAD_DATE=""
 
 # External helper for URL normalization
@@ -93,22 +93,28 @@ normalize_youtube_url() {
 #
 print_help() {
     cat <<EOF
-Usage: $0 [--outdir DIR] [--srtoutdir DIR] [--lang LANG] [--context-file FILE] [--overwrite] [--debug] <youtube_url>
+Usage: $0 [OPTIONS] <youtube_url>
 
 Downloads audio, transcribes it via SpeechcoreAI, and runs lecture_cleanup.sh.
 
-Options:
-  --outdir DIR     Override the markdown output dir (default or in .env: AUTOYOUTUBE_MDOUTDIR)
-    default: $MDOUTDIR;
-  --srtoutdir DIR  Override the audio/transcript dir (default or in .env:  AUTOYOUTUBE_SRTOUTDIR)
-    default: $SRTOUTDIR;
-  --lang LANG      Language code for lecture_cleanup.sh (auto-detected from YouTube if omitted)
-  --overwrite      Re-process even if destination .md already exists (default: skip existing)
-  --debug          Show yt-dlp output and pass --debug to lecture_cleanup.sh
-  --context-file FILE  Additional context file(s) passed to lecture_cleanup.sh (can be repeated)
+Language:
+  --lang CODE|auto       Recognition language (default: auto)
+                         auto uses YouTube's original subtitle-language metadata
+                         Pass CODE if that metadata is unavailable
+
+Pipeline options:
+  --outdir DIR           Markdown output directory (default: $MDOUTDIR)
+                         Can also be set with AUTOYOUTUBE_MDOUTDIR in .env
+  --srtoutdir DIR        Audio/transcript directory (default: $SRTOUTDIR)
+                         Can also be set with AUTOYOUTUBE_SRTOUTDIR in .env
+  --context-file FILE    Extra cleanup context; repeatable
+  --overwrite            Redownload/reprocess existing outputs
+  --debug                Show yt-dlp and cleanup diagnostics
+  -h, --help             Show this help
 
 Examples:
   $0 "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+  $0 --lang auto "https://youtu.be/dQw4w9WgXcQ"
   $0 --lang en "https://youtu.be/dQw4w9WgXcQ"
 EOF
 }
@@ -165,6 +171,11 @@ while [[ $# -gt 0 ]]; do
             DEBUG=1
             shift
             ;;
+        --*)
+            echo "Error: unknown option '$1'."
+            print_help
+            exit 2
+            ;;
         *)
             if [[ -z "$URL" ]]; then
                 URL="$1"
@@ -215,7 +226,8 @@ echo "[*] Normalized URL: $URL"
 # Detect language from YouTube subtitles unless overridden
 AUTO_LANG=""
 LANG=""
-if [[ -n "$LANG_OVERRIDE" ]]; then
+LANG_OVERRIDE="${LANG_OVERRIDE,,}"
+if [[ "$LANG_OVERRIDE" != "auto" ]]; then
     LANG="$LANG_OVERRIDE"
     AUTO_LANG="$LANG_OVERRIDE"
 else
@@ -231,20 +243,22 @@ else
     fi
     if [[ -z "$AUTO_LANG" ]]; then
         echo "[!] No auto-generated subtitles found."
-        echo "[!] Provide --lang to continue without YouTube subtitles."
+        echo "[!] Automatic mode needs YouTube language metadata for cleanup filenames."
+        echo "[!] Pass --lang CODE to continue without that metadata."
         exit 2
     fi
     LANG="${AUTO_LANG%-orig}"
+    LANG="${LANG%%-*}"
     echo "[*] Detected auto-sub language: $AUTO_LANG lang: $LANG"
 fi
 
-if [[ -z "$LANG" ]]; then
-    echo "Error: Unable to determine language."
-    exit 1
+if [[ ! "$LANG" =~ ^[a-z]{2}$ ]]; then
+    echo "Error: --lang must be a two-letter code or auto."
+    exit 2
 fi
 
 if [[ -z "$YOUTUBE_UPLOAD_DATE" ]]; then
-    # When --lang is provided, no --list-subs call is made; reuse the existing filename metadata call instead.
+    # A concrete --lang skips --list-subs; fetch upload date with filename metadata.
     YT_META_INFO=$(yt-dlp "${YT_DLP_SILENT_FLAGS[@]}" --print "%(upload_date)s" --print filename --skip-download --extractor-args "youtube:player_client=default" "$URL")
     YOUTUBE_UPLOAD_DATE_RAW=$(printf '%s\n' "$YT_META_INFO" | awk '/^[0-9]{8}$/ {print; exit}')
     if [[ "$YOUTUBE_UPLOAD_DATE_RAW" =~ ^([0-9]{4})([0-9]{2})([0-9]{2})$ ]]; then
@@ -319,10 +333,7 @@ else
     if [[ -f "$TASK_ID_FILE" && "$OVERWRITE" -eq 1 ]]; then
         rm -f "$TASK_ID_FILE"
     fi
-    SPEECHCORE_ARGS=(--input-file "$MP3_PATH" --output-dir "$SRTOUTDIR" --task-output "$TASK_ID_FILE")
-    case "$LANG" in
-        ru|uk|en|de) SPEECHCORE_ARGS+=(--language "$LANG") ;;
-    esac
+    SPEECHCORE_ARGS=(--input-file "$MP3_PATH" --output-dir "$SRTOUTDIR" --task-output "$TASK_ID_FILE" --language "$LANG")
     if [[ "$DEBUG" -eq 1 ]]; then
         SPEECHCORE_ARGS+=(--log-level DEBUG)
     fi

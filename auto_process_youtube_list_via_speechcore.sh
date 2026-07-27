@@ -10,22 +10,33 @@ SRT_OUTDIR=""
 DEBUG=0
 PLAYLIST_URL=""
 VIDEOS_SPEC=""
+LANG="auto"
 OVERWRITE=0
 CONTEXT_FILES=()
 
 print_help() {
     cat <<EOF
-Usage: $0 [--outdir DIR] [--srtoutdir DIR] [--videos SPEC] [--context-file FILE] [--overwrite] [--debug] <youtube_playlist_url>
+Usage: $0 [OPTIONS] <youtube_playlist_url>
 
-Expands a YouTube playlist and runs auto_process_youtube.sh for each video.
+Expands a YouTube playlist and runs auto_process_youtube_via_speechcore.sh for
+each selected video.
 
 Options:
-  --outdir DIR   Override markdown output dir for all videos (default: auto_process_youtube.sh\`s default)
-  --srtoutdir DIR Override subtitles download dir for all videos (default: auto_process_youtube.sh\`s default)
-  --videos SPEC  Process only selected items (1-based). Examples: 1-6 | 2,4,6 | 1-3,5,7,9-11,13
-  --context-file FILE  Additional context file(s) passed to auto_process_youtube_via_speechcore.sh (can be repeated)
-  --overwrite    Re-process even if destination .md already exists (default: skip existing)
-  --debug        Show yt-dlp output and pass --debug to auto_process_youtube.sh
+  --videos SPEC          Process selected 1-based items: 1-6 | 2,4,6 | 1-3,5
+  --lang CODE|auto       Recognition language for every video (default: auto)
+  --outdir DIR           Markdown output directory used by the child script
+  --srtoutdir DIR        Audio/transcript directory used by the child script
+  --context-file FILE    Extra cleanup context; repeatable
+  --overwrite            Redownload/reprocess existing outputs
+  --debug                Show yt-dlp and child-script diagnostics
+  -h, --help             Show this help
+
+In auto mode each child uses YouTube's original subtitle-language metadata.
+Pass --lang CODE when a playlist has no such metadata.
+
+Examples:
+  $0 "https://www.youtube.com/playlist?list=PL123"
+  $0 --videos 1-3 --lang uk "https://youtube.com/playlist?list=PL123"
 EOF
 }
 
@@ -59,6 +70,14 @@ while [[ $# -gt 0 ]]; do
             VIDEOS_SPEC="$2"
             shift 2
             ;;
+        --lang)
+            if [[ -z "${2-}" ]]; then
+                echo "Error: --lang requires a language code or auto."
+                exit 1
+            fi
+            LANG="${2,,}"
+            shift 2
+            ;;
         --context-file)
             if [[ -z "${2-}" ]]; then
                 echo "Error: --context-file requires a filename."
@@ -74,6 +93,11 @@ while [[ $# -gt 0 ]]; do
         --debug)
             DEBUG=1
             shift
+            ;;
+        --*)
+            echo "Error: unknown option '$1'."
+            print_help
+            exit 2
             ;;
         *)
             if [[ -z "$PLAYLIST_URL" ]]; then
@@ -94,6 +118,10 @@ if [[ -z "$PLAYLIST_URL" ]]; then
     echo
     print_help
     exit 1
+fi
+if [[ "$LANG" != "auto" && ! "$LANG" =~ ^[a-z]{2}$ ]]; then
+    echo "Error: --lang must be a two-letter code or auto."
+    exit 2
 fi
 
 # Basic YouTube URL validation
@@ -119,6 +147,7 @@ fi
 
 YT_DLP_SILENT_FLAGS=()
 CHILD_FLAGS=()
+CHILD_FLAGS+=(--lang "$LANG")
 if [[ "$DEBUG" -ne 1 ]]; then
     YT_DLP_SILENT_FLAGS+=(--quiet --no-warnings)
 else
