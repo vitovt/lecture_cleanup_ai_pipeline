@@ -161,6 +161,172 @@ def _joined_len(lines: List[str]) -> int:
         return 0
     return sum(len(s) for s in lines) + (len(lines) - 1)
 
+def _compute_overlap_units(units: Optional[List[Dict]], limit: int) -> List[Dict]:
+    if not units or limit <= 0:
+        return []
+    # If the last unit is a split piece, prefer taking a tail of it that fits the limit
+    last = units[-1]
+    if last.get("split"):
+        # Split last unit text into sub-pieces and take from the end
+        sub_pieces, sub_notes = split_line_for_limit(last["text"], limit)
+        # choose minimal number from end that fit
+        out: List[str] = []
+        total = 0
+        for s in reversed(sub_pieces):
+            add = len(s) if total == 0 else (1 + len(s))
+            if total + add <= limit:
+                out.append(s)
+                total += add
+            else:
+                break
+        out.reverse()
+        return [{"text": t, "orig": last["orig"], "split": True} for t in out]
+    # Else, add whole lines from the end backwards
+    out_rev: List[Dict] = []
+    total = 0
+    for u in reversed(units):
+        # only take whole original lines for overlap
+        if u.get("split"):
+            # stop at first split piece encountered from the end
+            break
+        add = len(u["text"]) if total == 0 else (1 + len(u["text"]))
+        if total + add <= limit:
+            out_rev.append(u)
+            total += add
+        else:
+            # If even the very last whole line doesn't fit, split it
+            if not out_rev:  # no line has fit yet
+                sub_pieces, sub_notes = split_line_for_limit(u["text"], limit)
+                # take from the end minimal pieces that fit
+                out: List[str] = []
+                sub_total = 0
+                for s in reversed(sub_pieces):
+                    add2 = len(s) if sub_total == 0 else (1 + len(s))
+                    if sub_total + add2 <= limit:
+                        out.append(s)
+                        sub_total += add2
+                    else:
+                        break
+                out.reverse()
+                return [{"text": t, "orig": u["orig"], "split": True} for t in out]
+            break
+    out_rev.reverse()
+    return out_rev
+
+def _new_units(chunk: Dict) -> List[Dict]:
+    units = chunk.get("_units", [])
+    overlap_n = int(chunk.get("_overlap_units", 0) or 0)
+    return list(units[overlap_n:])
+
+def _units_text_len(units: List[Dict]) -> int:
+    return _joined_len([u["text"] for u in units])
+
+def _make_chunk(units: List[Dict], overlap_units: Optional[List[Dict]] = None) -> Dict:
+    overlap_units = list(overlap_units or [])
+    all_units = overlap_units + list(units)
+    chunk_text = "\n".join(u["text"] for u in all_units)
+    return {
+        "start": None,
+        "end": None,
+        "text": chunk_text,
+        "_units": all_units,
+        "_overlap_units": len(overlap_units),
+    }
+
+def rebalance_two_chunk_small_tail(
+    chunks: List[Dict],
+    chunk_chars: int = 6500,
+    overlap_chars: int = 500,
+    tail_threshold_ratio: float = 0.30,
+) -> Tuple[List[Dict], Optional[Dict]]:
+    """
+    If the regular chunker produced exactly two chunks and the second chunk's
+    new content is tiny, rebalance into two chunks with a boundary close to 50/50.
+
+    This preserves existing unit boundaries: whole input lines when possible and
+    pre-split long-line pieces when the original chunker had to split a long line.
+    Returns (chunks, info); info is None when no rebalance was applied.
+    """
+    if len(chunks or []) != 2:
+        return chunks, None
+
+    try:
+        limit = int(chunk_chars or 0)
+    except Exception:
+        limit = 0
+    if limit <= 0:
+        return chunks, None
+
+    first_old = _new_units(chunks[0])
+    second_old = _new_units(chunks[1])
+    if not first_old or not second_old:
+        return chunks, None
+
+    old_first_len = _units_text_len(first_old)
+    old_second_len = _units_text_len(second_old)
+    if old_second_len >= int(limit * tail_threshold_ratio):
+        return chunks, None
+
+    all_units = first_old + second_old
+    if len(all_units) < 2:
+        return chunks, None
+
+    total_len = _units_text_len(all_units)
+    target = total_len / 2.0
+    hard_overlap_limit = max(0, min(overlap_chars, max(0, limit - 1)))
+
+    best: Optional[Tuple[float, int, List[Dict], List[Dict], List[Dict], int, int]] = None
+    for boundary in range(1, len(all_units)):
+        first_new = all_units[:boundary]
+        second_new = all_units[boundary:]
+        first_len = _units_text_len(first_new)
+        second_new_len = _units_text_len(second_new)
+        if first_len > limit or second_new_len > limit:
+            continue
+
+        if second_new_len >= limit:
+            overlap_limit = 0
+        else:
+            # Reserve one newline between overlap and new content.
+            overlap_limit = max(0, min(hard_overlap_limit, limit - second_new_len - 1))
+        overlap_units = _compute_overlap_units(first_new, overlap_limit)
+        second_units = overlap_units + second_new
+        second_total_len = _units_text_len(second_units)
+        if second_total_len > limit:
+            continue
+
+        score = abs(first_len - target)
+        if best is None or score < best[0]:
+            best = (
+                score,
+                boundary,
+                first_new,
+                second_new,
+                overlap_units,
+                first_len,
+                second_new_len,
+            )
+
+    if best is None:
+        return chunks, None
+
+    _, boundary, first_new, second_new, overlap_units, first_len, second_new_len = best
+    rebalanced = [
+        _make_chunk(first_new),
+        _make_chunk(second_new, overlap_units),
+    ]
+    info = {
+        "threshold_ratio": tail_threshold_ratio,
+        "chunk_chars": limit,
+        "old_first_chars": old_first_len,
+        "old_second_chars": old_second_len,
+        "new_first_chars": first_len,
+        "new_second_chars": second_new_len,
+        "boundary_units": boundary,
+        "total_units": len(all_units),
+    }
+    return rebalanced, info
+
 def chunk_text_line_preserving(lines: List[str], chunk_chars: int = 6500, overlap_chars: int = 500) -> List[Dict]:
     """
     Build chunks preserving whole lines. Never split inside a line unless the line
@@ -191,62 +357,10 @@ def chunk_text_line_preserving(lines: List[str], chunk_chars: int = 6500, overla
             break
 
         # 1) Determine overlap from previous chunk
-        def compute_overlap(units: Optional[List[Dict]], limit: int) -> List[Dict]:
-            if not units or limit <= 0:
-                return []
-            # If the last unit is a split piece, prefer taking a tail of it that fits the limit
-            last = units[-1]
-            if last.get("split"):
-                # Split last unit text into sub-pieces and take from the end
-                sub_pieces, sub_notes = split_line_for_limit(last["text"], limit)
-                # choose minimal number from end that fit
-                out: List[str] = []
-                total = 0
-                for s in reversed(sub_pieces):
-                    add = len(s) if total == 0 else (1 + len(s))
-                    if total + add <= limit:
-                        out.append(s)
-                        total += add
-                    else:
-                        break
-                out.reverse()
-                return [{"text": t, "orig": last["orig"], "split": True} for t in out]
-            # Else, add whole lines from the end backwards
-            out_rev: List[Dict] = []
-            total = 0
-            for u in reversed(units):
-                # only take whole original lines for overlap
-                if u.get("split"):
-                    # stop at first split piece encountered from the end
-                    break
-                add = len(u["text"]) if total == 0 else (1 + len(u["text"]))
-                if total + add <= limit:
-                    out_rev.append(u)
-                    total += add
-                else:
-                    # If even the very last whole line doesn't fit, split it
-                    if not out_rev:  # no line has fit yet
-                        sub_pieces, sub_notes = split_line_for_limit(u["text"], limit)
-                        # take from the end minimal pieces that fit
-                        out: List[str] = []
-                        sub_total = 0
-                        for s in reversed(sub_pieces):
-                            add2 = len(s) if sub_total == 0 else (1 + len(s))
-                            if sub_total + add2 <= limit:
-                                out.append(s)
-                                sub_total += add2
-                            else:
-                                break
-                        out.reverse()
-                        return [{"text": t, "orig": u["orig"], "split": True} for t in out]
-                    break
-            out_rev.reverse()
-            return out_rev
-
         attempt = 0
         while True:
             overlap_limit = hard_overlap_limit if attempt == 0 else 0
-            overlap_units = compute_overlap(prev_units, overlap_limit)
+            overlap_units = _compute_overlap_units(prev_units, overlap_limit)
             units: List[Dict] = list(overlap_units)
             curr_len = _joined_len([u["text"] for u in units])
             added_new = 0

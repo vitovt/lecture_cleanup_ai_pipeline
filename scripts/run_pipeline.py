@@ -35,6 +35,7 @@ from scripts.utils import (
     rewrite_merged_terms_comments,
     build_context_overlap,
     strip_all_html_comments,
+    rebalance_two_chunk_small_tail,
 )
 
 def load_text(path: str) -> str:
@@ -453,12 +454,14 @@ def main() -> int:
     # sentence delimiters for overlap selection
     sentence_delimiters = str(cfg.get("overlap_sentence_delimiters", ".!?…"))
     stitch_dedup_window = int(cfg.get("stitch_dedup_window_chars", cfg.get("txt_overlap_chars", 500)) or 0)
+    rebalance_small_tail_chunks = bool(cfg.get("rebalance_small_tail_chunks", True))
     content_mode = str(cfg.get("content_mode", "normal")).strip().lower()
     suppress_edit_comments = bool(cfg.get("suppress_edit_comments", True))
     if debug:
         log_debug(f"Settings -> provider={_llm['provider']}, model={model}, temperature={temperature}, top_p={top_p}, lang={lang}, delay={request_delay}s, retries={attempts} x pause {pause_between_attempts}s")
         log_debug(f"Options -> include_timecodes={include_timecodes}, process_timecodes_by_ai={process_timecodes_by_ai}, aside_style={aside_style}")
         log_debug(f"Overlap -> source={overlap_source}, sentence_delimiters={sentence_delimiters!r}, stitch_dedup_window_chars={stitch_dedup_window}")
+        log_debug(f"Chunking -> rebalance_small_tail_chunks={rebalance_small_tail_chunks}")
         log_debug(f"Content mode -> {content_mode}; suppress_edit_comments={suppress_edit_comments}")
 
     # Load parasites for the language
@@ -534,11 +537,30 @@ def main() -> int:
     timecodes_policy_text = _build_timecodes_policy_text(include_timecodes, timecodes_handled_by_ai, timecodes_available)
 
     # Chunk (line-preserving)
+    chunk_chars = int(cfg.get("txt_chunk_chars", 6500) or 6500)
+    overlap_chars = int(cfg.get("txt_overlap_chars", 500) or 0)
     chunks = chunk_text_line_preserving(
         src_lines,
-        chunk_chars=cfg.get("txt_chunk_chars", 6500),
-        overlap_chars=cfg.get("txt_overlap_chars", 500),
+        chunk_chars=chunk_chars,
+        overlap_chars=overlap_chars,
     )
+    if rebalance_small_tail_chunks:
+        chunks, rebalance_info = rebalance_two_chunk_small_tail(
+            chunks,
+            chunk_chars=chunk_chars,
+            overlap_chars=overlap_chars,
+        )
+        if rebalance_info:
+            old_second = int(rebalance_info["old_second_chars"])
+            limit = int(rebalance_info["chunk_chars"])
+            old_pct = (old_second / limit * 100.0) if limit else 0.0
+            threshold_pct = float(rebalance_info["threshold_ratio"]) * 100.0
+            log_warn(
+                "Small tail chunk detected: initial split produced 2 chunks with "
+                f"second fragment {old_second}/{limit} chars ({old_pct:.1f}%, < {threshold_pct:.0f}%); "
+                "rebalanced to "
+                f"{rebalance_info['new_first_chars']}/{rebalance_info['new_second_chars']} chars."
+            )
 
     # For timestamped TXT, set chunk 'start' based on first new line's timestamp
     if fmt == "txt" and has_line_timestamps:

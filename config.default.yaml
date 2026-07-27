@@ -127,6 +127,7 @@ format: txt
 
 # Chunking
 txt_chunk_chars: 6500   # chunk size for plain text (TXT)
+rebalance_small_tail_chunks: true # if exactly 2 chunks and the second is <30% of txt_chunk_chars, rebalance near 50/50
 
 # Overlap-specific options (advanced)
 ## Overlap typ
