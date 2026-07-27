@@ -160,6 +160,11 @@ while [[ $# -gt 0 ]]; do
             DEBUG=1
             shift
             ;;
+        --*)
+            echo "Error: unknown option '$1'."
+            print_help
+            exit 2
+            ;;
         *)
             if [[ -z "$INPUT_FILE" ]]; then
                 INPUT_FILE="$1"

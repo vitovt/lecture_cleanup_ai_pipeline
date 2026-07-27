@@ -115,10 +115,9 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         --*)
-            echo "Error: Unexpected option '$1'."
-            echo
+            echo "Error: unknown option '$1'."
             print_help
-            exit 1
+            exit 2
             ;;
         *)
             INPUT_FILES+=("$1")

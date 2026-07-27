@@ -75,6 +75,11 @@ while [[ $# -gt 0 ]]; do
             DEBUG=1
             shift
             ;;
+        --*)
+            echo "Error: unknown option '$1'."
+            print_help
+            exit 2
+            ;;
         *)
             if [[ -z "$PLAYLIST_URL" ]]; then
                 PLAYLIST_URL="$1"
