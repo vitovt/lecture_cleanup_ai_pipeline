@@ -14,7 +14,7 @@ Außerdem fügt es eine einfache Struktur hinzu und sorgt für konsistente Termi
 1. Liest die Eingabedatei (`.txt` oder `.srt`). Bei `.txt` können Zeitstempel in eckigen Klammern am Zeilenanfang stehen.
 2. Teilt den Text in Blöcke mit Überlappung, ohne nach Möglichkeit Zeilen zu trennen.
 3. Fügt „Kontext“ aus dem vorherigen Fragment hinzu (nur lesend) — `raw`, `cleaned` oder `none`.
-4. Sendet den Block mit strikten Prompts an OpenAI.
+4. Sendet den Block mit strikten Prompts an den gewählten LLM-Anbieter.
 5. Bei `.txt`-Dateien mit Zeitstempeln werden diese in Überschriften eingefügt. Standard: Zeitstempel des Blockanfangs für alle Überschriften; optional `--process-timecodes-by-ai`, dann setzt das Modell pro Überschrift einen Zeitcode anhand der gelieferten Stempel.
 6. Entfernt doppelte Textstellen an den Blockgrenzen.
 7. Erfasst Informationen über „merged_terms“ und übergibt sie an folgende Blöcke (`<!-- merged_terms: ... -->`, nur neue Änderungen).
@@ -43,7 +43,7 @@ Außerdem fügt es eine einfache Struktur hinzu und sorgt für konsistente Termi
 
   * `chunk_text_line_preserving(...)` gruppiert Text bis zur Grenze `txt_chunk_chars` mit Überlappung `txt_overlap_chars`.
   * Kontext = die letzten `txt_overlap_chars` des vorherigen Blocks (nur lesend).
-* **OpenAI-Aufruf:**
+* **LLM-Anbieter-Aufruf:**
 
   * System-Prompt abhängig vom Modus: `strict` / `normal` / `creative`.
   * Benutzer-Prompt enthält: Sprache, Füllwort-Listen, Stil für Randbemerkungen/Witze, `TERM_HINTS` (versteckt), „Kontext“ und den eigentlichen Textblock.
@@ -91,10 +91,14 @@ Es wird empfohlen, die `.sh`-Wrapper zu verwenden, da sie `.venv` aktivieren und
 ### LLM-Provider wählen (Adapter)
 
 - Den Provider in `config.yaml` (lokale Overrides) unter `llm.provider` setzen (Standard in `config.default.yaml`).
-- Per CLI überschreiben mit `--llm-provider openai|gemini|dummy|...`.
+- Per CLI überschreiben mit `--llm-provider openai|gemini|kie|evolink|groq|deepseek|dummy`.
 - API-Schlüssel in `.env` im Projektverzeichnis ablegen:
   - OpenAI: `OPENAI_API_KEY=...`
   - Gemini: `GOOGLE_API_KEY=...`
+  - Kie: `KIE_API_KEY=...`
+  - EvoLink: `EVOLINK_API_KEY=...`
+  - Groq: `GROQ_API_KEY=...`
+  - DeepSeek: `DEEPSEEK_API_KEY=...`
 
 Die Pipeline ist anbieterunabhängig und verwendet eine einheitliche Adapter-Schnittstelle. Um einen neuen Provider hinzuzufügen, `aiadapters/dummy_adapter.py` kopieren, `LLMAdapter.generate` implementieren und in `aiadapters/factory.py` registrieren.
 
@@ -116,6 +120,33 @@ Die Pipeline ist anbieterunabhängig und verwendet eine einheitliche Adapter-Sch
 - `--context-file FILE` übergibt zusätzliche Kontextdateien an `lecture_cleanup.sh` (kann mehrfach angegeben werden).
 - `--debug` zeigt die `yt-dlp`-Ausgabe und reicht `--debug` an `lecture_cleanup.sh` weiter.
 - Erfordert ein Video mit automatisch generierten Untertiteln.
+
+### YouTube-Audio über Groq oder Speechcore
+
+Die öffentlichen `.sh`-Abläufe verwenden einheitlich
+`--lang CODE|auto`. Bei der automatischen Verarbeitung einzelner
+YouTube-Videos und Playlists ist `auto` der Standard und muss nicht explizit
+angegeben werden.
+
+```bash
+# Groq erkennt die Audiosprache; YouTube-Untertitel sind nicht erforderlich
+./auto_process_youtube_via_groq.sh --diarization off "https://youtu.be/ID"
+./auto_process_youtube_list_via_groq.sh --videos 1-3 "PLAYLIST_URL"
+
+# Ein expliziter Sprachhinweis funktioniert in Single- und Listenmodus gleich
+./auto_process_youtube_via_groq.sh --lang uk "https://youtu.be/ID"
+
+# Speechcore Single/List stellt denselben öffentlichen auto-Standard bereit
+./auto_process_youtube_via_speechcore.sh "https://youtu.be/ID"
+./auto_process_youtube_list_via_speechcore.sh --videos 1-3 "PLAYLIST_URL"
+```
+
+Groq reicht `auto` direkt an den Anbieter weiter. Der aktuelle
+Speechcore-Wrapper verwendet im Auto-Modus die Sprachmetadaten der
+Original-Untertitel von YouTube, weil Dateiname und Cleanup einen konkreten
+Sprachcode benötigen. Fehlen diese Metadaten, muss `--lang CODE` angegeben
+werden. Die vollständige aktuelle Optionsliste zeigt jedes Skript mit
+`--help`.
 
 * **Einzeldatei:**
 
@@ -142,7 +173,7 @@ Diese Parameter werden über die `.sh`-Skripte an `scripts/run_pipeline.py` übe
 * `--input` *(erforderlich)* — Pfad zu `.txt` oder `.srt`
 * `--format` — `txt` oder `srt` (wird sonst automatisch erkannt)
 * `--outdir` — Ausgabeverzeichnis (Standard: `output`)
-* `--lang` — `ru`, `uk`, `en`
+* `--lang` — zweistelliger ISO-639-1-Code, z. B. `ru`, `uk`, `en`, `de`, `pl`, `es`
 * `--glossary` — Pfad zu einer Glossardatei (ein Begriff pro Zeile)
 * `--txt-chunk-chars` — Blockgröße in Zeichen (überschreibt Konfigurationswert)
 * `--txt-overlap-chars` — Überlappung in Zeichen
@@ -224,7 +255,7 @@ Allgemein
 * `llm.gemini.retry.pause_seconds`: zusätzliche Wartezeit für Gemini (addiert zur Provider-Empfehlung; sonst allein)
 
 LLM
-- `llm.provider`: `openai`, `gemini` oder eigener Adapter
+- `llm.provider`: `openai`, `gemini`, `kie`, `evolink`, `groq`, `deepseek`, `dummy` oder eigener Adapter
 - `llm.openai.model`: Modellname (z. B. `gpt-5-mini`)
 - `llm.openai.temperature`: Zahl
 - `llm.openai.top_p`: Zahl oder null

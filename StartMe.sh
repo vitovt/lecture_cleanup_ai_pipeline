@@ -135,10 +135,12 @@ YouTube subtitles (no speech-to-text provider)
 SpeechCore transcription and cleanup
   youtube-speechcore
     Download one YouTube video's audio, transcribe with SpeechCore, then clean it.
-    Example: $PROGRAM youtube-speechcore --lang uk "https://youtu.be/VIDEO_ID"
+    Language defaults to auto; use --lang CODE to override it.
+    Example: $PROGRAM youtube-speechcore "https://youtu.be/VIDEO_ID"
 
   youtube-speechcore-list
     Process selected videos from a playlist through SpeechCore.
+    Language defaults to auto and is forwarded to every selected video.
     Example: $PROGRAM youtube-speechcore-list --videos 1-3 "PLAYLIST_URL"
 
   local-speechcore
@@ -152,11 +154,13 @@ SpeechCore transcription and cleanup
 Groq transcription, optional pyannote speakers, and cleanup
   youtube-groq
     Download and process one YouTube video through Groq Whisper.
-    Example: $PROGRAM youtube-groq --lang uk --oversize-policy compress "VIDEO_URL"
+    Language defaults to Groq auto-detection; use --lang CODE as a hint.
+    Example: $PROGRAM youtube-groq --diarization off "VIDEO_URL"
 
   youtube-groq-list
     Preflight and process selected playlist videos through Groq.
-    Example: $PROGRAM youtube-groq-list --videos 1-3 --lang uk "PLAYLIST_URL"
+    Language defaults to auto and is forwarded to every selected video.
+    Example: $PROGRAM youtube-groq-list --videos 1-3 "PLAYLIST_URL"
 
   local-groq
     Process one local audio/video file through Groq, optionally with speakers.
@@ -169,7 +173,7 @@ Groq transcription, optional pyannote speakers, and cleanup
 Provider-level tools
   groq-api
     Run the standalone Groq transcribe/preflight or batch-check CLI.
-    Example: $PROGRAM groq-api transcribe --input-file audio.mp3 --language uk
+    Example: $PROGRAM groq-api transcribe --input-file audio.mp3 --lang uk
 
   diarize
     Run local pyannote speaker diarization without transcription or cleanup.

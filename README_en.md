@@ -13,7 +13,7 @@ It preserves the content without loss, corrects punctuation, capitalization, and
 1. Reads the input file (`.txt` or `.srt`). For `.txt`, timestamps may appear in square brackets at the start of lines.
 2. Splits the text into chunks with overlap, avoiding line breaks when possible.
 3. Adds “context” from the previous fragment (read-only) — can be `raw`, `cleaned`, or `none`.
-4. Sends the fragment to OpenAI with strict prompts.
+4. Sends the fragment to the selected LLM provider with strict prompts.
 5. For `.txt` files with timecodes, adds them to fragment headings (default: chunk start for all headings in a chunk; optional: `--process-timecodes-by-ai` lets the LLM assign per-heading stamps using provided timestamps).
 6. Removes duplicates at chunk boundaries during stitching.
 7. Collects “merged terms” info and passes it to the next blocks via comments `<!-- merged_terms: ... -->` (only new changes per block).
@@ -42,7 +42,7 @@ It preserves the content without loss, corrects punctuation, capitalization, and
 
   * `chunk_text_line_preserving(...)` groups text up to `txt_chunk_chars` with overlap `txt_overlap_chars`.
   * Context = last `txt_overlap_chars` of the previous chunk (read-only).
-* **OpenAI call:**
+* **LLM provider call:**
 
   * System prompt depends on mode: `strict` / `normal` / `creative`.
   * User prompt includes: language, filler-word lists, aside/joke style, `TERM_HINTS` (hidden), “context,” and the fragment.
@@ -90,10 +90,14 @@ It’s recommended to run via provided `.sh` wrappers — they activate `.venv` 
 ### Choosing LLM provider (adapters)
 
 - Configure the provider in `config.yaml` (local overrides) under `llm.provider` (default comes from `config.default.yaml`).
-- Override via CLI using `--llm-provider openai|gemini|dummy|...`.
+- Override via CLI using `--llm-provider openai|gemini|kie|evolink|groq|deepseek|dummy`.
 - Place provider API keys in `.env` at project root:
   - OpenAI: `OPENAI_API_KEY=...`
   - Gemini: `GOOGLE_API_KEY=...`
+  - Kie: `KIE_API_KEY=...`
+  - EvoLink: `EVOLINK_API_KEY=...`
+  - Groq: `GROQ_API_KEY=...`
+  - DeepSeek: `DEEPSEEK_API_KEY=...`
 
 The core pipeline is provider-agnostic and talks to a unified adapter interface. To add a new provider, copy `aiadapters/dummy_adapter.py` as a template, implement `LLMAdapter.generate`, and register it in `aiadapters/factory.py`.
 
@@ -115,6 +119,31 @@ The core pipeline is provider-agnostic and talks to a unified adapter interface.
 - `--context-file FILE` passes additional context file(s) to `lecture_cleanup.sh` (can be repeated).
 - `--debug` shows `yt-dlp` output and forwards `--debug` to `lecture_cleanup.sh`.
 - Requires the video to have auto-generated subtitles enabled.
+
+### YouTube audio through Groq or Speechcore
+
+The public `.sh` workflows use one language option name:
+`--lang CODE|auto`. Automatic YouTube single-video and playlist workflows
+default to `auto`, so it does not need to be passed explicitly.
+
+```bash
+# Groq detects the audio language; YouTube subtitles are not required
+./auto_process_youtube_via_groq.sh --diarization off "https://youtu.be/ID"
+./auto_process_youtube_list_via_groq.sh --videos 1-3 "PLAYLIST_URL"
+
+# An explicit language hint behaves the same in single/list workflows
+./auto_process_youtube_via_groq.sh --lang uk "https://youtu.be/ID"
+
+# Speechcore single/list workflows expose the same public auto default
+./auto_process_youtube_via_speechcore.sh "https://youtu.be/ID"
+./auto_process_youtube_list_via_speechcore.sh --videos 1-3 "PLAYLIST_URL"
+```
+
+Groq passes `auto` directly to the provider. The current Speechcore wrapper
+uses the original YouTube subtitle-language metadata in auto mode because the
+result filename and cleanup stage need a concrete language code. Pass
+`--lang CODE` when that metadata is unavailable. Run each script with `--help`
+for its complete current option list.
 
 * **Single file:**
 
@@ -141,7 +170,7 @@ These flags are passed to `scripts/run_pipeline.py` via the `.sh` wrappers.
 * `--input` *(required)* — path to `.txt` or `.srt`
 * `--format` — `txt` or `srt` (auto-detected if omitted)
 * `--outdir` — output folder (default `output`)
-* `--lang` — `ru`, `uk`, `en`
+* `--lang` — a two-letter ISO-639-1 code, for example `ru`, `uk`, `en`, `de`, `pl`, `es`
 * `--glossary` — path to glossary file (one term per line)
 * `--txt-chunk-chars` — chunk size in characters (overrides config)
 * `--txt-overlap-chars` — overlap size in characters
@@ -223,7 +252,7 @@ General
 * `llm.gemini.retry.pause_seconds`: extra pause for Gemini (added to provider-suggested delay; else used alone)
 
 LLM
-- `llm.provider`: `openai`, `gemini`, or custom
+- `llm.provider`: `openai`, `gemini`, `kie`, `evolink`, `groq`, `deepseek`, `dummy`, or custom
 - `llm.openai.model`: model name (e.g., `gpt-5-mini`)
 - `llm.openai.temperature`: float
 - `llm.openai.top_p`: float or null
