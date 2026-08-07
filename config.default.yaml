@@ -178,9 +178,22 @@ highlight_asides_style: italic
 # !!!      Warning      !!! #
 # High token usage          #
 ############################# 
-# The full result Markdown is sent to the model to produce the summary. It can double your expences.
-append_summary: false
+# The full result Markdown is sent to the model to produce summaries.
+# Summary generation mode: disabled, short, long, or both.
+# "both" generates the long and short summaries in one optimized LLM request.
+summary_mode: disabled
+# Summary output: append to the main Markdown, or write separate sibling files.
+# Separate files use <filename>-summary.md and <filename>-longsummary.md.
+summary_output: append
+# Long-summary language: default follows --lang; otherwise use a two-letter
+# ISO-639-1 code such as uk, en, de, ru, pl, or es.
+long_summary_lang: default
+# Deprecated compatibility switch. When present, false disables all summaries,
+# regardless of summary_mode. Legacy true enables a short summary when
+# summary_mode is disabled. Prefer summary_mode for new configurations.
+# append_summary: false
 summary_heading: "## Summary (не авторський)"
+long_summary_heading: "## Long summary (не авторський)"
 
 # Paths to stopword lists (one per language)
 parasites:

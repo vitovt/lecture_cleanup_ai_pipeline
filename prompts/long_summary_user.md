@@ -1,0 +1,1 @@
+Generate a detailed, structured retelling of the following lecture in `{SUMMARY_LANGUAGE}`. Follow the system instructions closely, analyze the complete source, and preserve the lecture's reasoning, concrete details, terminology, illustrative quotations, and atmosphere. Return only the summary Markdown, without a preamble or commentary about the task.

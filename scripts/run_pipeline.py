@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import os, argparse, sys, csv, traceback, time, re
 from datetime import datetime
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, Tuple
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -37,6 +37,13 @@ from scripts.utils import (
     strip_all_html_comments,
     rebalance_two_chunk_small_tail,
 )
+
+SUMMARY_MODES = ("disabled", "short", "long", "both")
+SUMMARY_OUTPUTS = ("append", "separate")
+LONG_SUMMARY_START = "<!-- LECTURE_CLEANUP_LONG_SUMMARY_START -->"
+LONG_SUMMARY_END = "<!-- LECTURE_CLEANUP_LONG_SUMMARY_END -->"
+SHORT_SUMMARY_START = "<!-- LECTURE_CLEANUP_SHORT_SUMMARY_START -->"
+SHORT_SUMMARY_END = "<!-- LECTURE_CLEANUP_SHORT_SUMMARY_END -->"
 
 def load_text(path: str) -> str:
     with open(path, "r", encoding="utf-8", errors="ignore") as f:
@@ -262,23 +269,47 @@ def call_llm(
         log_trace(f"LLM response END{trace_label}")
     return out_text
 
-def call_llm_summary(adapter: LLMAdapter, model: str, full_markdown: str, temperature: float = 1.0, top_p: float = None, debug: bool = False, trace: bool = False, label: str = None) -> str:
-    from pathlib import Path
+def _load_summary_prompt(summary_type: str, summary_lang: str) -> Tuple[str, str]:
+    if summary_type not in ("short", "long"):
+        raise ValueError(f"Unsupported summary type: {summary_type}")
     base = Path(__file__).parent.parent
-    summary_system_path = base / "prompts" / "summary_system.md"
-    summary_user_path = base / "prompts" / "summary_user.md"
+    prefix = "summary" if summary_type == "short" else "long_summary"
+    summary_system_path = base / "prompts" / f"{prefix}_system.md"
+    summary_user_path = base / "prompts" / f"{prefix}_user.md"
     summary_system_content = summary_system_path.read_text(encoding="utf-8")
     summary_user_content = summary_user_path.read_text(encoding="utf-8")
+    if summary_type == "long":
+        summary_system_content = summary_system_content.replace(
+            "{SUMMARY_LANGUAGE}", summary_lang
+        )
+        summary_user_content = summary_user_content.replace(
+            "{SUMMARY_LANGUAGE}", summary_lang
+        )
+    return summary_system_content, summary_user_content
+
+
+def _call_summary_request(
+    adapter: LLMAdapter,
+    model: str,
+    full_markdown: str,
+    system_content: str,
+    user_content: str,
+    temperature: float = 1.0,
+    top_p: float = None,
+    debug: bool = False,
+    trace: bool = False,
+    label: str = None,
+) -> str:
     messages = [
-        {"role": "system", "content": summary_system_content},
-        {"role": "user", "content": summary_user_content + "\n\n<<<\n" + full_markdown + "\n>>>"},
+        {"role": "system", "content": system_content},
+        {"role": "user", "content": user_content + "\n\n<<<\n" + full_markdown + "\n>>>"},
     ]
     trace_label = f" [{label}]" if label else ""
     if trace:
         log_trace(f"Summary request BEGIN{trace_label}")
         log_trace(f"Model: {model} | temperature: {temperature} | top_p: {top_p}")
-        log_trace_block("System prompt (summary)", summary_system_content)
-        log_trace_block("User prompt (summary)", summary_user_content)
+        log_trace_block("System prompt (summary)", system_content)
+        log_trace_block("User prompt (summary)", user_content)
         log_trace_block("Document (full markdown)", full_markdown)
         log_trace(f"Summary request END{trace_label}")
     out_text = adapter.generate(
@@ -294,6 +325,196 @@ def call_llm_summary(adapter: LLMAdapter, model: str, full_markdown: str, temper
         log_trace_block("Summary response", out_text)
         log_trace(f"Summary response END{trace_label}")
     return out_text
+
+
+def call_llm_summary(
+    adapter: LLMAdapter,
+    model: str,
+    full_markdown: str,
+    temperature: float = 1.0,
+    top_p: float = None,
+    debug: bool = False,
+    trace: bool = False,
+    label: str = None,
+    summary_type: str = "short",
+    summary_lang: str = "",
+) -> str:
+    system_content, user_content = _load_summary_prompt(summary_type, summary_lang)
+    return _call_summary_request(
+        adapter,
+        model,
+        full_markdown,
+        system_content,
+        user_content,
+        temperature=temperature,
+        top_p=top_p,
+        debug=debug,
+        trace=trace,
+        label=label,
+    )
+
+
+def _parse_combined_summaries(response: str) -> Dict[str, str]:
+    markers = (
+        LONG_SUMMARY_START,
+        LONG_SUMMARY_END,
+        SHORT_SUMMARY_START,
+        SHORT_SUMMARY_END,
+    )
+    if any(response.count(marker) != 1 for marker in markers):
+        raise RuntimeError("Combined summary response has missing or duplicate section markers")
+    positions = [response.index(marker) for marker in markers]
+    if positions != sorted(positions):
+        raise RuntimeError("Combined summary response sections are out of order")
+    before = response[:positions[0]].strip()
+    between = response[positions[1] + len(LONG_SUMMARY_END):positions[2]].strip()
+    after = response[positions[-1] + len(SHORT_SUMMARY_END):].strip()
+    if before or between or after:
+        raise RuntimeError("Combined summary response contains text outside section markers")
+    long_summary = response[
+        positions[0] + len(LONG_SUMMARY_START):positions[1]
+    ].strip()
+    short_summary = response[
+        positions[2] + len(SHORT_SUMMARY_START):positions[3]
+    ].strip()
+    if not long_summary or not short_summary:
+        raise RuntimeError("Combined summary response contains an empty section")
+    return {"long": long_summary, "short": short_summary}
+
+
+def call_llm_combined_summaries(
+    adapter: LLMAdapter,
+    model: str,
+    full_markdown: str,
+    long_summary_lang: str,
+    temperature: float = 1.0,
+    top_p: float = None,
+    debug: bool = False,
+    trace: bool = False,
+    label: str = None,
+) -> Dict[str, str]:
+    long_system, long_user = _load_summary_prompt("long", long_summary_lang)
+    short_system, short_user = _load_summary_prompt("short", long_summary_lang)
+    system_content = f"""Complete two independent summarization tasks in one response.
+
+Analyze the source lecture directly and independently for each task. Do not derive the short summary from the long summary, or the long summary from the short summary. Apply each task's instructions with the same care as if it were a separate request. The long-summary instructions apply only to the long section, and the short-summary instructions apply only to the short section. In particular, a long-summary language override must not change the short summary's requirement to use the lecture's original language.
+
+[LONG SUMMARY SYSTEM INSTRUCTIONS]
+{long_system}
+
+[SHORT SUMMARY SYSTEM INSTRUCTIONS]
+{short_system}
+"""
+    user_content = f"""Complete both tasks below from the single source document supplied after these instructions.
+
+[LONG SUMMARY USER INSTRUCTIONS]
+{long_user}
+
+[SHORT SUMMARY USER INSTRUCTIONS]
+{short_user}
+
+Return the long summary first and the short summary second. Output exactly these four marker lines and the Markdown between them. Do not use a surrounding code fence or write anything outside the markers.
+
+{LONG_SUMMARY_START}
+<long summary Markdown>
+{LONG_SUMMARY_END}
+{SHORT_SUMMARY_START}
+<short summary Markdown>
+{SHORT_SUMMARY_END}
+"""
+    response = _call_summary_request(
+        adapter,
+        model,
+        full_markdown,
+        system_content,
+        user_content,
+        temperature=temperature,
+        top_p=top_p,
+        debug=debug,
+        trace=trace,
+        label=label,
+    )
+    return _parse_combined_summaries(response)
+
+
+def _resolve_summary_settings(
+    cfg: Dict,
+    lecture_lang: str,
+    cli_mode: Optional[str] = None,
+    cli_output: Optional[str] = None,
+    cli_long_lang: Optional[str] = None,
+) -> Tuple[str, str, str]:
+    configured_mode = str(cfg.get("summary_mode", "disabled")).strip().lower()
+    mode = cli_mode or configured_mode
+    legacy_append_summary = cfg.get("append_summary")
+    if legacy_append_summary is False:
+        mode = "disabled"
+    elif legacy_append_summary is True and cli_mode is None and mode == "disabled":
+        mode = "short"
+    if mode not in SUMMARY_MODES:
+        raise ValueError(
+            f"Unknown summary_mode='{mode}'; expected one of: {', '.join(SUMMARY_MODES)}"
+        )
+
+    output = cli_output or str(cfg.get("summary_output", "append")).strip().lower()
+    if output not in SUMMARY_OUTPUTS:
+        raise ValueError(
+            f"Unknown summary_output='{output}'; expected one of: {', '.join(SUMMARY_OUTPUTS)}"
+        )
+
+    configured_long_lang = str(cfg.get("long_summary_lang", "default")).strip().lower()
+    requested_long_lang = cli_long_lang or configured_long_lang
+    long_lang = lecture_lang if requested_long_lang == "default" else requested_long_lang
+    if not re.fullmatch(r"[a-z]{2}", long_lang):
+        raise ValueError(
+            "long_summary_lang must be 'default' or a two-letter ISO-639-1 code"
+        )
+    return mode, output, long_lang
+
+
+def _append_summaries(
+    full_markdown: str,
+    summaries: Dict[str, str],
+    short_heading: str,
+    long_heading: str,
+) -> str:
+    sections = []
+    if summaries.get("long", "").strip():
+        sections.append(long_heading + "\n\n" + summaries["long"].strip())
+    if summaries.get("short", "").strip():
+        sections.append(short_heading + "\n\n" + summaries["short"].strip())
+    if not sections:
+        return full_markdown
+    return full_markdown.rstrip() + "\n\n" + "\n\n".join(sections) + "\n"
+
+
+def _standalone_summary(summary: str, heading: str) -> str:
+    return heading + "\n\n" + summary.strip() + "\n"
+
+
+def _write_separate_summaries(
+    outdir: Path,
+    filename_stem: str,
+    summaries: Dict[str, str],
+    short_heading: str,
+    long_heading: str,
+) -> List[Path]:
+    paths = []
+    if summaries.get("long", "").strip():
+        long_summary_path = outdir / f"{filename_stem}-longsummary.md"
+        long_summary_path.write_text(
+            _standalone_summary(summaries["long"], long_heading),
+            encoding="utf-8",
+        )
+        paths.append(long_summary_path)
+    if summaries.get("short", "").strip():
+        short_summary_path = outdir / f"{filename_stem}-summary.md"
+        short_summary_path.write_text(
+            _standalone_summary(summaries["short"], short_heading),
+            encoding="utf-8",
+        )
+        paths.append(short_summary_path)
+    return paths
 
 def main() -> int:
     ap = argparse.ArgumentParser(
@@ -333,6 +554,23 @@ def main() -> int:
     ap.add_argument("--llm-provider", default=None, help="Override LLM provider: openai|gemini|kie|evolink|groq|deepseek|dummy|...")
     ap.add_argument("--request-delay", type=float, default=None, help="Delay in seconds between LLM requests (0 = no delay)")
     ap.add_argument("--retry-attempts", type=int, default=None, help="Retry failed LLM requests up to N times (1 = no retry)")
+    ap.add_argument(
+        "--summary-mode",
+        choices=SUMMARY_MODES,
+        default=None,
+        help="Summary generation: disabled|short|long|both",
+    )
+    ap.add_argument(
+        "--summary-output",
+        choices=SUMMARY_OUTPUTS,
+        default=None,
+        help="Summary destination: append|separate",
+    )
+    ap.add_argument(
+        "--long-summary-lang",
+        default=None,
+        help="Long-summary language: default or a two-letter ISO-639-1 code",
+    )
     ap.add_argument("--chunks", type=str, default=None, help="Process only specified chunks, e.g. '1,3,7-9' (1-based indices)")
     ap.add_argument("--use-context-overlap", dest="use_context_overlap", choices=["raw","cleaned","none"], help="Source of overlap: raw ASR tail, cleaned previous tail, or none")
     # Per-input context files (user-level context). Can be passed multiple times; concatenated in order.
@@ -412,6 +650,19 @@ def main() -> int:
         qc_report_mode = "outdir"
 
     lang = args.lang
+    if args.long_summary_lang:
+        args.long_summary_lang = args.long_summary_lang.strip().lower()
+    try:
+        summary_mode, summary_output, long_summary_lang = _resolve_summary_settings(
+            cfg,
+            lang,
+            cli_mode=args.summary_mode,
+            cli_output=args.summary_output,
+            cli_long_lang=args.long_summary_lang,
+        )
+    except ValueError as exc:
+        log_error(str(exc))
+        return 2
     # Resolve provider + effective model params with backward compatibility
     def _effective_llm_params(cfg: Dict, provider_override: Optional[str]) -> Dict:
         llm = cfg["llm"]
@@ -463,6 +714,10 @@ def main() -> int:
         log_debug(f"Overlap -> source={overlap_source}, sentence_delimiters={sentence_delimiters!r}, stitch_dedup_window_chars={stitch_dedup_window}")
         log_debug(f"Chunking -> rebalance_small_tail_chunks={rebalance_small_tail_chunks}")
         log_debug(f"Content mode -> {content_mode}; suppress_edit_comments={suppress_edit_comments}")
+        log_debug(
+            f"Summary -> mode={summary_mode}, output={summary_output}, "
+            f"long_summary_lang={long_summary_lang}"
+        )
 
     # Load parasites for the language
     parasites_map = cfg.get("parasites", {})
@@ -811,10 +1066,11 @@ def main() -> int:
     # Merge
     full_markdown = "\n\n".join(cleaned_blocks)
 
-    # Append summary (only when all chunks succeeded)
-    if cfg.get("append_summary", True) and fail_count == 0:
-        log_info("Generating summary…")
-        summary = ""
+    # Generate summaries only when all chunks succeeded.
+    summaries: Dict[str, str] = {}
+    if summary_mode != "disabled" and fail_count == 0:
+        summary_label = "both summaries" if summary_mode == "both" else f"{summary_mode} summary"
+        log_info(f"Generating {summary_label}…")
         attempt_i = 1
         while attempt_i <= attempts:
             try:
@@ -823,13 +1079,35 @@ def main() -> int:
                     if debug:
                         log_debug(f"Sleeping {request_delay}s before summary request")
                     time.sleep(request_delay)
-                summary = call_llm_summary(
-                    adapter, model, strip_edit_comments(full_markdown),
-                    temperature=temperature, top_p=top_p,
-                    debug=debug, trace=trace, label=f"summary (attempt {attempt_i}/{attempts})",
-                )
-                if not (summary or "").strip():
-                    raise RuntimeError("Empty response text (summary)")
+                summary_source = strip_edit_comments(full_markdown)
+                if summary_mode == "both":
+                    summaries = call_llm_combined_summaries(
+                        adapter,
+                        model,
+                        summary_source,
+                        long_summary_lang,
+                        temperature=temperature,
+                        top_p=top_p,
+                        debug=debug,
+                        trace=trace,
+                        label=f"both summaries (attempt {attempt_i}/{attempts})",
+                    )
+                else:
+                    summary = call_llm_summary(
+                        adapter,
+                        model,
+                        summary_source,
+                        summary_type=summary_mode,
+                        summary_lang=long_summary_lang,
+                        temperature=temperature,
+                        top_p=top_p,
+                        debug=debug,
+                        trace=trace,
+                        label=f"{summary_mode} summary (attempt {attempt_i}/{attempts})",
+                    )
+                    if not (summary or "").strip():
+                        raise RuntimeError(f"Empty response text ({summary_mode} summary)")
+                    summaries = {summary_mode: summary.strip()}
                 break
             except Exception as e:
                 provider_name = adapter.name()
@@ -839,12 +1117,12 @@ def main() -> int:
                 from aiadapters.base import LLMAuthError, LLMRateLimitError, LLMConnectionError, LLMUnknownError
                 if isinstance(e, (LLMAuthError, LLMUnknownError)):
                     log_error(f"{provider_name} summary generation failed (attempt {attempt_i}/{attempts}): {e}")
-                    summary = ""
+                    summaries = {}
                     break
-                elif isinstance(e, (LLMRateLimitError, LLMConnectionError)):
+                elif isinstance(e, (LLMRateLimitError, LLMConnectionError, RuntimeError)):
                     if is_last:
                         log_error(f"{provider_name} summary generation failed (attempt {attempt_i}/{attempts}): {e}")
-                        summary = ""
+                        summaries = {}
                         break
                     suggested = _extract_retry_after_seconds(str(e)) if isinstance(e, (LLMRateLimitError,)) else None
                     if suggested and suggested > 0:
@@ -857,15 +1135,23 @@ def main() -> int:
                     attempt_i += 1
                 else:
                     log_error(f"{provider_name} summary generation failed (attempt {attempt_i}/{attempts}): {e}")
-                    summary = ""
+                    summaries = {}
                     break
-        if summary.strip():
-            summary_heading = cfg.get("summary_heading", "## Non-authorial AI generated summary")
-            full_markdown = full_markdown.rstrip() + "\n\n" + summary_heading + "\n\n" + summary + "\n"
+        if summaries and summary_output == "append":
+            short_heading = cfg.get("summary_heading", "## Non-authorial AI generated summary")
+            long_heading = cfg.get("long_summary_heading", "## Detailed AI generated summary")
+            full_markdown = _append_summaries(
+                full_markdown,
+                summaries,
+                short_heading,
+                long_heading,
+            )
+        elif summaries:
+            log_info("Summaries will be written to separate Markdown files.")
         else:
             log_warn("Summary generation returned empty output.")
-    elif cfg.get("append_summary", True) and fail_count > 0:
-        log_warn(f"Skipping summary because {fail_count} chunk(s) failed.")
+    elif summary_mode != "disabled" and fail_count > 0:
+        log_warn(f"Skipping summaries because {fail_count} chunk(s) failed.")
 
     # Append info comments if not suppressed
     if not suppress_edit_comments:
@@ -885,6 +1171,17 @@ def main() -> int:
     write_markdown = (fail_count == 0)
     if write_markdown:
         outfile_md.write_text(full_markdown, encoding="utf-8")
+    summary_paths: List[Path] = []
+    if write_markdown and summaries and summary_output == "separate":
+        short_heading = cfg.get("summary_heading", "## Non-authorial AI generated summary")
+        long_heading = cfg.get("long_summary_heading", "## Detailed AI generated summary")
+        summary_paths = _write_separate_summaries(
+            outdir,
+            in_path.stem,
+            summaries,
+            short_heading,
+            long_heading,
+        )
     # QC report
     qc_path = None
     if qc_report_mode != "off":
@@ -917,6 +1214,8 @@ def main() -> int:
         log_info(f"QC report: {qc_path}")
     else:
         log_info("QC report: skipped (qc_report_mode=off)")
+    for summary_path in summary_paths:
+        log_info(f"Summary: {summary_path}")
     return 0 if fail_count == 0 else 1
 
 if __name__ == "__main__":
