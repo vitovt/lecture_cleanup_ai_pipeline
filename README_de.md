@@ -165,6 +165,7 @@ werden. Die vollständige aktuelle Optionsliste zeigt jedes Skript mit
 
 * `lecture.md` — Endgültige Markdown-Datei
 * `lecture_qc_report.csv` — QC-Bericht
+* `lecture-summary.md` / `lecture-longsummary.md` — optionale separate Zusammenfassungen
 
 ## CLI-Parameter (Wichtigste)
 
@@ -185,6 +186,9 @@ Diese Parameter werden über die `.sh`-Skripte an `scripts/run_pipeline.py` übe
 * `--request-delay <Sekunden>` — Verzögerung zwischen LLM-Anfragen (0 = aus)
 * `--chunks <Spezifikation>` — nur bestimmte Blöcke verarbeiten; z. B. `1,3,7-9,23` (1-basiert)
 * `--retry-attempts <N>` — fehlgeschlagene LLM-Anfragen bis zu N‑mal erneut versuchen (1 = kein Retry)
+* `--summary-mode {disabled,short,long,both}` — Zusammenfassungstypen auswählen; `both` verwendet eine optimierte LLM-Anfrage
+* `--summary-output {append,separate}` — Zusammenfassungen anhängen oder in benachbarte Dateien schreiben
+* `--long-summary-lang <default|CODE>` — Vorlesungssprache verwenden oder mit einem ISO-639-1-Code überschreiben
 * `--context-file <Pfad>` — Datei mit dateispezifischem Kontext; wird im USER‑Prompt direkt nach dem allgemeinen Satz „Context“ eingefügt (gilt für alle Blöcke). Mehrfach nutzbar; Inhalte werden in Reihenfolge zusammengefügt.
 
 **Beispiele**
@@ -243,8 +247,11 @@ Allgemein
   * `creative`: freiere Strukturierung; kontextbasierte Terminologie hat Vorrang vor Häufigkeit (zur Vermeidung von ASR-Fehlern)
 * `suppress_edit_comments`: entfernt HTML-Kommentare im finalen Markdown
 * `highlight_asides_style`: `italic` oder `blockquote` für Randbemerkungen/Witze
-* `append_summary`: Zusammenfassung am Ende hinzufügen
-* `summary_heading`: Überschrift des Zusammenfassungsabschnitts
+* `summary_mode`: `disabled`, `short`, `long` oder `both`; im getrackten Standard deaktiviert
+* `summary_output`: `append` oder `separate`; separate Dateien liegen neben dem Haupt-Markdown
+* `long_summary_lang`: `default` folgt der Vorlesungssprache, alternativ ein zweistelliger ISO-639-1-Code
+* `summary_heading` / `long_summary_heading`: Überschriften für kurze und lange Zusammenfassungen
+* `append_summary`: veralteter Kompatibilitätsschalter; `false` deaktiviert alle Zusammenfassungen
 * `parasites`: Pfade zu Füllwortlisten je Sprache
 * `llm.request_delay_seconds`: Verzögerung zwischen LLM-Anfragen (Sekunden); hilft gegen Rate Limits; 0 = aus
 * `retry.attempts`: globale Standardanzahl an Versuchen (1 = kein Retry)

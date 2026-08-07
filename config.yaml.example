@@ -14,3 +14,6 @@ logging:
 # txt_overlap_chars: 500
 # include_timecodes_in_headings: true
 # qc_report_mode: outdir
+# summary_mode: disabled       # disabled | short | long | both
+# summary_output: append       # append | separate
+# long_summary_lang: default   # default follows --lang, or use uk/en/de/...

@@ -162,6 +162,7 @@ Output files are stored in `./output`:
 
 * `lecture.md` — final Markdown file
 * `lecture_qc_report.csv` — QC report
+* `lecture-summary.md` / `lecture-longsummary.md` — optional separate summaries
 
 ## CLI Flags (Main)
 
@@ -182,6 +183,9 @@ These flags are passed to `scripts/run_pipeline.py` via the `.sh` wrappers.
 * `--request-delay <seconds>` — delay between LLM requests (0 disables)
 * `--chunks <spec>` — process only specific chunks; spec example: `1,3,7-9,23` (1-based indices)
 * `--retry-attempts <N>` — retry failed LLM requests up to N times (1 = no retry)
+* `--summary-mode {disabled,short,long,both}` — choose which summaries to generate; `both` uses one optimized LLM request
+* `--summary-output {append,separate}` — append summaries to the main Markdown or write sibling files
+* `--long-summary-lang <default|CODE>` — use the lecture language for the long summary or override it with an ISO-639-1 code
 * `--context-file <path>` — file with per-input context inserted into the USER prompt right after the generic "Context" sentence (affects all chunks). Can be passed multiple times; blocks are concatenated in order.
 
 **Examples**
@@ -240,8 +244,11 @@ General
   * `creative`: freer structuring; prioritizes contextual term normalization to avoid frequent ASR biases
 * `suppress_edit_comments`: remove HTML comments from final Markdown
 * `highlight_asides_style`: `italic` or `blockquote` for asides/jokes
-* `append_summary`: append summary at end of document
-* `summary_heading`: heading title for summary section
+* `summary_mode`: `disabled`, `short`, `long`, or `both`; the tracked default remains disabled
+* `summary_output`: `append` or `separate`; separate files are written beside the main Markdown
+* `long_summary_lang`: `default` follows the lecture language, or a two-letter ISO-639-1 override
+* `summary_heading` / `long_summary_heading`: headings for short and long summaries
+* `append_summary`: deprecated compatibility switch; `false` disables every summary mode
 * `parasites`: paths to filler-word lists by language
 * `llm.request_delay_seconds`: delay between LLM requests (seconds); helps avoid rate limits; 0 disables
 * `retry.attempts`: global default retry attempts (1 = no retry)
