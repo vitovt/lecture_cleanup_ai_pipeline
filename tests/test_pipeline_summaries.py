@@ -149,6 +149,16 @@ class SummaryPromptTests(unittest.TestCase):
         self.assertIn("code `de`", prompt_text)
         self.assertNotIn("{SUMMARY_LANGUAGE}", prompt_text)
 
+    def test_long_prompt_requires_continuous_hierarchical_numbering(self) -> None:
+        prompt = (PROJECT / "prompts/long_summary_system.md").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("continuous top-level sequence", prompt)
+        self.assertIn("Never restart this sequence", prompt)
+        self.assertIn("#### 1️⃣.0️⃣ First detail", prompt)
+        self.assertIn("#### 2️⃣.0️⃣ First detail of the next topic", prompt)
+
     def test_both_mode_uses_one_call_and_analyzes_source_for_each_task(self) -> None:
         response = (
             f"{LONG_SUMMARY_START}\nLong result\n{LONG_SUMMARY_END}\n"
