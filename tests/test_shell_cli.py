@@ -12,6 +12,7 @@ from pathlib import Path
 PROJECT = Path(__file__).resolve().parents[1]
 
 PUBLIC_SHELL_SCRIPTS = (
+    "bulk_cleanup.sh",
     "auto_process_youtube.sh",
     "auto_process_youtube_list.sh",
     "auto_process_youtube_via_groq.sh",
@@ -24,6 +25,26 @@ PUBLIC_SHELL_SCRIPTS = (
     "process_localaudiovideo_via_speechcore.sh",
     "process_localaudiovideo_via_speechcore_list.sh",
 )
+
+FORWARDED_CLEANUP_OPTIONS = {
+    "--qc-report",
+    "--glossary",
+    "--txt-chunk-chars",
+    "--txt-overlap-chars",
+    "--llm-provider",
+    "--request-delay",
+    "--retry-attempts",
+    "--summary-mode",
+    "--summary-output",
+    "--long-summary-lang",
+    "--chunks",
+    "--use-context-overlap",
+    "--include-timecodes",
+    "--process-timecodes-by-ai",
+    "--no-process-timecodes-by-ai",
+    "--log-level",
+    "--trace",
+}
 
 
 class ShellHelpTests(unittest.TestCase):
@@ -63,6 +84,43 @@ class ShellHelpTests(unittest.TestCase):
                 combined = result.stdout + result.stderr
                 self.assertEqual(result.returncode, 2, combined)
                 self.assertIn("unknown option", combined.lower())
+
+    def test_workflow_help_lists_cleanup_options(self) -> None:
+        for relative_path in PUBLIC_SHELL_SCRIPTS:
+            with self.subTest(script=relative_path):
+                self.assertTrue(
+                    FORWARDED_CLEANUP_OPTIONS.issubset(
+                        self._help_options(relative_path)
+                    )
+                )
+
+    def test_recent_summary_options_pass_initial_validation(self) -> None:
+        for relative_path in PUBLIC_SHELL_SCRIPTS:
+            with self.subTest(script=relative_path):
+                result = subprocess.run(
+                    [
+                        str(PROJECT / relative_path),
+                        "--summary-mode",
+                        "both",
+                        "--summary-output",
+                        "separate",
+                        "--long-summary-lang",
+                        "de",
+                    ],
+                    cwd=PROJECT,
+                    text=True,
+                    input="n\n",
+                    capture_output=True,
+                    check=False,
+                )
+                combined = result.stdout + result.stderr
+                self.assertNotIn("unknown option", combined.lower())
+
+    def test_workflows_forward_collected_cleanup_options(self) -> None:
+        for relative_path in PUBLIC_SHELL_SCRIPTS:
+            with self.subTest(script=relative_path):
+                content = (PROJECT / relative_path).read_text(encoding="utf-8")
+                self.assertIn('"${LECTURE_CLEANUP_FLAGS[@]}"', content)
 
     def test_youtube_transcription_help_uses_lang_with_auto_default(self) -> None:
         scripts = (
