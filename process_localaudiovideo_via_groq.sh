@@ -37,6 +37,8 @@ GROQ_ALLOW_UNKNOWN_MODEL=0
 
 # shellcheck disable=SC1091
 source "$SCRIPT_DIR/scripts/groq_shell_common.sh"
+# shellcheck disable=SC1091
+source "$SCRIPT_DIR/scripts/lecture_cleanup_shell_common.sh"
 
 SANITIZE_HELPER="$SCRIPT_DIR/subtitle-utils/sanitize_filename.sh"
 if [[ -f "$SANITIZE_HELPER" ]]; then
@@ -97,6 +99,7 @@ Examples:
   $0 --lang uk --oversize-policy compress --oversize-policy chunk ./large.mp3
   $0 --lang en --trace ./problem-recording.m4a
 EOF
+    lecture_cleanup_print_forwarded_help
 }
 
 need_value() {
@@ -129,9 +132,19 @@ while [[ $# -gt 0 ]]; do
         --info) LOG_LEVEL_OVERRIDE=info; shift ;;
         --debug) LOG_LEVEL_OVERRIDE=debug; shift ;;
         --trace) LOG_LEVEL_OVERRIDE=trace; shift ;;
+        --log-level) need_value "$1" "${2:-}"; LOG_LEVEL_OVERRIDE="$2"; shift 2 ;;
         --preflight) PREFLIGHT=1; shift ;;
         --preflight-output) need_value "$1" "${2:-}"; PREFLIGHT_OUTPUT="$2"; shift 2 ;;
-        --*) echo "Error: unknown option '$1'." >&2; print_help; exit 2 ;;
+        --*)
+            if lecture_cleanup_parse_option "$1" "${2:-}"; then
+                shift "$LECTURE_CLEANUP_OPTION_SHIFT"
+            else
+                status=$?
+                [[ "$status" -eq 2 ]] || echo "Error: unknown option '$1'." >&2
+                print_help
+                exit 2
+            fi
+            ;;
         *)
             if [[ -n "$INPUT_FILE" ]]; then
                 echo "Error: unexpected argument '$1'." >&2
@@ -285,7 +298,8 @@ groq_info "Stage 3/4: cleaning transcript with the lecture pipeline"
     --outdir "$OUTDIR" \
     --context-file "$SCRIPT_DIR/prompts/custom_context_general/lection-monolog-with-questions.txt" \
     "${CONTEXT_FLAGS[@]}" \
-    "${LECTURE_LOG_FLAG[@]}"
+    "${LECTURE_LOG_FLAG[@]}" \
+    "${LECTURE_CLEANUP_FLAGS[@]}"
 
 if [[ -f "$OUT_MD" ]]; then
     tmp_md="$(mktemp)"

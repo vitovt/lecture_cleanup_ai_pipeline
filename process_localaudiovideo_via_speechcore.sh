@@ -2,6 +2,9 @@
 
 SCRIPT_PATH="$(readlink -f "$0")"
 SCRIPT_DIR="$(dirname "$SCRIPT_PATH")"
+
+# shellcheck disable=SC1091
+source "$SCRIPT_DIR/scripts/lecture_cleanup_shell_common.sh"
 SRTOUTDIR_DEFAULT="$SCRIPT_DIR/input/autolocal"
 MDOUTDIR_DEFAULT="$SCRIPT_DIR/output/autolocal"
 
@@ -67,6 +70,7 @@ Examples:
   $0 --lang en ./recording.mp4
   $0 --lang zh --debug ./audio.m4a
 EOF_HELP
+    lecture_cleanup_print_forwarded_help
 }
 
 to_lower() {
@@ -162,9 +166,14 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         --*)
-            echo "Error: unknown option '$1'."
-            print_help
-            exit 2
+            if lecture_cleanup_parse_option "$1" "${2:-}"; then
+                shift "$LECTURE_CLEANUP_OPTION_SHIFT"
+            else
+                status=$?
+                [[ "$status" -eq 2 ]] || echo "Error: unknown option '$1'."
+                print_help
+                exit 2
+            fi
             ;;
         *)
             if [[ -z "$INPUT_FILE" ]]; then
@@ -337,7 +346,8 @@ fi
     --outdir "$OUTDIR" \
     --context-file "$SCRIPT_DIR/prompts/custom_context_general/lection-monolog-with-questions.txt" \
     "${CONTEXT_FLAGS[@]}" \
-    "${LECTURE_DEBUG_FLAG[@]}"
+    "${LECTURE_DEBUG_FLAG[@]}" \
+    "${LECTURE_CLEANUP_FLAGS[@]}"
 
 if [[ -f "$OUT_MD" ]]; then
     tmp_md="$(mktemp)"

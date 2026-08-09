@@ -28,6 +28,8 @@ GROQ_ALLOW_UNKNOWN_MODEL=0
 
 # shellcheck disable=SC1091
 source "$SCRIPT_DIR/scripts/groq_shell_common.sh"
+# shellcheck disable=SC1091
+source "$SCRIPT_DIR/scripts/lecture_cleanup_shell_common.sh"
 
 print_help() {
     cat <<EOF
@@ -77,6 +79,7 @@ Examples:
   $0 --oversize-policy compress --oversize-policy chunk "https://youtube.com/playlist?list=PL123"
   $0 --videos 1 --trace "https://youtube.com/playlist?list=PL123"
 EOF
+    lecture_cleanup_print_forwarded_help
 }
 
 need_value() { [[ -n "${2:-}" ]] || { echo "Error: $1 requires a value." >&2; exit 2; }; }
@@ -106,7 +109,17 @@ while [[ $# -gt 0 ]]; do
         --info) LOG_LEVEL_OVERRIDE=info; shift ;;
         --debug) LOG_LEVEL_OVERRIDE=debug; shift ;;
         --trace) LOG_LEVEL_OVERRIDE=trace; shift ;;
-        --*) echo "Error: unknown option '$1'." >&2; print_help; exit 2 ;;
+        --log-level) need_value "$1" "${2:-}"; LOG_LEVEL_OVERRIDE="$2"; shift 2 ;;
+        --*)
+            if lecture_cleanup_parse_option "$1" "${2:-}"; then
+                shift "$LECTURE_CLEANUP_OPTION_SHIFT"
+            else
+                status=$?
+                [[ "$status" -eq 2 ]] || echo "Error: unknown option '$1'." >&2
+                print_help
+                exit 2
+            fi
+            ;;
         *)
             [[ -z "$PLAYLIST_URL" ]] || { echo "Error: unexpected argument '$1'." >&2; exit 2; }
             PLAYLIST_URL="$1"
@@ -129,6 +142,7 @@ groq_apply_log_level
 groq_debug "Effective logging level: $LOG_LEVEL"
 
 CHILD_FLAGS=()
+CHILD_FLAGS+=("${LECTURE_CLEANUP_FLAGS[@]}")
 CHILD_FLAGS+=(--lang "$LANG")
 [[ -n "$OUTDIR" ]] && CHILD_FLAGS+=(--outdir "$OUTDIR")
 [[ -n "$SRT_OUTDIR" ]] && CHILD_FLAGS+=(--srtoutdir "$SRT_OUTDIR")

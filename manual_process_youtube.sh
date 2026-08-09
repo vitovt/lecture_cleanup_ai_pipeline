@@ -4,6 +4,9 @@ set -euo pipefail
 SCRIPT_PATH="$(readlink -f "$0")"
 SCRIPT_DIR="$(dirname "$SCRIPT_PATH")"
 
+# shellcheck disable=SC1091
+source "$SCRIPT_DIR/scripts/lecture_cleanup_shell_common.sh"
+
 MDOUTDIR_DEFAULT="$SCRIPT_DIR/output/autoyoutube"
 
 if [[ -f "$SCRIPT_DIR/.env" ]]; then
@@ -109,6 +112,7 @@ Examples:
   $0 --input "./input/video.en.txt" --lang en
   $0 --input "./input/video.txt" --lang en --url "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
 EOF
+  lecture_cleanup_print_forwarded_help
 }
 
 # Parse arguments
@@ -153,9 +157,14 @@ while [[ $# -gt 0 ]]; do
       shift
       ;;
     --*)
-      echo "Error: unknown option '$1'."
-      print_help
-      exit 2
+      if lecture_cleanup_parse_option "$1" "${2:-}"; then
+        shift "$LECTURE_CLEANUP_OPTION_SHIFT"
+      else
+        status=$?
+        [[ "$status" -eq 2 ]] || echo "Error: unknown option '$1'."
+        print_help
+        exit 2
+      fi
       ;;
     *)
       echo "Error: Unexpected argument '$1'."
@@ -284,7 +293,8 @@ echo "[*] Starting AI processing"
   --lang="$LANG" \
   --outdir "$OUTDIR" \
   "${CONTEXT_ARGS[@]}" \
-  "${LECTURE_DEBUG_FLAG[@]}"
+  "${LECTURE_DEBUG_FLAG[@]}" \
+  "${LECTURE_CLEANUP_FLAGS[@]}"
 
 # lecture_cleanup.sh most likely writes: OUTDIR/<input_stem>.md
 # If we expect a different OUT_MD (URL-based naming), rename accordingly.

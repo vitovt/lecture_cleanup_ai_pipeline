@@ -5,6 +5,9 @@ set -euo pipefail
 SCRIPT_PATH="$(readlink -f "$0")"
 SCRIPT_DIR="$(dirname "$SCRIPT_PATH")"
 
+# shellcheck disable=SC1091
+source "$SCRIPT_DIR/scripts/lecture_cleanup_shell_common.sh"
+
 OUTDIR=""
 SRT_OUTDIR=""
 DEBUG=0
@@ -27,6 +30,7 @@ Options:
   --overwrite    Re-process even if destination .md already exists (default: skip existing)
   --debug        Show yt-dlp output and pass --debug to auto_process_youtube.sh
 EOF
+    lecture_cleanup_print_forwarded_help
 }
 
 while [[ $# -gt 0 ]]; do
@@ -76,9 +80,14 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         --*)
-            echo "Error: unknown option '$1'."
-            print_help
-            exit 2
+            if lecture_cleanup_parse_option "$1" "${2:-}"; then
+                shift "$LECTURE_CLEANUP_OPTION_SHIFT"
+            else
+                status=$?
+                [[ "$status" -eq 2 ]] || echo "Error: unknown option '$1'."
+                print_help
+                exit 2
+            fi
             ;;
         *)
             if [[ -z "$PLAYLIST_URL" ]]; then
@@ -124,6 +133,7 @@ fi
 
 YT_DLP_SILENT_FLAGS=()
 CHILD_FLAGS=()
+CHILD_FLAGS+=("${LECTURE_CLEANUP_FLAGS[@]}")
 if [[ "$DEBUG" -ne 1 ]]; then
     YT_DLP_SILENT_FLAGS+=(--quiet --no-warnings)
 else

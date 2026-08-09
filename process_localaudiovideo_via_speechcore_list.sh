@@ -5,6 +5,9 @@ set -euo pipefail
 SCRIPT_PATH="$(readlink -f "$0")"
 SCRIPT_DIR="$(dirname "$SCRIPT_PATH")"
 
+# shellcheck disable=SC1091
+source "$SCRIPT_DIR/scripts/lecture_cleanup_shell_common.sh"
+
 OUTDIR=""
 SRT_OUTDIR=""
 DEBUG=0
@@ -42,6 +45,7 @@ Notes:
   - --all scans only current directory (non-recursive).
   - Media detection in --all is extension-based.
 EOF_HELP
+    lecture_cleanup_print_forwarded_help
 }
 
 to_lower() {
@@ -115,9 +119,14 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         --*)
-            echo "Error: unknown option '$1'."
-            print_help
-            exit 2
+            if lecture_cleanup_parse_option "$1" "${2:-}"; then
+                shift "$LECTURE_CLEANUP_OPTION_SHIFT"
+            else
+                status=$?
+                [[ "$status" -eq 2 ]] || echo "Error: unknown option '$1'."
+                print_help
+                exit 2
+            fi
             ;;
         *)
             INPUT_FILES+=("$1")
@@ -188,6 +197,7 @@ if [[ ! -f "$CHILD_SCRIPT" ]]; then
 fi
 
 CHILD_FLAGS=(--lang "$LANG")
+CHILD_FLAGS+=("${LECTURE_CLEANUP_FLAGS[@]}")
 if [[ -n "$OUTDIR" ]]; then
     CHILD_FLAGS+=(--outdir "$OUTDIR")
 fi

@@ -58,7 +58,7 @@ colorize_help() {
         -v example="$C_EXAMPLE" \
         -v help_type="$help_type" '
         function colored(color, text) { return color text reset }
-        /^(Usage:.*|usage:.*|Global color options.*:|Typical flow:|More help:|Options:|Examples?:|Description:|Mandatory:|Optional:|Notes:|Input modes.*:|Preflight:|Language:|Pipeline options:|Groq options:|Forwarded pipeline options:|Forwarded Groq options:|Selection and language:|Detailed command help:|Commands:)$/ {
+        /^(Usage:.*|usage:.*|Global color options.*:|Typical flow:|More help:|Options:|Examples?:|Description:|Mandatory:|Optional:|Notes:|Input modes.*:|Preflight:|Language:|Pipeline options:|Groq options:|Forwarded pipeline options:|Forwarded lecture cleanup options:|Forwarded Groq options:|Selection and language:|Detailed command help:|Commands:)$/ {
             print colored(section, $0); next
         }
         /^(Transcript cleanup|YouTube subtitles.*|SpeechCore transcription.*|Groq transcription.*|Provider-level tools|Setup and maintenance|Utilities)$/ {

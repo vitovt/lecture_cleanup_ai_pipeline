@@ -2,6 +2,9 @@
 
 SCRIPT_PATH="$(readlink -f "$0")"
 SCRIPT_DIR="$(dirname "$SCRIPT_PATH")"
+
+# shellcheck disable=SC1091
+source "$SCRIPT_DIR/scripts/lecture_cleanup_shell_common.sh"
 SRTOUTDIR_DEFAULT="$SCRIPT_DIR/input/autoyoutube"
 MDOUTDIR_DEFAULT="$SCRIPT_DIR/output/autoyoutube"
 
@@ -98,6 +101,7 @@ Examples:
   $0 "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
   $0 "https://youtu.be/dQw4w9WgXcQ"
 EOF
+    lecture_cleanup_print_forwarded_help
 }
 
 URL=""
@@ -145,9 +149,14 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         --*)
-            echo "Error: unknown option '$1'."
-            print_help
-            exit 2
+            if lecture_cleanup_parse_option "$1" "${2:-}"; then
+                shift "$LECTURE_CLEANUP_OPTION_SHIFT"
+            else
+                status=$?
+                [[ "$status" -eq 2 ]] || echo "Error: unknown option '$1'."
+                print_help
+                exit 2
+            fi
             ;;
         *)
             if [[ -z "$URL" ]]; then
@@ -261,7 +270,7 @@ ESCAPED_URL=$(printf '%s\n' "$URL" | sed 's/[&/\]/\\&/g')
 # Replace the hardcoded URL in the template with the real one
 sed "s|https://www.youtube.com/watch?v=dQw4w9WgXcQ|$ESCAPED_URL|g" "$TEMPLATE_CTX" > "$TMP_CTX"
 
-"$SCRIPT_DIR/lecture_cleanup.sh" --input "$SRTOUTDIR/$TXT_FILE" --lang="$LANG" --outdir "$OUTDIR" --context-file "$TMP_CTX" --context-file "$SCRIPT_DIR/prompts/custom_context_general/lection-monolog-with-questions.txt" "${CONTEXT_FLAGS[@]}" "${LECTURE_DEBUG_FLAG[@]}"
+"$SCRIPT_DIR/lecture_cleanup.sh" --input "$SRTOUTDIR/$TXT_FILE" --lang="$LANG" --outdir "$OUTDIR" --context-file "$TMP_CTX" --context-file "$SCRIPT_DIR/prompts/custom_context_general/lection-monolog-with-questions.txt" "${CONTEXT_FLAGS[@]}" "${LECTURE_DEBUG_FLAG[@]}" "${LECTURE_CLEANUP_FLAGS[@]}"
 cleanup_status=$?
 
 if [[ "$cleanup_status" -ne 0 ]]; then

@@ -4,6 +4,12 @@ set -euo pipefail
 # bulk_cleanup.sh
 # Runs lecture_cleanup.sh over all *.txt files in an input directory, in alphabetical order.
 
+SCRIPT_PATH="$(readlink -f "$0")"
+SCRIPT_DIR="$(dirname "$SCRIPT_PATH")"
+
+# shellcheck disable=SC1091
+source "$SCRIPT_DIR/scripts/lecture_cleanup_shell_common.sh"
+
 show_usage() {
   cat <<'USAGE'
 Usage:
@@ -15,12 +21,22 @@ Description:
   - If confirmed, sequentially runs:
       ./lecture_cleanup.sh --input <file> [passed-through args...]
   - All options must use the space-separated form: --option value (no '=')
-  - All arguments are passed through unchanged to lecture_cleanup.sh, EXCEPT --indir which is only used here.
+  - Supported cleanup arguments are passed to lecture_cleanup.sh; --indir is only used here.
+
+Options:
+  --indir DIR       Input directory containing TXT files (default: ./input)
+  --lang LANG       Required lecture language
+  --format txt      Optional explicit input format; bulk inputs are always TXT
+  --outdir DIR      Markdown output directory
+  --context-file FILE
+                     Extra cleanup context; repeatable
+  --debug            Enable cleanup debug logging
 
 Examples:
   bulk_cleanup.sh --lang uk
   bulk_cleanup.sh --lang de --indir ./notes --outdir ./output/de --format txt --debug
 USAGE
+  lecture_cleanup_print_forwarded_help
 }
 
 # If no args at all, show help
@@ -32,7 +48,7 @@ fi
 INDIR="./input"
 PASSTHRU=()
 
-# Parse args minimally: strip only --indir, error on any --key=value usage, pass everything else.
+# Validate the complete cleanup option allowlist before asking for confirmation.
 while [[ $# -gt 0 ]]; do
   case "$1" in
     -h|--help)
@@ -47,22 +63,45 @@ while [[ $# -gt 0 ]]; do
       INDIR="$2"
       shift 2
       ;;
+    --format|--outdir|--lang|--context-file)
+      lecture_cleanup_add_value_option "$1" "${2:-}" || exit $?
+      shift 2
+      ;;
+    --debug)
+      lecture_cleanup_add_flag_option "$1"
+      shift
+      ;;
     --*=*)
       echo "Error: options must use '--option value' form (no '='): got '$1'" >&2
       echo
       show_usage
       exit 1
       ;;
+    --*)
+      if lecture_cleanup_parse_option "$1" "${2:-}"; then
+        shift "$LECTURE_CLEANUP_OPTION_SHIFT"
+      else
+        status=$?
+        [[ "$status" -eq 2 ]] || echo "Error: unknown option '$1'." >&2
+        echo
+        show_usage
+        exit 2
+      fi
+      ;;
     *)
-      PASSTHRU+=("$1")
-      shift
+      echo "Error: unexpected argument '$1'." >&2
+      echo
+      show_usage
+      exit 2
       ;;
   esac
 done
 
+PASSTHRU+=("${LECTURE_CLEANUP_FLAGS[@]}")
+
 # Ensure lecture_cleanup.sh exists and is executable
-if [[ ! -x "./lecture_cleanup.sh" ]]; then
-  echo "Error: ./lecture_cleanup.sh not found or not executable." >&2
+if [[ ! -x "$SCRIPT_DIR/lecture_cleanup.sh" ]]; then
+  echo "Error: lecture_cleanup.sh not found or not executable: $SCRIPT_DIR/lecture_cleanup.sh" >&2
   exit 1
 fi
 
@@ -101,9 +140,8 @@ echo
 for f in "${FILES[@]}"; do
   echo ">>> ./lecture_cleanup.sh --input \"$f\" ${PASSTHRU[*]:-}"
   # shellcheck disable=SC2086 # intentional word splitting for PASSTHRU
-  ./lecture_cleanup.sh --input "$f" ${PASSTHRU[@]+"${PASSTHRU[@]}"}
+  "$SCRIPT_DIR/lecture_cleanup.sh" --input "$f" ${PASSTHRU[@]+"${PASSTHRU[@]}"}
   echo
 done
 
 echo "All done."
-
