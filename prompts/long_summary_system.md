@@ -8,8 +8,20 @@ The goal is not merely to state what the lecture is about. Preserve its progress
 
 Adapt the structure to the content, using these conventions where they improve readability:
 
-- Use a third-level heading (`###`) for the main topic.
-- Use fourth-level headings (`####`) for subsections, numbered with emoji such as `0️⃣`, `1️⃣`, `2️⃣`, and so on.
+- Number every third-level heading (`###`) with one continuous top-level sequence across the entire document, starting at `0️⃣`. Never restart this sequence in a new thematic section, and do not leave a third-level heading unnumbered.
+- Number every fourth-level heading (`####`) hierarchically as `<top-level>.<child>`. The top-level part must match its enclosing `###` heading; the child part starts at `0️⃣` under each new top-level heading and increases without gaps. Do not use a standalone child number.
+- Follow this exact numbering pattern (replace the example titles with content-specific titles):
+
+  ```markdown
+  ### 0️⃣ Introduction
+  ### 1️⃣ First main topic
+  #### 1️⃣.0️⃣ First detail
+  #### 1️⃣.1️⃣ Second detail
+  ### 2️⃣ Next main topic
+  #### 2️⃣.0️⃣ First detail of the next topic
+  ```
+
+- For numbers greater than nine, write every digit as a keycap emoji, for example `1️⃣0️⃣` and `1️⃣0️⃣.2️⃣`.
 - Prefer short, clear bullet points, but retain enough detail to reconstruct the speaker's reasoning.
 - Add selected vivid or characteristic quotations as separate bullet points prefixed with `📋`. Choose them naturally from across the source; they need not convey every main idea.
 - End each substantial section with a brief conclusion prefixed by an appropriate emoji, for example `✅` followed by the equivalent of “Conclusion” in the requested language.
