@@ -46,6 +46,20 @@ FORWARDED_CLEANUP_OPTIONS = {
     "--trace",
 }
 
+EXAMPLE_SCRIPT_MODES = {
+    "bulk_cleanup.sh": "cleanup-list",
+    "auto_process_youtube.sh": "youtube-subtitles",
+    "auto_process_youtube_via_groq.sh": "youtube-groq",
+    "auto_process_youtube_list_via_groq.sh": "youtube-groq-list",
+    "auto_process_youtube_via_speechcore.sh": "youtube-speechcore",
+    "auto_process_youtube_list_via_speechcore.sh": "youtube-speechcore-list",
+    "manual_process_youtube.sh": "youtube-manual",
+    "process_localaudiovideo_via_groq.sh": "local-groq",
+    "process_localaudiovideo_via_groq_list.sh": "local-groq-list",
+    "process_localaudiovideo_via_speechcore.sh": "local-speechcore",
+    "process_localaudiovideo_via_speechcore_list.sh": "local-speechcore-list",
+}
+
 
 class ShellHelpTests(unittest.TestCase):
     def _help_options(self, relative_path: str) -> set[str]:
@@ -121,6 +135,52 @@ class ShellHelpTests(unittest.TestCase):
             with self.subTest(script=relative_path):
                 content = (PROJECT / relative_path).read_text(encoding="utf-8")
                 self.assertIn('"${LECTURE_CLEANUP_FLAGS[@]}"', content)
+
+    def test_examples_use_script_basename_from_any_directory(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            for relative_path, mode in EXAMPLE_SCRIPT_MODES.items():
+                expected_command = f"./{relative_path}"
+                commands = (
+                    [str(PROJECT / relative_path), "--help"],
+                    [
+                        str(PROJECT / "StartMe.sh"),
+                        "--no-color",
+                        "help",
+                        mode,
+                    ],
+                )
+                for command in commands:
+                    with self.subTest(script=relative_path, command=command):
+                        result = subprocess.run(
+                            command,
+                            cwd=directory,
+                            text=True,
+                            capture_output=True,
+                            check=False,
+                        )
+                        self.assertEqual(
+                            result.returncode,
+                            0,
+                            result.stdout + result.stderr,
+                        )
+                        match = re.search(
+                            r"(?m)^Examples:\n((?:[ \t]+.*\n)+)",
+                            result.stdout,
+                        )
+                        if match:
+                            example_lines = match.group(1).splitlines()
+                        else:
+                            example_lines = [
+                                line
+                                for line in result.stdout.splitlines()
+                                if line.strip().startswith(f"{expected_command} ")
+                            ]
+                        self.assertTrue(example_lines, result.stdout)
+                        for line in example_lines:
+                            self.assertEqual(
+                                line.strip().split(maxsplit=1)[0],
+                                expected_command,
+                            )
 
     def test_youtube_transcription_help_uses_lang_with_auto_default(self) -> None:
         scripts = (
