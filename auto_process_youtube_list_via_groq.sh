@@ -73,11 +73,11 @@ Provider-wide auth, billing, balance, permission, and model failures abort the
 remaining playlist. Ordinary per-video failures are counted and processing continues.
 
 Examples:
-  $0 "https://www.youtube.com/playlist?list=PL123"
-  $0 --lang ru --videos 1-5 --diarization off "https://youtube.com/playlist?list=PL123"
-  $0 --videos 2,4,7 --oversize-policy chunk --max-batch-cost-usd 1.00 --info "https://youtube.com/playlist?list=PL123"
-  $0 --oversize-policy compress --oversize-policy chunk "https://youtube.com/playlist?list=PL123"
-  $0 --videos 1 --trace "https://youtube.com/playlist?list=PL123"
+  ./${0##*/} "https://www.youtube.com/playlist?list=PL123"
+  ./${0##*/} --lang ru --videos 1-5 --diarization off "https://youtube.com/playlist?list=PL123"
+  ./${0##*/} --videos 2,4,7 --oversize-policy chunk --max-batch-cost-usd 1.00 --info "https://youtube.com/playlist?list=PL123"
+  ./${0##*/} --oversize-policy compress --oversize-policy chunk "https://youtube.com/playlist?list=PL123"
+  ./${0##*/} --videos 1 --trace "https://youtube.com/playlist?list=PL123"
 EOF
     lecture_cleanup_print_forwarded_help
 }

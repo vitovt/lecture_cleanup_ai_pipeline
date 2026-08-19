@@ -116,11 +116,11 @@ Preflight:
   --preflight-output FILE  Write machine-readable preflight JSON
 
 Examples:
-  $0 "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
-  $0 --lang uk --diarization off "https://youtu.be/dQw4w9WgXcQ"
-  $0 --lang auto --num-speakers 3 --oversize-policy chunk --info "https://youtu.be/dQw4w9WgXcQ"
-  $0 --lang uk --oversize-policy compress --oversize-policy chunk "https://youtu.be/dQw4w9WgXcQ"
-  $0 --lang en --trace "https://youtu.be/dQw4w9WgXcQ"
+  ./${0##*/} "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+  ./${0##*/} --lang uk --diarization off "https://youtu.be/dQw4w9WgXcQ"
+  ./${0##*/} --lang auto --num-speakers 3 --oversize-policy chunk --info "https://youtu.be/dQw4w9WgXcQ"
+  ./${0##*/} --lang uk --oversize-policy compress --oversize-policy chunk "https://youtu.be/dQw4w9WgXcQ"
+  ./${0##*/} --lang en --trace "https://youtu.be/dQw4w9WgXcQ"
 EOF
     lecture_cleanup_print_forwarded_help
 }

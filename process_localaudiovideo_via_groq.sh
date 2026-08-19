@@ -93,11 +93,11 @@ Supported direct audio containers: FLAC, MP3, MP4, MPEG, MPGA, M4A, OGG, WAV, WE
 Other audio formats fail. Video formats are converted to 16 kHz mono FLAC.
 
 Examples:
-  $0 --lang ru ./meeting.mp4
-  $0 --lang auto --diarization off ./lecture.m4a
-  $0 --lang en --num-speakers 2 --oversize-policy chunk --info ./long-video.mkv
-  $0 --lang uk --oversize-policy compress --oversize-policy chunk ./large.mp3
-  $0 --lang en --trace ./problem-recording.m4a
+  ./${0##*/} --lang ru ./meeting.mp4
+  ./${0##*/} --lang auto --diarization off ./lecture.m4a
+  ./${0##*/} --lang en --num-speakers 2 --oversize-policy chunk --info ./long-video.mkv
+  ./${0##*/} --lang uk --oversize-policy compress --oversize-policy chunk ./large.mp3
+  ./${0##*/} --lang en --trace ./problem-recording.m4a
 EOF
     lecture_cleanup_print_forwarded_help
 }

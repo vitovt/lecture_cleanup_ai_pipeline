@@ -28,9 +28,9 @@ Mandatory:
 
 Input modes (choose one):
   1) Explicit file list in arguments:
-       $0 --lang ru file1.mp4 file2.mp3 ../file3.mp4 /home/user/Desktop/file5.mp4
+       ./${0##*/} --lang ru file1.mp4 file2.mp3 ../file3.mp4 /home/user/Desktop/file5.mp4
   2) --all mode (scan current working directory):
-       $0 --lang en --all
+       ./${0##*/} --lang en --all
 
 Options:
   --outdir DIR      Forwarded to child script

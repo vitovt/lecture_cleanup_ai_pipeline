@@ -38,8 +38,8 @@ In auto mode each child uses YouTube's original subtitle-language metadata.
 Pass --lang CODE when a playlist has no such metadata.
 
 Examples:
-  $0 "https://www.youtube.com/playlist?list=PL123"
-  $0 --videos 1-3 --lang uk "https://youtube.com/playlist?list=PL123"
+  ./${0##*/} "https://www.youtube.com/playlist?list=PL123"
+  ./${0##*/} --videos 1-3 --lang uk "https://youtube.com/playlist?list=PL123"
 EOF
     lecture_cleanup_print_forwarded_help
 }

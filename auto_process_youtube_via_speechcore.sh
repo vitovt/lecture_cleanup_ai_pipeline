@@ -116,9 +116,9 @@ Pipeline options:
   -h, --help             Show this help
 
 Examples:
-  $0 "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
-  $0 --lang auto "https://youtu.be/dQw4w9WgXcQ"
-  $0 --lang en "https://youtu.be/dQw4w9WgXcQ"
+  ./${0##*/} "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+  ./${0##*/} --lang auto "https://youtu.be/dQw4w9WgXcQ"
+  ./${0##*/} --lang en "https://youtu.be/dQw4w9WgXcQ"
 EOF
     lecture_cleanup_print_forwarded_help
 }

@@ -72,11 +72,11 @@ The list wrapper validates every selected file and total estimated cost before
 the first Groq request. Provider-wide billing/auth/model failures abort the batch.
 
 Examples:
-  $0 --lang ru file1.mp4 file2.mp3 ../file3.m4a
-  $0 --lang auto --all --diarization off
-  $0 --lang en --all --oversize-policy chunk --max-batch-cost-usd 1.00 --info
-  $0 --lang uk --all --oversize-policy compress --oversize-policy chunk
-  $0 --lang en --trace problem-file.m4a
+  ./${0##*/} --lang ru file1.mp4 file2.mp3 ../file3.m4a
+  ./${0##*/} --lang auto --all --diarization off
+  ./${0##*/} --lang en --all --oversize-policy chunk --max-batch-cost-usd 1.00 --info
+  ./${0##*/} --lang uk --all --oversize-policy compress --oversize-policy chunk
+  ./${0##*/} --lang en --trace problem-file.m4a
 EOF
     lecture_cleanup_print_forwarded_help
 }

@@ -33,8 +33,8 @@ Options:
   --debug            Enable cleanup debug logging
 
 Examples:
-  bulk_cleanup.sh --lang uk
-  bulk_cleanup.sh --lang de --indir ./notes --outdir ./output/de --format txt --debug
+  ./bulk_cleanup.sh --lang uk
+  ./bulk_cleanup.sh --lang de --indir ./notes --outdir ./output/de --format txt --debug
 USAGE
   lecture_cleanup_print_forwarded_help
 }

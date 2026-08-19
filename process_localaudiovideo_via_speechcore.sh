@@ -67,8 +67,8 @@ Audio input rules:
   - Any other audio extension exits with an error.
 
 Examples:
-  $0 --lang en ./recording.mp4
-  $0 --lang zh --debug ./audio.m4a
+  ./${0##*/} --lang en ./recording.mp4
+  ./${0##*/} --lang zh --debug ./audio.m4a
 EOF_HELP
     lecture_cleanup_print_forwarded_help
 }

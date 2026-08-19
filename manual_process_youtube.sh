@@ -109,8 +109,8 @@ Optional:
   --debug          Show yt-dlp output (when --url is used) and pass --debug to lecture_cleanup.sh
 
 Examples:
-  $0 --input "./input/video.en.txt" --lang en
-  $0 --input "./input/video.txt" --lang en --url "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+  ./${0##*/} --input "./input/video.en.txt" --lang en
+  ./${0##*/} --input "./input/video.txt" --lang en --url "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
 EOF
   lecture_cleanup_print_forwarded_help
 }

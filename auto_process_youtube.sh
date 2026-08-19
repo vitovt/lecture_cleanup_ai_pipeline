@@ -98,8 +98,8 @@ Options:
   --context-file FILE  Additional context file(s) passed to lecture_cleanup.sh (can be repeated)
 
 Examples:
-  $0 "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
-  $0 "https://youtu.be/dQw4w9WgXcQ"
+  ./${0##*/} "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+  ./${0##*/} "https://youtu.be/dQw4w9WgXcQ"
 EOF
     lecture_cleanup_print_forwarded_help
 }
