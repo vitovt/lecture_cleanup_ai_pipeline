@@ -136,6 +136,13 @@ class ShellHelpTests(unittest.TestCase):
                 content = (PROJECT / relative_path).read_text(encoding="utf-8")
                 self.assertIn('"${LECTURE_CLEANUP_FLAGS[@]}"', content)
 
+    def test_groq_wrappers_request_final_language_suffixed_artifacts(self) -> None:
+        content = (PROJECT / "scripts/groq_shell_common.sh").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("--language-suffix", content)
+
     def test_examples_use_script_basename_from_any_directory(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             for relative_path, mode in EXAMPLE_SCRIPT_MODES.items():
