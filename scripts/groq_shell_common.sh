@@ -133,6 +133,7 @@ groq_transcribe() {
         --input-file "$input_file"
         --output-dir "$output_dir"
         --metadata-output "$metadata_file"
+        --language-suffix
     )
     [[ -n "$language" ]] && args+=(--language "$language")
     "$GROQ_RUNNER" transcribe "${args[@]}" "${GROQ_CLI_FLAGS[@]}"
