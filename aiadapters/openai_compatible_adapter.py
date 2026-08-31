@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+import http.client as http_client
 import json
 import os
-import socket
 from typing import Any, Dict, List, Optional
 from urllib import error as urllib_error
 from urllib import request as urllib_request
@@ -398,9 +398,12 @@ class OpenAICompatibleChatAdapter(LLMAdapter):
             )
             self._raise_mapped_error(message, status=status, debug=debug)
             raise  # pragma: no cover
-        except urllib_error.URLError as e:
-            raise LLMConnectionError(str(e)) from e
-        except (TimeoutError, socket.timeout) as e:
+        except (
+            urllib_error.URLError,
+            http_client.HTTPException,
+            ConnectionError,
+            TimeoutError,
+        ) as e:
             raise LLMConnectionError(str(e)) from e
         except (LLMAuthError, LLMConnectionError, LLMRateLimitError, LLMUnknownError):
             raise
