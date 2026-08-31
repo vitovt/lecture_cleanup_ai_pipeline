@@ -7,6 +7,7 @@ from unittest.mock import patch
 
 import yaml
 
+from aiadapters.base import LLMConnectionError
 from scripts.run_pipeline import (
     LONG_SUMMARY_END,
     LONG_SUMMARY_START,
@@ -50,6 +51,21 @@ class PipelineAdapter:
             f"{LONG_SUMMARY_START}\nLong result\n{LONG_SUMMARY_END}\n"
             f"{SHORT_SUMMARY_START}\nShort result\n{SHORT_SUMMARY_END}"
         )
+
+
+class RetryingPipelineAdapter:
+    def __init__(self, failures: int) -> None:
+        self.failures = failures
+        self.calls = 0
+
+    def name(self) -> str:
+        return "dummy"
+
+    def generate(self, messages, **kwargs):
+        self.calls += 1
+        if self.calls <= self.failures:
+            raise LLMConnectionError("incomplete response")
+        return "### Cleaned lecture\n\nCleaned content."
 
 
 class SummarySettingsTests(unittest.TestCase):
@@ -289,6 +305,73 @@ class SummaryOutputTests(unittest.TestCase):
             self.assertNotIn("Short result", main_markdown)
             self.assertIn("Long result", (outdir / "lecture-longsummary.md").read_text(encoding="utf-8"))
             self.assertIn("Short result", (outdir / "lecture-summary.md").read_text(encoding="utf-8"))
+
+
+class PipelineRetryTests(unittest.TestCase):
+    def _config(self) -> dict:
+        cfg = yaml.safe_load(
+            (PROJECT / "config.default.yaml").read_text(encoding="utf-8")
+        )
+        cfg["llm"]["provider"] = "dummy"
+        cfg["llm"]["dummy"] = {
+            "model": "test-model",
+            "temperature": 0.0,
+            "top_p": 1.0,
+        }
+        cfg["llm"]["request_delay_seconds"] = 0
+        cfg["retry"] = {"attempts": 3, "pause_seconds": 0}
+        cfg["summary_mode"] = "disabled"
+        cfg["suppress_edit_comments"] = True
+        cfg["qc_report_mode"] = "off"
+        cfg["txt_chunk_chars"] = 10000
+        cfg["logging"]["level"] = "quiet"
+        return cfg
+
+    def _run_pipeline(self, root: Path, adapter: RetryingPipelineAdapter) -> int:
+        input_path = root / "lecture.txt"
+        input_path.write_text(
+            "A sufficiently long lecture sentence for retry testing. " * 4,
+            encoding="utf-8",
+        )
+        argv = [
+            "run_pipeline.py",
+            "--input",
+            str(input_path),
+            "--outdir",
+            str(root / "output"),
+            "--lang",
+            "en",
+        ]
+        with patch(
+            "scripts.run_pipeline.load_effective_config",
+            return_value=(self._config(), True),
+        ), patch(
+            "scripts.run_pipeline.create_llm_adapter",
+            return_value=adapter,
+        ), patch("sys.argv", argv):
+            return main()
+
+    def test_transient_chunk_failure_is_retried_and_written(self) -> None:
+        adapter = RetryingPipelineAdapter(failures=1)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+
+            result = self._run_pipeline(root, adapter)
+
+            self.assertEqual(result, 0)
+            self.assertEqual(adapter.calls, 2)
+            self.assertTrue((root / "output/lecture.md").is_file())
+
+    def test_exhausted_chunk_retries_do_not_write_partial_markdown(self) -> None:
+        adapter = RetryingPipelineAdapter(failures=3)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+
+            result = self._run_pipeline(root, adapter)
+
+            self.assertEqual(result, 1)
+            self.assertEqual(adapter.calls, 3)
+            self.assertFalse((root / "output/lecture.md").exists())
 
 
 if __name__ == "__main__":
