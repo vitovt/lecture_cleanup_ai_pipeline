@@ -162,6 +162,7 @@ qc_report_mode: outdir
 # - strict   : no reordering; only punctuation/casing; remove safe fillers.
 # - creative : allows stronger rephrasing/merging short sentences; normalizes term variants.
 # - creativedetailed : allows stronger rephrasing/merging short sentences; normalizes term variants but keep verbosity and original mood.
+# - creativeeditoral : same as crearive detailed (allows stronger rephrasing/merging, keeps verbosity) + additional meaningfull blocks formating + Editorial callouts
 content_mode: creative
 
 # Edit comments emitted at end of each output block (HTML comments like <!-- fixed: ... -->, <!-- merged_terms: ... -->).
@@ -182,7 +183,7 @@ highlight_asides_style: italic
 # Summary generation mode: disabled, short, long, or both.
 # "both" generates the long and short summaries in one optimized LLM request.
 summary_mode: disabled
-# Summary output: append to the main Markdown, or write separate sibling files.
+# Summary output: "append" to the main Markdown, or write "separate" sibling files.
 # Separate files use <filename>-summary.md and <filename>-longsummary.md.
 summary_output: append
 # Long-summary language: default follows --lang; otherwise use a two-letter
