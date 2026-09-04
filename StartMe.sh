@@ -61,7 +61,7 @@ colorize_help() {
         /^(Usage:.*|usage:.*|Global color options.*:|Typical flow:|More help:|Options:|Examples?:|Description:|Mandatory:|Optional:|Notes:|Input modes.*:|Preflight:|Language:|Pipeline options:|Groq options:|Forwarded pipeline options:|Forwarded lecture cleanup options:|Forwarded Groq options:|Selection and language:|Detailed command help:|Commands:)$/ {
             print colored(section, $0); next
         }
-        /^(Transcript cleanup|YouTube subtitles.*|SpeechCore transcription.*|Groq transcription.*|Provider-level tools|Setup and maintenance|Utilities)$/ {
+        /^(Transcript cleanup|YouTube subtitles.*|SpeechCore transcription.*|Groq transcription.*|Multitrack transcription and cleanup|Provider-level tools|Setup and maintenance|Utilities)$/ {
             print colored(section, $0); next
         }
         help_type == "overview" && /^  [a-z][a-z-]*$/ {
@@ -170,6 +170,11 @@ Groq transcription, optional pyannote speakers, and cleanup
     Preflight cost/size and process multiple local files through Groq.
     Example: $PROGRAM local-groq-list --lang uk --all --oversize-policy chunk
 
+Multitrack transcription and cleanup
+  multitrack
+    Transcribe simultaneous audio tracks, merge speakers on one timeline, and clean once.
+    Example: $PROGRAM multitrack --manifest ./webinar.yaml
+
 Provider-level tools
   groq-api
     Run the standalone Groq transcribe/preflight or batch-check CLI.
@@ -236,6 +241,7 @@ resolve_mode() {
         youtube-groq-list) TARGET="$SCRIPT_DIR/auto_process_youtube_list_via_groq.sh" ;;
         local-groq) TARGET="$SCRIPT_DIR/process_localaudiovideo_via_groq.sh" ;;
         local-groq-list) TARGET="$SCRIPT_DIR/process_localaudiovideo_via_groq_list.sh" ;;
+        multitrack) TARGET="$SCRIPT_DIR/process_multitrack.sh" ;;
         groq-api) TARGET="$SCRIPT_DIR/groq-api/groq_api.sh" ;;
         diarize) TARGET="$SCRIPT_DIR/pyannote-diarization/pyannote_diarization.sh" ;;
         setup-main) TARGET="$SCRIPT_DIR/init_once.sh"; HELP_KIND="setup-main" ;;
