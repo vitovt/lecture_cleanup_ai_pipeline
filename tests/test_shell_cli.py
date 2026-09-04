@@ -24,6 +24,7 @@ PUBLIC_SHELL_SCRIPTS = (
     "process_localaudiovideo_via_groq_list.sh",
     "process_localaudiovideo_via_speechcore.sh",
     "process_localaudiovideo_via_speechcore_list.sh",
+    "process_multitrack.sh",
 )
 
 FORWARDED_CLEANUP_OPTIONS = {
@@ -58,6 +59,7 @@ EXAMPLE_SCRIPT_MODES = {
     "process_localaudiovideo_via_groq_list.sh": "local-groq-list",
     "process_localaudiovideo_via_speechcore.sh": "local-speechcore",
     "process_localaudiovideo_via_speechcore_list.sh": "local-speechcore-list",
+    "process_multitrack.sh": "multitrack",
 }
 
 
