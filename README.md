@@ -1,5 +1,7 @@
 # Lecture Cleanup AI Pipeline
 
+Project documentation starts at [Docs/GLOSSARY.md](Docs/GLOSSARY.md).
+
 <img width="1178" height="653" alt="cleanup-pipeline03" src="https://github.com/user-attachments/assets/bb4cc7b1-eba5-401e-9b50-be5a65bd235e" />
 
 ## 🇺🇦 Українською
