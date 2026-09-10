@@ -24,6 +24,8 @@ GROQ_SAVE_JSON=""
 GROQ_MAX_FILE_COST_USD=""
 GROQ_MAX_BATCH_COST_USD=""
 GROQ_PROMPT=""
+GROQ_RESUME=""
+GROQ_CACHE_DIR=""
 GROQ_ALLOW_UNKNOWN_MODEL=0
 
 # shellcheck disable=SC1091
@@ -47,7 +49,7 @@ Forwarded pipeline options:
   --outdir DIR           Markdown output directory
   --srtoutdir DIR        Audio/transcript directory
   --context-file FILE    Extra cleanup context; repeatable
-  --overwrite            Replace existing outputs
+  --overwrite            Replace outputs and ignore existing checkpoints
   --quiet                Print nothing, including errors
   --error                Print errors only
   --info                 Show playlist and per-video progress (default)
@@ -67,6 +69,8 @@ Forwarded Groq options:
   --save-json on|off     Keep verbose_json responses
   --max-file-cost-usd N  Per-video estimated USD cap
   --max-batch-cost-usd N Playlist estimated USD cap; negative disables
+  --resume on|off        Reuse validated stage checkpoints (default: on)
+  --cache-dir DIR        Shared checkpoint directory
   --allow-unknown-model  Permit future model slugs
 
 Provider-wide auth, billing, balance, permission, and model failures abort the
@@ -102,6 +106,8 @@ while [[ $# -gt 0 ]]; do
         --save-json) need_value "$1" "${2:-}"; GROQ_SAVE_JSON="$2"; shift 2 ;;
         --max-file-cost-usd) need_value "$1" "${2:-}"; GROQ_MAX_FILE_COST_USD="$2"; shift 2 ;;
         --max-batch-cost-usd) need_value "$1" "${2:-}"; GROQ_MAX_BATCH_COST_USD="$2"; shift 2 ;;
+        --resume) need_value "$1" "${2:-}"; GROQ_RESUME="$2"; shift 2 ;;
+        --cache-dir) need_value "$1" "${2:-}"; GROQ_CACHE_DIR="$2"; shift 2 ;;
         --allow-unknown-model) GROQ_ALLOW_UNKNOWN_MODEL=1; shift ;;
         --overwrite) OVERWRITE=1; shift ;;
         --quiet) LOG_LEVEL_OVERRIDE=quiet; shift ;;
@@ -128,6 +134,7 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 groq_apply_early_quiet
+groq_validate_checkpoint_options || exit 2
 
 [[ -n "$PLAYLIST_URL" ]] || { echo "Error: no playlist URL provided." >&2; print_help; exit 2; }
 [[ "$PLAYLIST_URL" == *list=* ]] || { echo "Error: URL has no list= parameter." >&2; exit 2; }
@@ -157,6 +164,8 @@ for policy in "${GROQ_OVERSIZE_POLICIES[@]}"; do
 done
 [[ -n "$GROQ_SAVE_JSON" ]] && CHILD_FLAGS+=(--save-json "$GROQ_SAVE_JSON")
 [[ -n "$GROQ_MAX_FILE_COST_USD" ]] && CHILD_FLAGS+=(--max-file-cost-usd "$GROQ_MAX_FILE_COST_USD")
+[[ -n "$GROQ_RESUME" ]] && CHILD_FLAGS+=(--resume "$GROQ_RESUME")
+[[ -n "$GROQ_CACHE_DIR" ]] && CHILD_FLAGS+=(--cache-dir "$GROQ_CACHE_DIR")
 [[ "$GROQ_ALLOW_UNKNOWN_MODEL" -eq 1 ]] && CHILD_FLAGS+=(--allow-unknown-model)
 [[ "$OVERWRITE" -eq 1 ]] && CHILD_FLAGS+=(--overwrite)
 CHILD_FLAGS+=("--$LOG_LEVEL")

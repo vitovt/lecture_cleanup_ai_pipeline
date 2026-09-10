@@ -33,6 +33,8 @@ GROQ_OVERSIZE_POLICIES=()
 GROQ_SAVE_JSON=""
 GROQ_MAX_FILE_COST_USD=""
 GROQ_PROMPT=""
+GROQ_RESUME=""
+GROQ_CACHE_DIR=""
 GROQ_ALLOW_UNKNOWN_MODEL=0
 
 # shellcheck disable=SC1091
@@ -90,7 +92,7 @@ Pipeline options:
                          from the root .env, then the Groq project default
   --srtoutdir DIR        Audio/transcript directory (default: $SRTOUTDIR)
   --context-file FILE    Extra cleanup context; repeatable
-  --overwrite            Redownload/reprocess existing outputs
+  --overwrite            Redownload/reprocess and ignore existing checkpoints
   --quiet                Print nothing, including errors
   --error                Print errors only
   --info                 Show download/transcription/cleanup progress (default)
@@ -109,6 +111,8 @@ Groq options:
   --oversize-policy MODE error|compress|chunk|interactive; repeat for fallbacks
   --save-json on|off     Keep verbose_json response
   --max-file-cost-usd N  Estimated per-file USD cap
+  --resume on|off        Reuse validated stage checkpoints (default: on)
+  --cache-dir DIR        Checkpoint directory (default: SRT_OUTDIR/.groq-cache)
   --allow-unknown-model  Permit future model slugs
 
 Preflight:
@@ -143,6 +147,8 @@ while [[ $# -gt 0 ]]; do
         --oversize-policy) need_value "$1" "${2:-}"; GROQ_OVERSIZE_POLICIES+=("$2"); shift 2 ;;
         --save-json) need_value "$1" "${2:-}"; GROQ_SAVE_JSON="$2"; shift 2 ;;
         --max-file-cost-usd) need_value "$1" "${2:-}"; GROQ_MAX_FILE_COST_USD="$2"; shift 2 ;;
+        --resume) need_value "$1" "${2:-}"; GROQ_RESUME="$2"; shift 2 ;;
+        --cache-dir) need_value "$1" "${2:-}"; GROQ_CACHE_DIR="$2"; shift 2 ;;
         --allow-unknown-model) GROQ_ALLOW_UNKNOWN_MODEL=1; shift ;;
         --overwrite) OVERWRITE=1; shift ;;
         --quiet) LOG_LEVEL_OVERRIDE=quiet; shift ;;
@@ -171,6 +177,7 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 groq_apply_early_quiet
+groq_validate_checkpoint_options || exit 2
 
 [[ -n "$URL" ]] || { echo "Error: no YouTube URL provided." >&2; print_help; exit 2; }
 [[ -z "$PREFLIGHT_OUTPUT" || "$PREFLIGHT" -eq 1 ]] || { echo "Error: --preflight-output requires --preflight." >&2; exit 2; }

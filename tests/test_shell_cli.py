@@ -246,6 +246,29 @@ class ShellHelpTests(unittest.TestCase):
                 self.assertEqual(single_options - batch_options, single_only)
                 self.assertEqual(batch_options - single_options, batch_only)
 
+    def test_groq_workflows_expose_resume_controls(self) -> None:
+        scripts = (
+            "auto_process_youtube_via_groq.sh",
+            "auto_process_youtube_list_via_groq.sh",
+            "process_localaudiovideo_via_groq.sh",
+            "process_localaudiovideo_via_groq_list.sh",
+        )
+        for relative_path in scripts:
+            with self.subTest(script=relative_path):
+                options = self._help_options(relative_path)
+                self.assertIn("--resume", options)
+                self.assertIn("--cache-dir", options)
+
+                result = subprocess.run(
+                    [str(PROJECT / relative_path), "--resume", "invalid"],
+                    cwd=PROJECT,
+                    text=True,
+                    capture_output=True,
+                    check=False,
+                )
+                self.assertEqual(result.returncode, 2)
+                self.assertIn("Invalid --resume value", result.stderr)
+
 
 class YoutubeLanguageDefaultTests(unittest.TestCase):
     def _write_executable(self, path: Path, content: str) -> None:

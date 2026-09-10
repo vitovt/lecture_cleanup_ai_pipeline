@@ -97,6 +97,16 @@ groq_apply_early_quiet() {
     fi
 }
 
+groq_validate_checkpoint_options() {
+    case "${GROQ_RESUME:-}" in
+        ""|on|off) return 0 ;;
+        *)
+            groq_error "Invalid --resume value '${GROQ_RESUME}'; expected on or off."
+            return 2
+            ;;
+    esac
+}
+
 groq_build_cli_flags() {
     GROQ_CLI_FLAGS=()
     [[ -n "${GROQ_CONFIG:-}" ]] && GROQ_CLI_FLAGS+=(--config "$GROQ_CONFIG")
@@ -111,7 +121,10 @@ groq_build_cli_flags() {
     [[ -n "${GROQ_SAVE_JSON:-}" ]] && GROQ_CLI_FLAGS+=(--save-json "$GROQ_SAVE_JSON")
     [[ -n "${GROQ_MAX_FILE_COST_USD:-}" ]] && GROQ_CLI_FLAGS+=(--max-file-cost-usd "$GROQ_MAX_FILE_COST_USD")
     [[ -n "${GROQ_PROMPT:-}" ]] && GROQ_CLI_FLAGS+=(--prompt "$GROQ_PROMPT")
+    [[ -n "${GROQ_RESUME:-}" ]] && GROQ_CLI_FLAGS+=(--resume "$GROQ_RESUME")
+    [[ -n "${GROQ_CACHE_DIR:-}" ]] && GROQ_CLI_FLAGS+=(--cache-dir "$GROQ_CACHE_DIR")
     [[ "${GROQ_ALLOW_UNKNOWN_MODEL:-0}" -eq 1 ]] && GROQ_CLI_FLAGS+=(--allow-unknown-model)
+    [[ "${OVERWRITE:-0}" -eq 1 ]] && GROQ_CLI_FLAGS+=(--resume off)
     GROQ_CLI_FLAGS+=("--${LOG_LEVEL:-info}")
 }
 
