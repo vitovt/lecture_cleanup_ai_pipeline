@@ -19,5 +19,11 @@ Subtitle workflows normalize the URL, download SRT with `yt-dlp`, convert it to
 custom TXT, and clean it. ASR workflows download audio before provider
 transcription. All final wrappers add YouTube source metadata to Markdown.
 
+The Groq path also persists validated diarization and per-audio-part
+checkpoints. Repeating an unchanged failed command resumes automatically; use
+`--resume off` for a fresh ASR pass or `--cache-dir DIR` to choose a shared
+checkpoint location. `--overwrite` deliberately bypasses checkpoints as well
+as replacing normal outputs. See [ASRprovider_Groq.md](ASRprovider_Groq.md).
+
 Use `StartMe.sh help MODE` for options and [FORMATS.md](FORMATS.md) for handoff
 formats.
