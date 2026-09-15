@@ -211,6 +211,9 @@ summary:
       # Requires both include_src_block_ids and
       # include_txt_block_ids_for_untimed to be true in the effective config.
       enabled: false
+      # markdown renders as a link in standard Markdown viewers, but the
+      # #^src-* / #^txt-* block target remains Obsidian-specific.
+      link_style: markdown            # markdown | wikilink
       # Reference aliases are rendered programmatically after AI validation.
       display:
         label: "🔗 Source"

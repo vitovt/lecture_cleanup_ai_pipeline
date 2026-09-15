@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from typing import Optional
+from urllib.parse import quote
 
 from scripts.summary_settings import LongSummaryReferenceDisplaySettings
 from scripts.source_timecode_core import (
@@ -212,8 +213,13 @@ def render_long_summary_reference_display(
     summary: str,
     source_markdown: str,
     display: LongSummaryReferenceDisplaySettings,
+    *,
+    link_style: str,
 ) -> str:
-    """Rewrite validated reference aliases without changing their targets."""
+    """Render validated references without changing their source blocks."""
+    if link_style not in ("wikilink", "markdown"):
+        raise SummaryReferenceError(f"unsupported reference link style: {link_style}")
+
     source_blocks = collect_source_blocks(source_markdown)
     lines = summary.splitlines(keepends=True)
     if not lines and summary:
@@ -234,7 +240,16 @@ def render_long_summary_reference_display(
                     f"cannot render unknown source block ^{identifier}"
                 )
             alias = _reference_alias(source_block, display)
-            return f"[[{match.group('note')}#^{identifier}|{alias}]]"
+            note = match.group("note")
+            if link_style == "wikilink":
+                return f"[[{note}#^{identifier}|{alias}]]"
+
+            if not note:
+                target = f"#^{identifier}"
+            else:
+                note_path = note if note.lower().endswith(".md") else f"{note}.md"
+                target = f"{quote(note_path, safe='/')}#^{identifier}"
+            return f"[{alias}]({target})"
 
         output.append(REFERENCE_LINK_RE.sub(replace_link, line))
 

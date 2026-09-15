@@ -7,6 +7,7 @@ from typing import Optional
 
 SUMMARY_OUTPUTS = ("append", "separate")
 REFERENCE_HEADING_MODES = ("none", "title", "markdown")
+REFERENCE_LINK_STYLES = ("wikilink", "markdown")
 REMOVED_SUMMARY_KEYS = (
     "summary_mode",
     "summary_output",
@@ -36,6 +37,7 @@ class LongSummaryReferenceDisplaySettings:
 @dataclass(frozen=True)
 class LongSummaryReferenceSettings:
     enabled: bool
+    link_style: str
     display: LongSummaryReferenceDisplaySettings
 
 
@@ -198,6 +200,16 @@ def resolve_summary_settings(
     if cli_long_references is not None:
         long_references_enabled = cli_long_references
 
+    reference_link_style = _text_value(
+        references_cfg.get("link_style", "markdown"),
+        "summary.long.references.link_style",
+    ).lower()
+    if reference_link_style not in REFERENCE_LINK_STYLES:
+        raise ValueError(
+            "summary.long.references.link_style must be one of: "
+            + ", ".join(REFERENCE_LINK_STYLES)
+        )
+
     reference_label = _display_text_value(
         display_cfg.get("label", "🔗 Source"),
         "summary.long.references.display.label",
@@ -247,6 +259,7 @@ def resolve_summary_settings(
             file_suffix=long_suffix,
             references=LongSummaryReferenceSettings(
                 enabled=long_references_enabled,
+                link_style=reference_link_style,
                 display=LongSummaryReferenceDisplaySettings(
                     label=reference_label,
                     heading=reference_heading,

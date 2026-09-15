@@ -132,6 +132,7 @@ class SummarySettingsTests(unittest.TestCase):
                     "-longsummary",
                     LongSummaryReferenceSettings(
                         enabled=False,
+                        link_style="markdown",
                         display=LongSummaryReferenceDisplaySettings(
                             label="🔗 Source",
                             heading="none",
@@ -160,6 +161,7 @@ class SummarySettingsTests(unittest.TestCase):
                     "file_suffix": "-detailed",
                     "references": {
                         "enabled": True,
+                        "link_style": "wikilink",
                         "display": {
                             "label": "Origin",
                             "heading": "title",
@@ -177,6 +179,7 @@ class SummarySettingsTests(unittest.TestCase):
         self.assertEqual(settings.long.lang, "uk")
         self.assertEqual(settings.long.output, "separate")
         self.assertTrue(settings.long.references.enabled)
+        self.assertEqual(settings.long.references.link_style, "wikilink")
         self.assertEqual(settings.long.references.display.label, "Origin")
         self.assertEqual(settings.long.references.display.heading, "title")
         self.assertFalse(settings.long.references.display.timestamp)
@@ -198,6 +201,7 @@ class SummarySettingsTests(unittest.TestCase):
         self.assertTrue(settings.long.enabled)
         self.assertEqual(settings.long.lang, "uk")
         self.assertTrue(settings.long.references.enabled)
+        self.assertEqual(settings.long.references.link_style, "markdown")
 
     def test_removed_flat_config_is_rejected(self) -> None:
         with self.assertRaisesRegex(ValueError, "Removed summary configuration"):
@@ -260,6 +264,17 @@ class SummarySettingsTests(unittest.TestCase):
                             "references": {
                                 "display": {"heading": "full"},
                             }
+                        }
+                    }
+                },
+                "en",
+            )
+        with self.assertRaisesRegex(ValueError, "link_style must be one of"):
+            _resolve_summary_settings(
+                {
+                    "summary": {
+                        "long": {
+                            "references": {"link_style": "html"},
                         }
                     }
                 },
@@ -691,7 +706,7 @@ class SummaryOutputTests(unittest.TestCase):
         self.assertIn("Short result", main_output)
         self.assertNotIn("Timed topic", main_output)
         self.assertIn(
-            "[[lecture#^src-5|🔗 Source · 00:00:05]]",
+            "[🔗 Source · 00:00:05](lecture.md#^src-5)",
             long_output,
         )
         summary_system = adapter.calls[1][0][0]["content"]

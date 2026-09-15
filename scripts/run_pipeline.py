@@ -1367,6 +1367,7 @@ def main() -> int:
                         summaries["long"],
                         summary_source,
                         summary_settings.long.references.display,
+                        link_style=summary_settings.long.references.link_style,
                     )
                 break
             except Exception as e:

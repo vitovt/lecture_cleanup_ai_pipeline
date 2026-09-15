@@ -60,6 +60,7 @@ class LongSummaryReferenceTests(unittest.TestCase):
     def render(
         self,
         *,
+        link_style: str = "wikilink",
         label: str = "🔗 Source",
         heading: str = "none",
         timestamp: bool = True,
@@ -74,6 +75,7 @@ class LongSummaryReferenceTests(unittest.TestCase):
                 timestamp=timestamp,
                 separator=separator,
             ),
+            link_style=link_style,
         )
 
     def test_default_display_adds_label_and_available_timestamp(self) -> None:
@@ -81,6 +83,12 @@ class LongSummaryReferenceTests(unittest.TestCase):
 
         self.assertIn("[[#^src-60|🔗 Source · 00:01:00]]", rendered)
         self.assertIn("[[#^txt-1|🔗 Source]]", rendered)
+
+    def test_markdown_style_renders_internal_block_links(self) -> None:
+        rendered = self.render(link_style="markdown")
+
+        self.assertIn("[🔗 Source · 00:01:00](#^src-60)", rendered)
+        self.assertIn("[🔗 Source](#^txt-1)", rendered)
 
     def test_title_display_uses_clean_source_heading(self) -> None:
         rendered = self.render(
@@ -115,9 +123,27 @@ class LongSummaryReferenceTests(unittest.TestCase):
                 timestamp=False,
                 separator=" · ",
             ),
+            link_style="wikilink",
         )
 
         self.assertIn("[[lecture#^txt-1|Origin]]", rendered)
+
+    def test_markdown_style_renders_encoded_external_note_target(self) -> None:
+        summary = "### 0️⃣ First\n↩ [[My lecture#^txt-1|Source]]\n"
+
+        rendered = render_long_summary_reference_display(
+            summary,
+            SOURCE,
+            LongSummaryReferenceDisplaySettings(
+                label="Origin",
+                heading="none",
+                timestamp=False,
+                separator=" · ",
+            ),
+            link_style="markdown",
+        )
+
+        self.assertIn("[Origin](My%20lecture.md#^txt-1)", rendered)
 
     def test_display_sanitizes_wikilink_delimiters_in_source_heading(self) -> None:
         source = "### Arrays [A] | Pipes ^txt-2\n"
@@ -132,6 +158,7 @@ class LongSummaryReferenceTests(unittest.TestCase):
                 timestamp=False,
                 separator=" · ",
             ),
+            link_style="wikilink",
         )
 
         self.assertIn("[[#^txt-2|Arrays (A) ¦ Pipes]]", rendered)
