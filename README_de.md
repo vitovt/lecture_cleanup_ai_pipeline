@@ -15,7 +15,7 @@ Außerdem fügt es eine einfache Struktur hinzu und sorgt für konsistente Termi
 2. Teilt den Text in Blöcke mit Überlappung, ohne nach Möglichkeit Zeilen zu trennen.
 3. Fügt „Kontext“ aus dem vorherigen Fragment hinzu (nur lesend) — `raw`, `cleaned` oder `none`.
 4. Sendet den Block mit strikten Prompts an den gewählten LLM-Anbieter.
-5. Bei `.txt`-Dateien mit Zeitstempeln werden diese in Überschriften eingefügt. Standard: Zeitstempel des Blockanfangs für alle Überschriften; optional `--process-timecodes-by-ai`, dann setzt das Modell pro Überschrift einen Zeitcode anhand der gelieferten Stempel.
+5. Bei `.txt` mit Zeitstempeln werden Überschriftenzeiten durch das LLM oder den Blockstart-Fallback zugewiesen; danach rendert das Programm Inline- (`I`), Below- (`B`) und Source-ID-Formate (`S`).
 6. Entfernt doppelte Textstellen an den Blockgrenzen.
 7. Erfasst Informationen über „merged_terms“ und übergibt sie an folgende Blöcke (`<!-- merged_terms: ... -->`, nur neue Änderungen).
 8. Fügt alle Blöcke zu einer endgültigen Markdown-Datei zusammen; optional wird am Ende eine automatisch erzeugte Zusammenfassung hinzugefügt.
@@ -53,9 +53,10 @@ Außerdem fügt es eine einfache Struktur hinzu und sorgt für konsistente Termi
   * Erstellt eine globale Zuordnung *kanonisch → Varianten*.
   * Übergibt sie als `TERM_HINTS` an den nächsten Aufruf (versteckt, nicht ausgegeben).
   * Im Kommentar des aktuellen Blocks werden nur neue Begriffe aufgeführt.
-* **Zeitcodes:**
+* **Überschriftenreferenzen:**
 
-  * Für TXT-Dateien mit Zeitangabe: Standard ist der Blockstart als `[HH:MM:SS](#t=HH:MM:SS)` an jeder Überschrift. Optional `--process-timecodes-by-ai`: Rohzeitstempel bleiben im Prompt, das Modell setzt pro Überschrift einen Zeitcode und entfernt die Rohmarker aus dem Text.
+  * Bei TXT mit Zeitangaben weist `--process-timecodes-by-ai` jeder Überschrift einen kanonischen Zeitwert zu; andernfalls wird der Blockstart verwendet. Nach dem Zusammenfügen rendert das Programm die gewünschte Kombination aus Inline-Zeit (`I`), Kamera-Link unter der Überschrift (`B`) und `^src-SECONDS` (`S`). Überschriften ohne aufgelösten Zeitwert können fortlaufende `^txt-N`-Fallback-IDs erhalten.
+  * Aktivieren Sie `include_src_block_ids` und `include_txt_block_ids_for_untimed` gemeinsam, wenn jede erzeugte Quellüberschrift eine Block-ID erhalten soll.
 * **Deduplizierung:**
 
   * Vergleicht das Ende des vorherigen und den Anfang des nächsten Blocks im Fenster `stitch_dedup_window_chars`; entfernt Duplikate.
@@ -178,7 +179,10 @@ Diese Parameter werden über die `.sh`-Skripte an `scripts/run_pipeline.py` übe
 * `--glossary` — Pfad zu einer Glossardatei (ein Begriff pro Zeile)
 * `--txt-chunk-chars` — Blockgröße in Zeichen (überschreibt Konfigurationswert)
 * `--txt-overlap-chars` — Überlappung in Zeichen
-* `--include-timecodes` — Zeitcodes in Überschriften einfügen (für TXT)
+* `--include-timecodes` / `--no-include-timecodes` — Inline-Zeitcodes (`I`) aktivieren oder deaktivieren
+* `--include-timecodes-below-headings` / `--no-include-timecodes-below-headings` — Kamera-Links (`B`) unter Überschriften aktivieren oder deaktivieren
+* `--include-src-block-ids` / `--no-include-src-block-ids` — zeitbasierte Block-IDs (`S`) aktivieren oder deaktivieren
+* `--include-txt-block-ids-for-untimed` / `--no-include-txt-block-ids-for-untimed` — fortlaufende `^txt-N` für Überschriften ohne Zeitwert aktivieren oder deaktivieren
 * `--process-timecodes-by-ai` / `--no-process-timecodes-by-ai` — Rohzeitstempel an das Modell geben, damit es pro Überschrift Zeitcodes setzt (TXT mit Zeilen `[HH:MM:SS,mmm] ...`)
 * `--use-context-overlap {raw,cleaned,none}` — Quelle des Kontexts für den nächsten Block
 * `--debug` — Debug-Logs (ohne vollständige Prompts/Antworten)
@@ -239,6 +243,9 @@ Allgemein
 - `use_context_overlap`: `raw`, `cleaned` oder `none` (Standard `raw`)
 - `stitch_dedup_window_chars`: Fenster zur Deduplizierung (null = wie Überlappung, 0 = aus)
 - `include_timecodes_in_headings`: Zeitcodes in Überschriften (für TXT)
+- `include_timecodes_below_headings`: `[🎥 HH:MM:SS](...)` unter Überschriften mit Zeitwert
+- `include_src_block_ids`: kollisionssichere `^src-SECONDS` für Überschriften mit Zeitwert
+- `include_txt_block_ids_for_untimed`: fortlaufende `^txt-N` nur für Überschriften ohne aufgelösten Zeitwert
 - `process_timecodes_by_ai`: Rohzeitcodes im Prompt lassen und das Modell pro Überschrift Zeitcodes setzen lassen (TXT mit Zeitstempeln)
 - `content_mode`: `strict` / `normal` / `creative` / `creativedetailed` / `creativeeditoral` / `creativeeditoral_technical`
 

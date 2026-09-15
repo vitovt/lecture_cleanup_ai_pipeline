@@ -14,7 +14,7 @@ It preserves the content without loss, corrects punctuation, capitalization, and
 2. Splits the text into chunks with overlap, avoiding line breaks when possible.
 3. Adds “context” from the previous fragment (read-only) — can be `raw`, `cleaned`, or `none`.
 4. Sends the fragment to the selected LLM provider with strict prompts.
-5. For `.txt` files with timecodes, adds them to fragment headings (default: chunk start for all headings in a chunk; optional: `--process-timecodes-by-ai` lets the LLM assign per-heading stamps using provided timestamps).
+5. For timestamped `.txt`, assigns heading times using the LLM or the chunk-start fallback, then programmatically renders inline (`I`), below-heading (`B`), and source-ID (`S`) formats.
 6. Removes duplicates at chunk boundaries during stitching.
 7. Collects “merged terms” info and passes it to the next blocks via comments `<!-- merged_terms: ... -->` (only new changes per block).
 8. Joins all blocks into a final Markdown document; optionally appends a non-authored summary.
@@ -52,9 +52,10 @@ It preserves the content without loss, corrects punctuation, capitalization, and
   * Builds a global map of canonical → variants.
   * Passes it to the next call as `TERM_HINTS` (hidden, not printed).
   * Keeps only new terms in the current block’s comment.
-* **Timecodes:**
+* **Heading references:**
 
-  * For TXT with timestamps — default: append chunk start `[HH:MM:SS](#t=HH:MM:SS)` to fragment headings; optional `--process-timecodes-by-ai` keeps timestamps in the prompt and asks the LLM to add per-heading timecodes, removing raw markers from the body.
+  * For TXT with timestamps, `--process-timecodes-by-ai` lets the LLM assign a canonical per-heading time; otherwise every heading receives its chunk start. After stitching, the program renders any requested combination of inline timestamps (`I`), camera links below headings (`B`), and `^src-SECONDS` block IDs (`S`). Untimed headings can receive deterministic `^txt-N` fallback IDs.
+  * Enable both `include_src_block_ids` and `include_txt_block_ids_for_untimed` when every generated source heading must have a block ID.
 * **Deduplication:**
 
   * Compares the end of the previous chunk and start of the next within a window `stitch_dedup_window_chars`; removes duplicates.
@@ -175,7 +176,10 @@ These flags are passed to `scripts/run_pipeline.py` via the `.sh` wrappers.
 * `--glossary` — path to glossary file (one term per line)
 * `--txt-chunk-chars` — chunk size in characters (overrides config)
 * `--txt-overlap-chars` — overlap size in characters
-* `--include-timecodes` — include timecodes in headings (for TXT)
+* `--include-timecodes` / `--no-include-timecodes` — enable or disable inline (`I`) timecodes in headings
+* `--include-timecodes-below-headings` / `--no-include-timecodes-below-headings` — enable or disable camera (`B`) links below headings
+* `--include-src-block-ids` / `--no-include-src-block-ids` — enable or disable timestamp-derived (`S`) block IDs
+* `--include-txt-block-ids-for-untimed` / `--no-include-txt-block-ids-for-untimed` — enable or disable sequential `^txt-N` IDs for headings without a resolved timestamp
 * `--process-timecodes-by-ai` / `--no-process-timecodes-by-ai` — send raw timestamps to the LLM to add per-heading timecodes (TXT with `[HH:MM:SS,mmm] ...` lines)
 * `--use-context-overlap {raw,cleaned,none}` — type of context for next fragment
 * `--debug` — debug logs (no full prompts/responses)
@@ -236,6 +240,9 @@ General
 - `use_context_overlap`: `raw`, `cleaned`, or `none` (`raw` = default)
 - `stitch_dedup_window_chars`: deduplication window (null = same as overlap, 0 = off)
 - `include_timecodes_in_headings`: add timecodes to headings (for TXT)
+- `include_timecodes_below_headings`: add `[🎥 HH:MM:SS](...)` below timed headings
+- `include_src_block_ids`: add collision-safe `^src-SECONDS` IDs to timed headings
+- `include_txt_block_ids_for_untimed`: add sequential `^txt-N` IDs only to headings without a resolved timestamp
 - `process_timecodes_by_ai`: keep raw timestamps in the prompt and ask the LLM to place per-heading timecodes (TXT with timestamps)
 - `content_mode`: `strict` / `normal` / `creative` / `creativedetailed` / `creativeeditoral` / `creativeeditoral_technical`
 
