@@ -81,6 +81,7 @@ class TargetInfo:
     video_id: Optional[str] = None
     seconds: Optional[int] = None
     base_url: Optional[str] = None
+    legacy_youtube_url: bool = False
 
 
 @dataclass
@@ -130,6 +131,7 @@ class Document:
     issues: list[Issue] = field(default_factory=list)
     url_state: str = "none"
     video_base_url: Optional[str] = None
+    warnings: list[Issue] = field(default_factory=list)
 
     def formats(self) -> set[str]:
         result: set[str] = set()
@@ -210,7 +212,9 @@ def parse_label(value: str, line_number: int, issues: list[Issue]) -> Optional[i
         return None
 
 
-def parse_youtube_url(value: str) -> tuple[str, str, list[tuple[str, str]]]:
+def parse_youtube_url(
+    value: str,
+) -> tuple[str, str, list[tuple[str, str]], bool]:
     try:
         parsed = urlsplit(value.strip())
     except ValueError as exc:
@@ -224,6 +228,7 @@ def parse_youtube_url(value: str) -> tuple[str, str, list[tuple[str, str]]]:
     path = parsed.path.rstrip("/")
     base_path = parsed.path
     query = list(parse_qsl(parsed.query, keep_blank_values=True))
+    legacy_youtube_url = False
     if host in ("youtu.be", "www.youtu.be"):
         path_parts = path.lstrip("/").split("/", 1)
         short_path = path_parts[0]
@@ -232,7 +237,12 @@ def parse_youtube_url(value: str) -> tuple[str, str, list[tuple[str, str]]]:
             # timestamp is technically part of the URL path, treat the suffix
             # as a query string so existing documents remain valid input.
             video_id, legacy_query = short_path.split("&", 1)
-            query = list(parse_qsl(legacy_query, keep_blank_values=True)) + query
+            legacy_pairs = list(parse_qsl(legacy_query, keep_blank_values=True))
+            query = legacy_pairs + query
+            legacy_youtube_url = any(
+                key.lower() in ("t", "start", "time_continue")
+                for key, _ in legacy_pairs
+            )
             path_suffix = f"/{path_parts[1]}" if len(path_parts) == 2 else ""
             base_path = f"/{video_id}{path_suffix}"
         else:
@@ -256,11 +266,11 @@ def parse_youtube_url(value: str) -> tuple[str, str, list[tuple[str, str]]]:
     base = urlunsplit(
         (parsed.scheme, parsed.netloc, base_path, urlencode(cleaned_query, doseq=True), "")
     )
-    return video_id, base, query
+    return video_id, base, query, legacy_youtube_url
 
 
 def youtube_base_url(value: str) -> tuple[str, str]:
-    video_id, base_url, _ = parse_youtube_url(value)
+    video_id, base_url, _, _ = parse_youtube_url(value)
     return video_id, base_url
 
 
@@ -293,7 +303,7 @@ def parse_target(raw: Optional[str], line_number: int, issues: list[Issue]) -> T
         return TargetInfo(raw=value, seconds=seconds)
 
     try:
-        video_id, base_url, query = parse_youtube_url(value)
+        video_id, base_url, query, legacy_youtube_url = parse_youtube_url(value)
     except ValueError as exc:
         issues.append(Issue("malformed_video_url", line_number, str(exc)))
         return TargetInfo(raw=value)
@@ -318,6 +328,7 @@ def parse_target(raw: Optional[str], line_number: int, issues: list[Issue]) -> T
         video_id=video_id,
         seconds=target_seconds,
         base_url=base_url,
+        legacy_youtube_url=legacy_youtube_url,
     )
 
 
@@ -347,6 +358,7 @@ def parse_document(path: Path, text: str) -> Document:
     if not lines and text:
         lines = [text]
     issues: list[Issue] = []
+    warnings: list[Issue] = []
     headings: list[Heading] = []
     fence_mask = code_fence_mask(lines)
     below_candidates: dict[int, Marker] = {}
@@ -459,6 +471,15 @@ def parse_document(path: Path, text: str) -> Document:
                     values.append((f"{marker.kind}-target", marker.target.seconds, marker.line_number))
                 if marker.target.external:
                     external_markers.append((heading, marker))
+                if marker.target.legacy_youtube_url:
+                    warnings.append(
+                        Issue(
+                            "legacy_youtube_url",
+                            marker.line_number,
+                            "youtu.be timestamp uses & instead of ?; "
+                            "accepted for compatibility but should be fixed",
+                        )
+                    )
         if heading.src_seconds is not None:
             values.append(("S", heading.src_seconds, heading.line_number))
         unique_seconds = {value for _, value, _ in values}
@@ -511,7 +532,16 @@ def parse_document(path: Path, text: str) -> Document:
         url_state = "none"
         base_url = None
 
-    return Document(path, text, lines, headings, issues, url_state, base_url)
+    return Document(
+        path,
+        text,
+        lines,
+        headings,
+        issues,
+        url_state,
+        base_url,
+        warnings,
+    )
 
 
 def read_document(path: Path) -> Document:
@@ -539,8 +569,22 @@ def print_doctor_errors(document: Document) -> None:
         )
 
 
+def print_document_warnings(document: Document) -> None:
+    by_code: dict[str, list[Issue]] = {}
+    for warning in document.warnings:
+        by_code.setdefault(warning.code, []).append(warning)
+    for code, warnings in by_code.items():
+        first = min(warning.line for warning in warnings)
+        print(
+            f"WARNING code={code} count={len(warnings)} first_line={first} "
+            f"message={json_value(warnings[0].message)}",
+            file=sys.stderr,
+        )
+
+
 def command_doctor(path: Path) -> int:
     document = read_document(path)
+    print_document_warnings(document)
     if document.issues:
         print_doctor_errors(document)
         return 1
@@ -550,6 +594,7 @@ def command_doctor(path: Path) -> int:
 
 def command_analyze(path: Path) -> int:
     document = read_document(path)
+    print_document_warnings(document)
     if document.issues:
         print_doctor_errors(document)
         return 1
@@ -781,6 +826,7 @@ def atomic_write(path: Path, text: str, mode_source: Path) -> None:
 def command_transform(args: argparse.Namespace) -> int:
     document = read_document(args.filename)
     if document.issues:
+        print_document_warnings(document)
         print_doctor_errors(document)
         return 1
     timestamped = [heading for heading in document.headings if heading.timestamp_seconds is not None]
@@ -825,8 +871,10 @@ def command_transform(args: argparse.Namespace) -> int:
     )
     final_document = parse_document(document.path, transformed)
     if final_document.issues:
+        print_document_warnings(final_document)
         print_doctor_errors(final_document)
         return 1
+    print_document_warnings(final_document)
 
     if args.overwrite:
         destination = document.path

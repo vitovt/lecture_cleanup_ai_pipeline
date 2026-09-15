@@ -215,7 +215,25 @@ class SourceTimecodesCliTests(unittest.TestCase):
             "LEGEND I=inline B=below S=src\n"
             "ANALYZE status=ok formats=I url=complete\n",
         )
-        self.assertEqual(result.stderr, "")
+        self.assertEqual(
+            result.stderr,
+            "WARNING code=legacy_youtube_url count=2 first_line=1 "
+            'message="youtu.be timestamp uses & instead of ?; accepted for '
+            'compatibility but should be fixed"\n',
+        )
+
+    def test_doctor_warns_but_succeeds_for_legacy_youtube_url(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = self.write_markdown(
+                directory,
+                "### First [00:01:00](https://youtu.be/abc&t=60s)\n",
+            )
+
+            result = self.run_tool("doctor", path)
+
+        self.assertEqual(result.returncode, 0)
+        self.assertEqual(result.stdout, "DOCTOR status=ok errors=0\n")
+        self.assertIn("WARNING code=legacy_youtube_url count=1", result.stderr)
 
     def test_added_marker_canonicalizes_legacy_short_youtube_url(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
