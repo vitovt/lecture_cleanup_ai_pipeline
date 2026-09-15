@@ -250,7 +250,8 @@ YouTube, бо цей код потрібен для імені результа�
 - `summary.short.file_suffix` / `summary.long.file_suffix`: непорожній безпечний суфікс окремого файла; типові значення `-summary` і `-longsummary`.
 - `summary.short.heading` / `summary.long.heading`: заголовки короткого й довгого підсумків.
 - `summary.long.lang`: `default` використовує мову лекції; також можна вказати дволітерний код ISO-639-1.
-- `summary.long.references`: додає під кожним `###`/`####` перевірене посилання на `^src-*` або `^txt-*`; потребує одночасно `include_src_block_ids: true` та `include_txt_block_ids_for_untimed: true`.
+- `summary.long.references.enabled`: додає під кожним `###`/`####` перевірене посилання на `^src-*` або `^txt-*`; потребує одночасно `include_src_block_ids: true` та `include_txt_block_ids_for_untimed: true`.
+- `summary.long.references.display`: програмно формує видимий текст посилання після AI-валідації. `label` задає сталий текст, `heading` приймає `none`, `title` або `markdown`, `timestamp` керує показом доступного часу, а `separator` з’єднує компоненти. `markdown` зберігає реальний рівень source-заголовка як звичайний текст wikilink alias.
 - `parasites`: шляхи до списків «слів-паразитів» по мовах.
 - `llm.request_delay_seconds`: пауза між LLM-запитами (секунди); допомагає уникати лімітів; 0 вимикає.
 - `retry.attempts`: глобальна кількість спроб (1 = без повторів)

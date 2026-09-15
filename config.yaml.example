@@ -26,4 +26,10 @@ logging:
 #     enabled: false
 #     lang: default
 #     output: separate
-#     references: false
+#     references:
+#       enabled: false
+#       display:
+#         label: "🔗 Source"
+#         heading: none       # none | title | markdown
+#         timestamp: true
+#         separator: " · "

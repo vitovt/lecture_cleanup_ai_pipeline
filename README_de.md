@@ -265,7 +265,8 @@ Allgemein
 * `summary.short.file_suffix` / `summary.long.file_suffix`: nicht leeres sicheres Suffix für separate Dateien; Standardwerte sind `-summary` und `-longsummary`
 * `summary.short.heading` / `summary.long.heading`: Überschriften für kurze und lange Zusammenfassungen
 * `summary.long.lang`: `default` folgt der Vorlesungssprache, alternativ ein zweistelliger ISO-639-1-Code
-* `summary.long.references`: fügt unter jedem `###`/`####` einen validierten Link auf `^src-*` oder `^txt-*` ein; erfordert `include_src_block_ids: true` und `include_txt_block_ids_for_untimed: true`
+* `summary.long.references.enabled`: fügt unter jedem `###`/`####` einen validierten Link auf `^src-*` oder `^txt-*` ein; erfordert `include_src_block_ids: true` und `include_txt_block_ids_for_untimed: true`
+* `summary.long.references.display`: rendert den sichtbaren Linktext nach der AI-Validierung programmgesteuert. `label` liefert festen Text, `heading` akzeptiert `none`, `title` oder `markdown`, `timestamp` steuert die verfügbare Zeit und `separator` verbindet die Komponenten. `markdown` erhält die echte Ebene der Quellüberschrift als normalen Wikilink-Aliastext
 * `parasites`: Pfade zu Füllwortlisten je Sprache
 * `llm.request_delay_seconds`: Verzögerung zwischen LLM-Anfragen (Sekunden); hilft gegen Rate Limits; 0 = aus
 * `retry.attempts`: globale Standardanzahl an Versuchen (1 = kein Retry)

@@ -262,7 +262,8 @@ General
 * `summary.short.file_suffix` / `summary.long.file_suffix`: non-empty safe suffix for a separate file; defaults are `-summary` and `-longsummary`
 * `summary.short.heading` / `summary.long.heading`: headings for short and long summaries
 * `summary.long.lang`: `default` follows the lecture language, or use a two-letter ISO-639-1 override
-* `summary.long.references`: add a validated `^src-*` or `^txt-*` link below every `###`/`####`; requires both `include_src_block_ids: true` and `include_txt_block_ids_for_untimed: true`
+* `summary.long.references.enabled`: add a validated `^src-*` or `^txt-*` link below every `###`/`####`; requires both `include_src_block_ids: true` and `include_txt_block_ids_for_untimed: true`
+* `summary.long.references.display`: programmatically render the visible link text after AI validation. `label` supplies fixed text, `heading` accepts `none`, `title`, or `markdown`, `timestamp` controls the available time, and `separator` joins components. `markdown` preserves the real source-heading level as plain wikilink alias text
 * `parasites`: paths to filler-word lists by language
 * `llm.request_delay_seconds`: delay between LLM requests (seconds); helps avoid rate limits; 0 disables
 * `retry.attempts`: global default retry attempts (1 = no retry)
