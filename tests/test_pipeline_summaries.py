@@ -57,6 +57,20 @@ class PipelineAdapter:
         )
 
 
+class ReferencePipelineAdapter(PipelineAdapter):
+    def generate(self, messages, **kwargs):
+        self.calls.append((messages, kwargs))
+        if str(kwargs.get("label", "")).startswith("chunk"):
+            return (
+                "### Timed — [00:00:05](#t=00:00:05)\n\n"
+                "### Untimed\n\nCleaned content."
+            )
+        return (
+            f"{LONG_SUMMARY_START}\nLong result\n{LONG_SUMMARY_END}\n"
+            f"{SHORT_SUMMARY_START}\nShort result\n{SHORT_SUMMARY_END}"
+        )
+
+
 class RetryingPipelineAdapter:
     def __init__(self, failures: int) -> None:
         self.failures = failures
@@ -322,6 +336,134 @@ class SummaryOutputTests(unittest.TestCase):
             self.assertNotIn("Short result", main_markdown)
             self.assertIn("Long result", (outdir / "lecture-longsummary.md").read_text(encoding="utf-8"))
             self.assertIn("Short result", (outdir / "lecture-summary.md").read_text(encoding="utf-8"))
+
+    def test_references_are_rendered_before_summary_generation(self) -> None:
+        cfg = yaml.safe_load(
+            (PROJECT / "config.default.yaml").read_text(encoding="utf-8")
+        )
+        cfg["llm"]["provider"] = "dummy"
+        cfg["llm"]["dummy"] = {
+            "model": "test-model",
+            "temperature": 0.0,
+            "top_p": 1.0,
+        }
+        cfg["llm"]["request_delay_seconds"] = 0
+        cfg["retry"]["attempts"] = 1
+        cfg["summary_mode"] = "both"
+        cfg["summary_output"] = "append"
+        cfg["suppress_edit_comments"] = True
+        cfg["qc_report_mode"] = "off"
+        cfg["txt_chunk_chars"] = 10000
+        cfg["logging"]["level"] = "quiet"
+        cfg["include_timecodes_in_headings"] = False
+        cfg["include_timecodes_below_headings"] = True
+        cfg["include_src_block_ids"] = True
+        cfg["include_txt_block_ids_for_untimed"] = True
+        cfg["process_timecodes_by_ai"] = True
+        adapter = ReferencePipelineAdapter()
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            input_path = root / "lecture.txt"
+            input_path.write_text(
+                "[00:00:05,000] A sufficiently long timestamped lecture "
+                "sentence for reference rendering. " * 4,
+                encoding="utf-8",
+            )
+            outdir = root / "output"
+            argv = [
+                "run_pipeline.py",
+                "--input",
+                str(input_path),
+                "--outdir",
+                str(outdir),
+                "--lang",
+                "en",
+            ]
+
+            with patch(
+                "scripts.run_pipeline.load_effective_config",
+                return_value=(cfg, True),
+            ), patch(
+                "scripts.run_pipeline.create_llm_adapter",
+                return_value=adapter,
+            ), patch("sys.argv", argv):
+                result = main()
+
+            output = (outdir / "lecture.md").read_text(encoding="utf-8")
+
+        self.assertEqual(result, 0)
+        self.assertEqual(len(adapter.calls), 2)
+        chunk_prompt = adapter.calls[0][0][1]["content"]
+        summary_prompt = adapter.calls[1][0][1]["content"]
+        self.assertIn("[00:00:05,000]", chunk_prompt)
+        self.assertIn("### Timed ^src-5\n[🎥 00:00:05](#)", summary_prompt)
+        self.assertIn("### Untimed ^txt-1", summary_prompt)
+        self.assertNotIn("### Timed — [00:00:05]", summary_prompt)
+        self.assertIn("### Timed ^src-5\n[🎥 00:00:05](#)", output)
+        self.assertEqual(output.count("^txt-1"), 1)
+
+    def test_cli_can_render_chunk_start_references_without_ai_assignment(self) -> None:
+        cfg = yaml.safe_load(
+            (PROJECT / "config.default.yaml").read_text(encoding="utf-8")
+        )
+        cfg["llm"]["provider"] = "dummy"
+        cfg["llm"]["dummy"] = {
+            "model": "test-model",
+            "temperature": 0.0,
+            "top_p": 1.0,
+        }
+        cfg["llm"]["request_delay_seconds"] = 0
+        cfg["retry"]["attempts"] = 1
+        cfg["summary_mode"] = "disabled"
+        cfg["suppress_edit_comments"] = True
+        cfg["qc_report_mode"] = "off"
+        cfg["txt_chunk_chars"] = 10000
+        cfg["logging"]["level"] = "quiet"
+        adapter = PipelineAdapter()
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            input_path = root / "lecture.txt"
+            input_path.write_text(
+                "[00:00:05,000] "
+                + "A sufficiently long timestamped lecture sentence for "
+                "chunk-start reference rendering. "
+                * 4,
+                encoding="utf-8",
+            )
+            outdir = root / "output"
+            argv = [
+                "run_pipeline.py",
+                "--input",
+                str(input_path),
+                "--outdir",
+                str(outdir),
+                "--lang",
+                "en",
+                "--no-include-timecodes",
+                "--include-timecodes-below-headings",
+                "--include-src-block-ids",
+                "--no-process-timecodes-by-ai",
+            ]
+
+            with patch(
+                "scripts.run_pipeline.load_effective_config",
+                return_value=(cfg, True),
+            ), patch(
+                "scripts.run_pipeline.create_llm_adapter",
+                return_value=adapter,
+            ), patch("sys.argv", argv):
+                result = main()
+
+            output = (outdir / "lecture.md").read_text(encoding="utf-8")
+
+        self.assertEqual(result, 0)
+        self.assertEqual(len(adapter.calls), 1)
+        chunk_prompt = adapter.calls[0][0][1]["content"]
+        self.assertNotIn("[00:00:05,000]", chunk_prompt)
+        self.assertIn("### Cleaned lecture ^src-5\n[🎥 00:00:05](#)", output)
+        self.assertNotIn("### Cleaned lecture — [00:00:05]", output)
 
 
 class PipelineRetryTests(unittest.TestCase):

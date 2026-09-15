@@ -11,6 +11,10 @@ if str(PROJECT_ROOT) not in sys.path:
 from aiadapters.factory import create_llm_adapter
 from aiadapters.base import LLMAdapter
 from scripts.config_loader import load_effective_config
+from scripts.heading_references import (
+    HeadingReferenceOptions,
+    render_heading_references,
+)
 from scripts.logging_helper import (
     set_log_level,
     log_debug,
@@ -178,7 +182,11 @@ def _extract_retry_after_seconds(msg: str) -> Optional[float]:
             return None
     return None
 
-def _build_timecodes_policy_text(include_timecodes: bool, ai_handles: bool, has_timecodes: bool) -> str:
+def _build_timecodes_policy_text(
+    references_requested: bool,
+    ai_handles: bool,
+    has_timecodes: bool,
+) -> str:
     """
     Build the timecode policy block for the prompt based on settings and input availability.
     """
@@ -186,7 +194,7 @@ def _build_timecodes_policy_text(include_timecodes: bool, ai_handles: bool, has_
         "- Never add or duplicate timecodes for headings that exist only in CONTEXT.\n"
         "- Do not place timecodes elsewhere."
     )
-    if not include_timecodes:
+    if not references_requested:
         return "- Timecodes are not requested for this fragment."
     if not has_timecodes:
         return "- No timecodes detected in this fragment."
@@ -611,7 +619,64 @@ def main() -> int:
             "sentence. Can be provided multiple times; blocks are concatenated in the given order."
         ),
     )
-    ap.add_argument("--include-timecodes", dest="include_timecodes", action="store_true", default=None, help="Append timecodes to headings when available")
+    inline_group = ap.add_mutually_exclusive_group()
+    inline_group.add_argument(
+        "--include-timecodes",
+        dest="include_timecodes",
+        action="store_true",
+        help="Add I timecodes to generated headings when available",
+    )
+    inline_group.add_argument(
+        "--no-include-timecodes",
+        dest="include_timecodes",
+        action="store_false",
+        help="Do not include I timecodes in generated headings",
+    )
+    below_group = ap.add_mutually_exclusive_group()
+    below_group.add_argument(
+        "--include-timecodes-below-headings",
+        dest="include_timecodes_below_headings",
+        action="store_true",
+        help="Add B camera timecodes below generated headings",
+    )
+    below_group.add_argument(
+        "--no-include-timecodes-below-headings",
+        dest="include_timecodes_below_headings",
+        action="store_false",
+        help="Do not add B camera timecodes below headings",
+    )
+    src_group = ap.add_mutually_exclusive_group()
+    src_group.add_argument(
+        "--include-src-block-ids",
+        dest="include_src_block_ids",
+        action="store_true",
+        help="Add S block IDs derived from resolved timestamp seconds",
+    )
+    src_group.add_argument(
+        "--no-include-src-block-ids",
+        dest="include_src_block_ids",
+        action="store_false",
+        help="Do not add S block IDs",
+    )
+    txt_group = ap.add_mutually_exclusive_group()
+    txt_group.add_argument(
+        "--include-txt-block-ids-for-untimed",
+        dest="include_txt_block_ids_for_untimed",
+        action="store_true",
+        help="Add sequential ^txt-N IDs to headings without a resolved timestamp",
+    )
+    txt_group.add_argument(
+        "--no-include-txt-block-ids-for-untimed",
+        dest="include_txt_block_ids_for_untimed",
+        action="store_false",
+        help="Do not add fallback ^txt-N IDs",
+    )
+    ap.set_defaults(
+        include_timecodes=None,
+        include_timecodes_below_headings=None,
+        include_src_block_ids=None,
+        include_txt_block_ids_for_untimed=None,
+    )
     tc_group = ap.add_mutually_exclusive_group()
     tc_group.add_argument(
         "--process-timecodes-by-ai",
@@ -667,8 +732,16 @@ def main() -> int:
     # override config
     if args.txt_chunk_chars: cfg["txt_chunk_chars"] = args.txt_chunk_chars
     if args.txt_overlap_chars: cfg["txt_overlap_chars"] = args.txt_overlap_chars
-    if args.include_timecodes is not None: cfg["include_timecodes_in_headings"] = bool(args.include_timecodes)
-    if args.process_timecodes_by_ai is not None: cfg["process_timecodes_by_ai"] = bool(args.process_timecodes_by_ai)
+    if args.include_timecodes is not None:
+        cfg["include_timecodes_in_headings"] = bool(args.include_timecodes)
+    if args.include_timecodes_below_headings is not None:
+        cfg["include_timecodes_below_headings"] = bool(args.include_timecodes_below_headings)
+    if args.include_src_block_ids is not None:
+        cfg["include_src_block_ids"] = bool(args.include_src_block_ids)
+    if args.include_txt_block_ids_for_untimed is not None:
+        cfg["include_txt_block_ids_for_untimed"] = bool(args.include_txt_block_ids_for_untimed)
+    if args.process_timecodes_by_ai is not None:
+        cfg["process_timecodes_by_ai"] = bool(args.process_timecodes_by_ai)
     qc_report_mode = str(cfg.get("qc_report_mode", "outdir")).strip().lower()
     if args.qc_report_mode:
         qc_report_mode = args.qc_report_mode
@@ -723,7 +796,17 @@ def main() -> int:
         attempts = max(1, int(args.retry_attempts))
     pause_between_attempts = float(cfg_retry_provider.get("pause_seconds", cfg_retry_global.get("pause_seconds", 0.0)) or 0.0)
     include_timecodes = bool(cfg.get("include_timecodes_in_headings", True))
+    include_timecodes_below = bool(cfg.get("include_timecodes_below_headings", False))
+    include_src_block_ids = bool(cfg.get("include_src_block_ids", False))
+    include_txt_block_ids = bool(cfg.get("include_txt_block_ids_for_untimed", False))
     process_timecodes_by_ai = bool(cfg.get("process_timecodes_by_ai", False))
+    reference_options = HeadingReferenceOptions(
+        include_inline=include_timecodes,
+        include_below=include_timecodes_below,
+        include_src=include_src_block_ids,
+        include_txt_for_untimed=include_txt_block_ids,
+    )
+    reference_processing_requested = reference_options.needs_timestamp_resolution()
     aside_style = cfg.get("highlight_asides_style", "italic")
     # Overlap source (assumes validated config)
     overlap_source = str(cfg.get("use_context_overlap", "raw")).lower()
@@ -737,7 +820,13 @@ def main() -> int:
     suppress_edit_comments = bool(cfg.get("suppress_edit_comments", True))
     if debug:
         log_debug(f"Settings -> provider={_llm['provider']}, model={model}, temperature={temperature}, top_p={top_p}, lang={lang}, delay={request_delay}s, retries={attempts} x pause {pause_between_attempts}s")
-        log_debug(f"Options -> include_timecodes={include_timecodes}, process_timecodes_by_ai={process_timecodes_by_ai}, aside_style={aside_style}")
+        log_debug(
+            "References -> "
+            f"I={include_timecodes}, B={include_timecodes_below}, "
+            f"S={include_src_block_ids}, txt={include_txt_block_ids}, "
+            f"process_by_ai={process_timecodes_by_ai}"
+        )
+        log_debug(f"Options -> aside_style={aside_style}")
         log_debug(f"Overlap -> source={overlap_source}, sentence_delimiters={sentence_delimiters!r}, stitch_dedup_window_chars={stitch_dedup_window}")
         log_debug(f"Chunking -> rebalance_small_tail_chunks={rebalance_small_tail_chunks}")
         log_debug(f"Content mode -> {content_mode}; suppress_edit_comments={suppress_edit_comments}")
@@ -791,7 +880,11 @@ def main() -> int:
         parsed_lines = parse_timestamped_txt_lines(input_text, keep_raw=True)
         has_line_timestamps = any(item["time"] is not None for item in parsed_lines)
         timecodes_available = has_line_timestamps
-        timecodes_handled_by_ai = bool(include_timecodes and process_timecodes_by_ai and timecodes_available)
+        timecodes_handled_by_ai = bool(
+            reference_processing_requested
+            and process_timecodes_by_ai
+            and timecodes_available
+        )
         src_lines = [item.get("raw", item["text"]) if timecodes_handled_by_ai else item["text"] for item in parsed_lines]
         per_line_time = [item["time"] for item in parsed_lines]
         if debug:
@@ -816,7 +909,24 @@ def main() -> int:
         log_error("Input contains no textual content after preprocessing.")
         sys.exit(1)
 
-    timecodes_policy_text = _build_timecodes_policy_text(include_timecodes, timecodes_handled_by_ai, timecodes_available)
+    timecodes_policy_text = _build_timecodes_policy_text(
+        reference_processing_requested,
+        timecodes_handled_by_ai,
+        timecodes_available,
+    )
+    if (
+        (include_timecodes_below or include_src_block_ids)
+        and not timecodes_available
+    ):
+        fallback = (
+            "^txt-N IDs will be used"
+            if include_txt_block_ids
+            else "no timed references will be added"
+        )
+        log_warn(
+            "Timed heading references requested but no source timestamps "
+            f"were detected; {fallback}."
+        )
 
     # Chunk (line-preserving)
     chunk_chars = int(cfg.get("txt_chunk_chars", 6500) or 6500)
@@ -1052,7 +1162,13 @@ def main() -> int:
                 merge_term_maps(known_terms, current_map)
                 known_terms = coalesce_term_map(known_terms)
         # For TXT inputs that had per-line timestamps, add link-style stamp (unless AI handled timecodes itself)
-        if include_timecodes and not timecodes_handled_by_ai and fmt == "txt" and has_line_timestamps and ch.get("start") is not None:
+        if (
+            reference_processing_requested
+            and not timecodes_handled_by_ai
+            and fmt == "txt"
+            and has_line_timestamps
+            and ch.get("start") is not None
+        ):
             if debug:
                 log_debug(f"Adding timecodes to chunk`s headings; start: {ch['start']}")
             cleaned = add_timecodes_to_headings(cleaned, ch["start"], as_link=True)
@@ -1092,6 +1208,25 @@ def main() -> int:
 
     # Merge
     full_markdown = "\n\n".join(cleaned_blocks)
+    reference_result = render_heading_references(
+        full_markdown,
+        reference_options,
+    )
+    full_markdown = reference_result.markdown
+    if debug:
+        assignment = (
+            "ai"
+            if timecodes_handled_by_ai
+            else "chunk-start"
+            if reference_processing_requested and timecodes_available
+            else "none"
+        )
+        log_debug(
+            "Reference rendering -> "
+            f"assignment={assignment}, headings={reference_result.headings}, "
+            f"timed={reference_result.timed_headings}, "
+            f"src={reference_result.src_ids}, txt={reference_result.txt_ids}"
+        )
 
     # Generate summaries only when all chunks succeeded.
     summaries: Dict[str, str] = {}

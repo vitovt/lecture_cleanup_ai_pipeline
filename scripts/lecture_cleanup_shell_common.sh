@@ -31,7 +31,11 @@ lecture_cleanup_parse_option() {
             lecture_cleanup_add_value_option "$1" "${2:-}" || return $?
             LECTURE_CLEANUP_OPTION_SHIFT=2
             ;;
-        --include-timecodes|--process-timecodes-by-ai|--no-process-timecodes-by-ai|--trace)
+        --include-timecodes|--no-include-timecodes|\
+        --include-timecodes-below-headings|--no-include-timecodes-below-headings|\
+        --include-src-block-ids|--no-include-src-block-ids|\
+        --include-txt-block-ids-for-untimed|--no-include-txt-block-ids-for-untimed|\
+        --process-timecodes-by-ai|--no-process-timecodes-by-ai|--trace)
             lecture_cleanup_add_flag_option "$1"
             LECTURE_CLEANUP_OPTION_SHIFT=1
             ;;
@@ -58,6 +62,17 @@ Forwarded lecture cleanup options:
   --chunks SPEC                 Process selected cleanup chunks, e.g. 1,3,7-9
   --use-context-overlap MODE    Overlap source: raw|cleaned|none
   --include-timecodes           Append timecodes to headings when available
+  --no-include-timecodes        Do not include I timecodes in headings
+  --include-timecodes-below-headings
+                                Add B camera timecodes below headings
+  --no-include-timecodes-below-headings
+                                Disable B camera timecodes
+  --include-src-block-ids       Add S block IDs from timestamp seconds
+  --no-include-src-block-ids    Disable S block IDs
+  --include-txt-block-ids-for-untimed
+                                Add ^txt-N to headings without timestamps
+  --no-include-txt-block-ids-for-untimed
+                                Disable fallback ^txt-N IDs
   --process-timecodes-by-ai     Let the LLM process source timestamps
   --no-process-timecodes-by-ai  Disable LLM-side timestamp processing
   --log-level LEVEL             Cleanup logging: quiet|error|info|debug|trace

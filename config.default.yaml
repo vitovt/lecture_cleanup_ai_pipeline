@@ -146,8 +146,14 @@ overlap_sentence_delimiters: ".!?…"   # characters that mark end of sentences 
 stitch_dedup_window_chars: null        # if null, defaults to txt_overlap_chars
 
 # Output / behavior
-include_timecodes_in_headings: true   # append timecodes to headings when available
-process_timecodes_by_ai: true        # if true, keep timestamps in the prompt and ask the LLM to add per-heading timecodes
+# Timestamp/reference formats for generated headings
+include_timecodes_in_headings: true          # I: [HH:MM:SS] in the heading
+include_timecodes_below_headings: false      # B: [🎥 HH:MM:SS](...) below the heading
+include_src_block_ids: false                 # S: ^src-SECONDS
+include_txt_block_ids_for_untimed: false     # ^txt-N only when no timestamp is resolved
+# Assignment strategy for timestamped input. The LLM always emits canonical I;
+# the requested I/B/S formats are rendered programmatically afterward.
+process_timecodes_by_ai: true
 # QC report output:
 # - outdir         : write next to the .md output (current behavior)
 # - default_outdir : always write to ./output regardless of --outdir

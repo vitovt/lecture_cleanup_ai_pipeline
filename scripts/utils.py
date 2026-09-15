@@ -38,23 +38,45 @@ def parse_timestamped_txt_lines(txt: str, keep_raw: bool = False) -> List[Dict]:
 
 def add_timecodes_to_headings(markdown: str, chunk_start_seconds: float, as_link: bool = False) -> str:
     """
-    Append [HH:MM:SS] to the end of each top-level and second-level heading line in the given markdown.
+    Append [HH:MM:SS] to every ATX heading outside fenced code blocks.
     """
     if chunk_start_seconds is None:
         return markdown
     stamp = format_hms(chunk_start_seconds)
     link_text = f"[{stamp}]" if not as_link else f"[{stamp}](#t={stamp})"
     out_lines = []
-    for line in markdown.splitlines():
-        if line.startswith("# " ) or line.startswith("## "):
-            # avoid duplicate if already has [HH:MM:SS]
-            if re.search(r"\[\d{2}:\d{2}:\d{2}\]\s*$", line):
+    fence_char = None
+    fence_length = 0
+    for line in markdown.splitlines(keepends=True):
+        body = line.rstrip("\r\n")
+        eol = line[len(body):]
+        if fence_char is None:
+            fence = re.match(r"^[ \t]{0,3}(`{3,}|~{3,})", body)
+            if fence:
+                token = fence.group(1)
+                fence_char = token[0]
+                fence_length = len(token)
                 out_lines.append(line)
-            else:
-                out_lines.append(f"{line} — {link_text}")
+                continue
         else:
             out_lines.append(line)
-    return "\n".join(out_lines)
+            if re.match(
+                rf"^[ \t]{{0,3}}{re.escape(fence_char)}{{{fence_length},}}[ \t]*$",
+                body,
+            ):
+                fence_char = None
+                fence_length = 0
+            continue
+
+        heading = re.match(r"^[ \t]{0,3}#{1,6}[ \t]+", body)
+        has_timecode = re.search(
+            r"\[\d{1,3}:\d{2}:\d{2}\](?:\([^)]*\))?[ \t]*$",
+            body,
+        )
+        if heading and not has_timecode:
+            body = f"{body.rstrip()} — {link_text}"
+        out_lines.append(body + eol)
+    return "".join(out_lines) if out_lines else markdown
 
 def similarity_ratio(a: str, b: str) -> float:
     """
