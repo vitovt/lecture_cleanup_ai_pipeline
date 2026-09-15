@@ -24,11 +24,12 @@ from scripts.logging_helper import (
     log_trace,
     log_trace_block,
 )
-from scripts.summary_references import validate_long_summary_references
+from scripts.summary_references import (
+    render_long_summary_reference_display,
+    validate_long_summary_references,
+)
 from scripts.summary_settings import (
     SUMMARY_OUTPUTS,
-    LongSummarySettings,
-    ShortSummarySettings,
     SummarySettings,
     resolve_summary_settings as _resolve_summary_settings,
     validate_summary_reference_dependencies as _validate_summary_reference_dependencies,
@@ -898,7 +899,7 @@ def main() -> int:
             f"long={summary_settings.long.enabled}/"
             f"{summary_settings.long.output}, "
             f"long_lang={summary_settings.long.lang}, "
-            f"references={summary_settings.long.references}"
+            f"references={summary_settings.long.references.enabled}"
         )
 
     # Load parasites for the language
@@ -1320,7 +1321,7 @@ def main() -> int:
                 )
                 source_link_prefix = (
                     (source_note + "#")
-                    if summary_settings.long.references
+                    if summary_settings.long.references.enabled
                     else None
                 )
                 if len(enabled_summary_types) == 2:
@@ -1356,11 +1357,16 @@ def main() -> int:
                     if not (summary or "").strip():
                         raise RuntimeError(f"Empty response text ({summary_type} summary)")
                     summaries = {summary_type: summary.strip()}
-                if summary_settings.long.references and "long" in summaries:
+                if summary_settings.long.references.enabled and "long" in summaries:
                     validate_long_summary_references(
                         summaries["long"],
                         summary_source,
                         source_note=source_note,
+                    )
+                    summaries["long"] = render_long_summary_reference_display(
+                        summaries["long"],
+                        summary_source,
+                        summary_settings.long.references.display,
                     )
                 break
             except Exception as e:

@@ -6,6 +6,7 @@ from typing import Optional
 
 
 SUMMARY_OUTPUTS = ("append", "separate")
+REFERENCE_HEADING_MODES = ("none", "title", "markdown")
 REMOVED_SUMMARY_KEYS = (
     "summary_mode",
     "summary_output",
@@ -25,13 +26,27 @@ class ShortSummarySettings:
 
 
 @dataclass(frozen=True)
+class LongSummaryReferenceDisplaySettings:
+    label: str
+    heading: str
+    timestamp: bool
+    separator: str
+
+
+@dataclass(frozen=True)
+class LongSummaryReferenceSettings:
+    enabled: bool
+    display: LongSummaryReferenceDisplaySettings
+
+
+@dataclass(frozen=True)
 class LongSummarySettings:
     enabled: bool
     heading: str
     lang: str
     output: str
     file_suffix: str
-    references: bool
+    references: LongSummaryReferenceSettings
 
 
 @dataclass(frozen=True)
@@ -74,6 +89,22 @@ def _suffix_value(value: object, path: str) -> str:
     if "/" in suffix or "\\" in suffix or suffix in (".", ".."):
         raise ValueError(f"{path} must be a filename suffix, not a path")
     return suffix
+
+
+def _display_text_value(
+    value: object,
+    path: str,
+    *,
+    strip: bool,
+) -> str:
+    if not isinstance(value, str):
+        raise ValueError(f"{path} must be a string")
+    result = value.strip() if strip else value
+    if any(token in result for token in ("\r", "\n", "|", "[", "]")):
+        raise ValueError(
+            f"{path} must not contain line breaks or wikilink delimiters"
+        )
+    return result
 
 
 def resolve_summary_settings(
@@ -153,11 +184,47 @@ def resolve_summary_settings(
             "summary.long.lang must be 'default' or a two-letter ISO-639-1 code"
         )
 
-    long_references = _bool_value(
-        long_cfg.get("references", False), "summary.long.references"
+    references_cfg = long_cfg.get("references", {})
+    if not isinstance(references_cfg, dict):
+        raise ValueError("summary.long.references must be a mapping")
+    display_cfg = references_cfg.get("display", {})
+    if not isinstance(display_cfg, dict):
+        raise ValueError("summary.long.references.display must be a mapping")
+
+    long_references_enabled = _bool_value(
+        references_cfg.get("enabled", False),
+        "summary.long.references.enabled",
     )
     if cli_long_references is not None:
-        long_references = cli_long_references
+        long_references_enabled = cli_long_references
+
+    reference_label = _display_text_value(
+        display_cfg.get("label", "🔗 Source"),
+        "summary.long.references.display.label",
+        strip=True,
+    )
+    reference_heading = _text_value(
+        display_cfg.get("heading", "none"),
+        "summary.long.references.display.heading",
+    ).lower()
+    if reference_heading not in REFERENCE_HEADING_MODES:
+        raise ValueError(
+            "summary.long.references.display.heading must be one of: "
+            + ", ".join(REFERENCE_HEADING_MODES)
+        )
+    reference_timestamp = _bool_value(
+        display_cfg.get("timestamp", True),
+        "summary.long.references.display.timestamp",
+    )
+    reference_separator = _display_text_value(
+        display_cfg.get("separator", " · "),
+        "summary.long.references.display.separator",
+        strip=False,
+    )
+    if not reference_label and reference_heading == "none":
+        raise ValueError(
+            "summary.long.references.display must include a label or heading"
+        )
 
     settings = SummarySettings(
         short=ShortSummarySettings(
@@ -178,7 +245,15 @@ def resolve_summary_settings(
             lang=long_lang,
             output=long_output,
             file_suffix=long_suffix,
-            references=long_references,
+            references=LongSummaryReferenceSettings(
+                enabled=long_references_enabled,
+                display=LongSummaryReferenceDisplaySettings(
+                    label=reference_label,
+                    heading=reference_heading,
+                    timestamp=reference_timestamp,
+                    separator=reference_separator,
+                ),
+            ),
         ),
     )
     if (
@@ -201,7 +276,7 @@ def validate_summary_reference_dependencies(
     include_src_block_ids: bool,
     include_txt_block_ids_for_untimed: bool,
 ) -> None:
-    if not settings.long.references:
+    if not settings.long.references.enabled:
         return
     missing = []
     if not include_src_block_ids:
@@ -210,5 +285,6 @@ def validate_summary_reference_dependencies(
         missing.append("include_txt_block_ids_for_untimed=true")
     if missing:
         raise ValueError(
-            "summary.long.references=true requires " + " and ".join(missing)
+            "summary.long.references.enabled=true requires "
+            + " and ".join(missing)
         )

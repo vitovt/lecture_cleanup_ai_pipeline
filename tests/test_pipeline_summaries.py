@@ -17,17 +17,21 @@ from scripts.run_pipeline import (
     SHORT_SUMMARY_BLOCK_START,
     SHORT_SUMMARY_END,
     SHORT_SUMMARY_START,
-    LongSummarySettings,
-    ShortSummarySettings,
-    SummarySettings,
     _append_summaries,
     _parse_combined_summaries,
-    _resolve_summary_settings,
-    _validate_summary_reference_dependencies,
     _write_separate_summaries,
     call_llm_combined_summaries,
     call_llm_summary,
     main,
+)
+from scripts.summary_settings import (
+    LongSummaryReferenceDisplaySettings,
+    LongSummaryReferenceSettings,
+    LongSummarySettings,
+    ShortSummarySettings,
+    SummarySettings,
+    resolve_summary_settings as _resolve_summary_settings,
+    validate_summary_reference_dependencies as _validate_summary_reference_dependencies,
 )
 
 
@@ -126,7 +130,15 @@ class SummarySettingsTests(unittest.TestCase):
                     "uk",
                     "append",
                     "-longsummary",
-                    False,
+                    LongSummaryReferenceSettings(
+                        enabled=False,
+                        display=LongSummaryReferenceDisplaySettings(
+                            label="🔗 Source",
+                            heading="none",
+                            timestamp=True,
+                            separator=" · ",
+                        ),
+                    ),
                 ),
             ),
         )
@@ -146,7 +158,15 @@ class SummarySettingsTests(unittest.TestCase):
                     "lang": "uk",
                     "output": "separate",
                     "file_suffix": "-detailed",
-                    "references": True,
+                    "references": {
+                        "enabled": True,
+                        "display": {
+                            "label": "Origin",
+                            "heading": "title",
+                            "timestamp": False,
+                            "separator": " / ",
+                        },
+                    },
                 },
             }
         }
@@ -156,7 +176,11 @@ class SummarySettingsTests(unittest.TestCase):
         self.assertEqual(settings.short.heading, "## Brief")
         self.assertEqual(settings.long.lang, "uk")
         self.assertEqual(settings.long.output, "separate")
-        self.assertTrue(settings.long.references)
+        self.assertTrue(settings.long.references.enabled)
+        self.assertEqual(settings.long.references.display.label, "Origin")
+        self.assertEqual(settings.long.references.display.heading, "title")
+        self.assertFalse(settings.long.references.display.timestamp)
+        self.assertEqual(settings.long.references.display.separator, " / ")
 
     def test_cli_overrides_each_summary_independently(self) -> None:
         settings = _resolve_summary_settings(
@@ -173,7 +197,7 @@ class SummarySettingsTests(unittest.TestCase):
         self.assertEqual(settings.short.output, "separate")
         self.assertTrue(settings.long.enabled)
         self.assertEqual(settings.long.lang, "uk")
-        self.assertTrue(settings.long.references)
+        self.assertTrue(settings.long.references.enabled)
 
     def test_removed_flat_config_is_rejected(self) -> None:
         with self.assertRaisesRegex(ValueError, "Removed summary configuration"):
@@ -206,7 +230,7 @@ class SummarySettingsTests(unittest.TestCase):
 
     def test_references_require_both_source_id_options(self) -> None:
         settings = _resolve_summary_settings(
-            {"summary": {"long": {"references": True}}},
+            {"summary": {"long": {"references": {"enabled": True}}}},
             "en",
         )
 
@@ -221,6 +245,39 @@ class SummarySettingsTests(unittest.TestCase):
             include_src_block_ids=True,
             include_txt_block_ids_for_untimed=True,
         )
+
+    def test_invalid_reference_display_is_rejected(self) -> None:
+        with self.assertRaisesRegex(ValueError, "references must be a mapping"):
+            _resolve_summary_settings(
+                {"summary": {"long": {"references": True}}},
+                "en",
+            )
+        with self.assertRaisesRegex(ValueError, "heading must be one of"):
+            _resolve_summary_settings(
+                {
+                    "summary": {
+                        "long": {
+                            "references": {
+                                "display": {"heading": "full"},
+                            }
+                        }
+                    }
+                },
+                "en",
+            )
+        with self.assertRaisesRegex(ValueError, "label or heading"):
+            _resolve_summary_settings(
+                {
+                    "summary": {
+                        "long": {
+                            "references": {
+                                "display": {"label": "", "heading": "none"},
+                            }
+                        }
+                    }
+                },
+                "en",
+            )
 
 
 class SummaryPromptTests(unittest.TestCase):
@@ -585,7 +642,7 @@ class SummaryOutputTests(unittest.TestCase):
         cfg["summary"]["short"]["output"] = "append"
         cfg["summary"]["long"]["enabled"] = True
         cfg["summary"]["long"]["output"] = "separate"
-        cfg["summary"]["long"]["references"] = True
+        cfg["summary"]["long"]["references"]["enabled"] = True
         cfg["suppress_edit_comments"] = True
         cfg["qc_report_mode"] = "off"
         cfg["txt_chunk_chars"] = 10000
@@ -633,7 +690,10 @@ class SummaryOutputTests(unittest.TestCase):
         self.assertEqual(result, 0)
         self.assertIn("Short result", main_output)
         self.assertNotIn("Timed topic", main_output)
-        self.assertIn("[[lecture#^src-5|Source · 00:00:05]]", long_output)
+        self.assertIn(
+            "[[lecture#^src-5|🔗 Source · 00:00:05]]",
+            long_output,
+        )
         summary_system = adapter.calls[1][0][0]["content"]
         self.assertIn("[[lecture#^src-NNNN", summary_system)
 
@@ -641,7 +701,7 @@ class SummaryOutputTests(unittest.TestCase):
         cfg = yaml.safe_load(
             (PROJECT / "config.default.yaml").read_text(encoding="utf-8")
         )
-        cfg["summary"]["long"]["references"] = True
+        cfg["summary"]["long"]["references"]["enabled"] = True
         cfg["include_src_block_ids"] = False
         cfg["include_txt_block_ids_for_untimed"] = True
         argv = [

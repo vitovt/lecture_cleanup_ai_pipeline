@@ -4,6 +4,7 @@ import re
 from dataclasses import dataclass
 from typing import Optional
 
+from scripts.summary_settings import LongSummaryReferenceDisplaySettings
 from scripts.source_timecode_core import (
     HEADING_RE,
     format_hms,
@@ -25,6 +26,8 @@ REFERENCE_LINK_RE = re.compile(
 class SourceBlock:
     identifier: str
     timestamp: Optional[str]
+    title: str
+    markdown_heading: str
 
 
 class SummaryReferenceError(RuntimeError):
@@ -46,7 +49,10 @@ def collect_source_blocks(markdown: str) -> dict[str, SourceBlock]:
             continue
 
         body, identifiers = strip_trailing_block_ids(heading.group("body"))
-        _, inline = split_trailing_inline(body)
+        title, inline = split_trailing_inline(body)
+        title = title.strip()
+        level = heading.group("prefix").count("#")
+        markdown_heading = f"{'#' * level} {title}".rstrip()
         below = None
         if index + 1 < len(lines) and not protected[index + 1]:
             below = parse_below_marker(lines[index + 1])
@@ -61,7 +67,12 @@ def collect_source_blocks(markdown: str) -> dict[str, SourceBlock]:
             timestamp = None
             if identifier.kind == "src" and visible_seconds == identifier.number:
                 timestamp = format_hms(identifier.number)
-            blocks[identifier_text] = SourceBlock(identifier_text, timestamp)
+            blocks[identifier_text] = SourceBlock(
+                identifier=identifier_text,
+                timestamp=timestamp,
+                title=title,
+                markdown_heading=markdown_heading,
+            )
     return blocks
 
 
@@ -163,3 +174,68 @@ def validate_long_summary_references(
             "long-summary references were requested, but the response has no "
             "### or #### headings"
         )
+
+
+def _safe_heading_alias(value: str) -> str:
+    """Make source heading text safe inside an Obsidian wikilink alias."""
+    return (
+        value.replace("|", "¦")
+        .replace("[", "(")
+        .replace("]", ")")
+        .replace("\r", " ")
+        .replace("\n", " ")
+    )
+
+
+def _reference_alias(
+    source_block: SourceBlock,
+    display: LongSummaryReferenceDisplaySettings,
+) -> str:
+    components = []
+    if display.label:
+        components.append(display.label)
+    if display.heading == "title":
+        components.append(_safe_heading_alias(source_block.title))
+    elif display.heading == "markdown":
+        components.append(_safe_heading_alias(source_block.markdown_heading))
+    if display.timestamp and source_block.timestamp is not None:
+        components.append(source_block.timestamp)
+    components = [component for component in components if component]
+    if not components:
+        raise SummaryReferenceError(
+            f"display settings produce an empty alias for ^{source_block.identifier}"
+        )
+    return display.separator.join(components)
+
+
+def render_long_summary_reference_display(
+    summary: str,
+    source_markdown: str,
+    display: LongSummaryReferenceDisplaySettings,
+) -> str:
+    """Rewrite validated reference aliases without changing their targets."""
+    source_blocks = collect_source_blocks(source_markdown)
+    lines = summary.splitlines(keepends=True)
+    if not lines and summary:
+        lines = [summary]
+    protected = protected_line_mask(lines, protect_summaries=False)
+    output = []
+
+    for index, line in enumerate(lines):
+        if protected[index] or not line.rstrip("\r\n").startswith("↩ "):
+            output.append(line)
+            continue
+
+        def replace_link(match: re.Match[str]) -> str:
+            identifier = match.group("identifier")
+            source_block = source_blocks.get(identifier)
+            if source_block is None:
+                raise SummaryReferenceError(
+                    f"cannot render unknown source block ^{identifier}"
+                )
+            alias = _reference_alias(source_block, display)
+            return f"[[{match.group('note')}#^{identifier}|{alias}]]"
+
+        output.append(REFERENCE_LINK_RE.sub(replace_link, line))
+
+    return "".join(output)

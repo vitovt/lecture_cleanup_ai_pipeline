@@ -206,10 +206,17 @@ summary:
     # Used only for separate output: <filename><file_suffix>.md.
     # Must be non-empty and must not contain a path separator.
     file_suffix: "-longsummary"
-    # Add a compact source link below every generated ### and #### heading.
-    # Requires both include_src_block_ids and
-    # include_txt_block_ids_for_untimed to be true in the effective config.
-    references: false
+    references:
+      # Add a compact source link below every generated ### and #### heading.
+      # Requires both include_src_block_ids and
+      # include_txt_block_ids_for_untimed to be true in the effective config.
+      enabled: false
+      # Reference aliases are rendered programmatically after AI validation.
+      display:
+        label: "🔗 Source"
+        heading: none                 # none | title | markdown
+        timestamp: true
+        separator: " · "
 
 # Paths to stopword lists (one per language)
 parasites:
