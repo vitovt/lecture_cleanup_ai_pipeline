@@ -4,6 +4,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -61,6 +62,14 @@ EXAMPLE_SCRIPT_MODES = {
     "process_localaudiovideo_via_speechcore_list.sh": "local-speechcore-list",
     "process_multitrack.sh": "multitrack",
 }
+
+YOUTUBE_CONTEXT_SCRIPTS = (
+    "auto_process_youtube.sh",
+    "auto_process_youtube_via_groq.sh",
+    "auto_process_youtube_via_speechcore.sh",
+    "manual_process_youtube.sh",
+)
+YOUTUBE_CONTEXT_PLACEHOLDER = "https://youtu.be/dQw4w9WgXcQ"
 
 
 class ShellHelpTests(unittest.TestCase):
@@ -268,6 +277,46 @@ class ShellHelpTests(unittest.TestCase):
                 )
                 self.assertEqual(result.returncode, 2)
                 self.assertIn("Invalid --resume value", result.stderr)
+
+
+class YoutubeTimecodeContextTests(unittest.TestCase):
+    def test_short_url_context_uses_query_separator_for_timestamp(self) -> None:
+        template = (
+            PROJECT / "prompts/custom_context_general/youtube-url-timecodes.txt"
+        ).read_text(encoding="utf-8")
+        normalized = subprocess.run(
+            [
+                sys.executable,
+                str(PROJECT / "subtitle-utils/normalize_youtube_url.py"),
+                "https://www.youtube.com/watch?v=6gL8fDG9Zo4",
+            ],
+            cwd=PROJECT,
+            text=True,
+            capture_output=True,
+            check=True,
+        ).stdout.strip()
+        rendered = template.replace(YOUTUBE_CONTEXT_PLACEHOLDER, normalized)
+
+        self.assertEqual(normalized, "https://youtu.be/6gL8fDG9Zo4")
+        self.assertIn("https://youtu.be/6gL8fDG9Zo4?t=SECONDS", rendered)
+        self.assertNotIn("https://youtu.be/6gL8fDG9Zo4&t=SECONDS", rendered)
+
+    def test_all_youtube_workflows_replace_the_short_url_placeholder(self) -> None:
+        for relative_path in YOUTUBE_CONTEXT_SCRIPTS:
+            with self.subTest(script=relative_path):
+                content = (PROJECT / relative_path).read_text(encoding="utf-8")
+                self.assertIn(
+                    f'sed "s|{YOUTUBE_CONTEXT_PLACEHOLDER}|$ESCAPED_URL|g"',
+                    content,
+                )
+
+    def test_startme_youtube_groq_delegates_to_checked_workflow(self) -> None:
+        content = (PROJECT / "StartMe.sh").read_text(encoding="utf-8")
+
+        self.assertIn(
+            'youtube-groq) TARGET="$SCRIPT_DIR/auto_process_youtube_via_groq.sh"',
+            content,
+        )
 
 
 class YoutubeLanguageDefaultTests(unittest.TestCase):

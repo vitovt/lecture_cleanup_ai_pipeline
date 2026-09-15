@@ -279,7 +279,7 @@ if [[ -n "$NORMALIZED_URL" ]]; then
 
   # Escape URL for sed replacement
   ESCAPED_URL="$(printf '%s' "$NORMALIZED_URL" | sed -e 's/[\/&]/\\&/g')"
-  sed "s|https://www.youtube.com/watch?v=dQw4w9WgXcQ|$ESCAPED_URL|g" "$TEMPLATE_CTX" > "$TMP_CTX"
+  sed "s|https://youtu.be/dQw4w9WgXcQ|$ESCAPED_URL|g" "$TEMPLATE_CTX" > "$TMP_CTX"
 
   CONTEXT_ARGS+=(--context-file "$TMP_CTX")
 fi

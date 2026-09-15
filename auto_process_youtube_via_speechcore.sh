@@ -371,7 +371,7 @@ TMP_CTX="$(mktemp)"
 ESCAPED_URL=$(printf '%s\n' "$URL" | sed 's/[&/\]/\\&/g')
 
 # Replace the hardcoded URL in the template with the real one
-sed "s|https://www.youtube.com/watch?v=dQw4w9WgXcQ|$ESCAPED_URL|g" "$TEMPLATE_CTX" > "$TMP_CTX"
+sed "s|https://youtu.be/dQw4w9WgXcQ|$ESCAPED_URL|g" "$TEMPLATE_CTX" > "$TMP_CTX"
 
 "$SCRIPT_DIR/lecture_cleanup.sh" --input "$TXT_PATH" --lang="$LANG" --outdir "$OUTDIR" --context-file "$TMP_CTX" --context-file "$SCRIPT_DIR/prompts/custom_context_general/lection-monolog-with-questions.txt" "${CONTEXT_FLAGS[@]}" "${LECTURE_DEBUG_FLAG[@]}" "${LECTURE_CLEANUP_FLAGS[@]}"
 

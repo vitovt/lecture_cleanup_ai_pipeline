@@ -284,7 +284,7 @@ OUT_MD="$OUTDIR/${TXT_FILE%.txt}.md"
 TEMPLATE_CTX="$SCRIPT_DIR/prompts/custom_context_general/youtube-url-timecodes.txt"
 TMP_CTX="$(mktemp)"
 ESCAPED_URL="$(printf '%s' "$URL" | sed 's/[&|]/\\&/g')"
-sed "s|https://www.youtube.com/watch?v=dQw4w9WgXcQ|$ESCAPED_URL|g" "$TEMPLATE_CTX" > "$TMP_CTX"
+sed "s|https://youtu.be/dQw4w9WgXcQ|$ESCAPED_URL|g" "$TEMPLATE_CTX" > "$TMP_CTX"
 LECTURE_LOG_FLAG=()
 LECTURE_LOG_FLAG+=(--log-level "$LOG_LEVEL")
 
