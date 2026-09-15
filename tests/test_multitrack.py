@@ -353,8 +353,7 @@ class PipelineTests(unittest.TestCase):
                         "--cleanup-outdir",
                         str(root / "clean"),
                         "--cleanup-args",
-                        "--summary-mode",
-                        "short",
+                        "--short-summary",
                     ]
                 )
 
@@ -366,7 +365,7 @@ class PipelineTests(unittest.TestCase):
             command = cleanup.call_args.args[0]
             self.assertEqual(command[0], str(PROJECT_ROOT / "lecture_cleanup.sh"))
             self.assertIn(str(workdir / "combined/session.txt"), command)
-            self.assertEqual(command[-2:], ["--summary-mode", "short"])
+            self.assertEqual(command[-1:], ["--short-summary"])
 
 
 if __name__ == "__main__":

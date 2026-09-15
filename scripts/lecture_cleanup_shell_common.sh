@@ -27,7 +27,7 @@ lecture_cleanup_add_flag_option() {
 lecture_cleanup_parse_option() {
     LECTURE_CLEANUP_OPTION_SHIFT=0
     case "$1" in
-        --qc-report|--glossary|--txt-chunk-chars|--txt-overlap-chars|--llm-provider|--request-delay|--retry-attempts|--summary-mode|--summary-output|--long-summary-lang|--chunks|--use-context-overlap|--log-level)
+        --qc-report|--glossary|--txt-chunk-chars|--txt-overlap-chars|--llm-provider|--request-delay|--retry-attempts|--short-summary-output|--long-summary-output|--short-summary-file-suffix|--long-summary-file-suffix|--long-summary-lang|--chunks|--use-context-overlap|--log-level)
             lecture_cleanup_add_value_option "$1" "${2:-}" || return $?
             LECTURE_CLEANUP_OPTION_SHIFT=2
             ;;
@@ -35,7 +35,9 @@ lecture_cleanup_parse_option() {
         --include-timecodes-below-headings|--no-include-timecodes-below-headings|\
         --include-src-block-ids|--no-include-src-block-ids|\
         --include-txt-block-ids-for-untimed|--no-include-txt-block-ids-for-untimed|\
-        --process-timecodes-by-ai|--no-process-timecodes-by-ai|--trace)
+        --process-timecodes-by-ai|--no-process-timecodes-by-ai|\
+        --short-summary|--no-short-summary|--long-summary|--no-long-summary|\
+        --long-summary-references|--no-long-summary-references|--trace)
             lecture_cleanup_add_flag_option "$1"
             LECTURE_CLEANUP_OPTION_SHIFT=1
             ;;
@@ -56,9 +58,17 @@ Forwarded lecture cleanup options:
   --llm-provider NAME           Override the cleanup LLM provider
   --request-delay SECONDS       Delay between cleanup LLM requests
   --retry-attempts N            Maximum cleanup request attempts
-  --summary-mode MODE           Summaries: disabled|short|long|both
-  --summary-output MODE         Summary destination: append|separate
+  --short-summary               Enable short-summary generation
+  --no-short-summary            Disable short-summary generation
+  --long-summary                Enable long-summary generation
+  --no-long-summary             Disable long-summary generation
+  --short-summary-output MODE   Short-summary destination: append|separate
+  --long-summary-output MODE    Long-summary destination: append|separate
+  --short-summary-file-suffix S Suffix for a separate short-summary file
+  --long-summary-file-suffix S  Suffix for a separate long-summary file
   --long-summary-lang LANG      Long-summary language: default or ISO code
+  --long-summary-references     Add source links to long-summary sections
+  --no-long-summary-references  Disable long-summary source links
   --chunks SPEC                 Process selected cleanup chunks, e.g. 1,3,7-9
   --use-context-overlap MODE    Overlap source: raw|cleaned|none
   --include-timecodes           Append timecodes to headings when available

@@ -24,6 +24,15 @@ from scripts.logging_helper import (
     log_trace,
     log_trace_block,
 )
+from scripts.summary_references import validate_long_summary_references
+from scripts.summary_settings import (
+    SUMMARY_OUTPUTS,
+    LongSummarySettings,
+    ShortSummarySettings,
+    SummarySettings,
+    resolve_summary_settings as _resolve_summary_settings,
+    validate_summary_reference_dependencies as _validate_summary_reference_dependencies,
+)
 
 from scripts.utils import (
     add_timecodes_to_headings,
@@ -42,8 +51,6 @@ from scripts.utils import (
     rebalance_two_chunk_small_tail,
 )
 
-SUMMARY_MODES = ("disabled", "short", "long", "both")
-SUMMARY_OUTPUTS = ("append", "separate")
 LONG_SUMMARY_START = "<!-- LECTURE_CLEANUP_LONG_SUMMARY_START -->"
 LONG_SUMMARY_END = "<!-- LECTURE_CLEANUP_LONG_SUMMARY_END -->"
 SHORT_SUMMARY_START = "<!-- LECTURE_CLEANUP_SHORT_SUMMARY_START -->"
@@ -289,7 +296,11 @@ def call_llm(
         log_trace(f"LLM response END{trace_label}")
     return out_text
 
-def _load_summary_prompt(summary_type: str, summary_lang: str) -> Tuple[str, str]:
+def _load_summary_prompt(
+    summary_type: str,
+    summary_lang: str,
+    source_link_prefix: Optional[str] = None,
+) -> Tuple[str, str]:
     if summary_type not in ("short", "long"):
         raise ValueError(f"Unsupported summary type: {summary_type}")
     base = Path(__file__).parent.parent
@@ -305,6 +316,18 @@ def _load_summary_prompt(summary_type: str, summary_lang: str) -> Tuple[str, str
         summary_user_content = summary_user_content.replace(
             "{SUMMARY_LANGUAGE}", summary_lang
         )
+        if source_link_prefix is not None:
+            references_path = base / "prompts" / "long_summary_references.md"
+            references_content = references_path.read_text(encoding="utf-8")
+            references_content = references_content.replace(
+                "{SOURCE_LINK_PREFIX}", source_link_prefix
+            )
+            summary_system_content = (
+                summary_system_content.rstrip()
+                + "\n\n"
+                + references_content.strip()
+                + "\n"
+            )
     return summary_system_content, summary_user_content
 
 
@@ -358,8 +381,13 @@ def call_llm_summary(
     label: str = None,
     summary_type: str = "short",
     summary_lang: str = "",
+    source_link_prefix: Optional[str] = None,
 ) -> str:
-    system_content, user_content = _load_summary_prompt(summary_type, summary_lang)
+    system_content, user_content = _load_summary_prompt(
+        summary_type,
+        summary_lang,
+        source_link_prefix,
+    )
     return _call_summary_request(
         adapter,
         model,
@@ -412,8 +440,13 @@ def call_llm_combined_summaries(
     debug: bool = False,
     trace: bool = False,
     label: str = None,
+    source_link_prefix: Optional[str] = None,
 ) -> Dict[str, str]:
-    long_system, long_user = _load_summary_prompt("long", long_summary_lang)
+    long_system, long_user = _load_summary_prompt(
+        "long",
+        long_summary_lang,
+        source_link_prefix,
+    )
     short_system, short_user = _load_summary_prompt("short", long_summary_lang)
     system_content = f"""Complete two independent summarization tasks in one response.
 
@@ -457,55 +490,19 @@ Return the long summary first and the short summary second. Output exactly these
     return _parse_combined_summaries(response)
 
 
-def _resolve_summary_settings(
-    cfg: Dict,
-    lecture_lang: str,
-    cli_mode: Optional[str] = None,
-    cli_output: Optional[str] = None,
-    cli_long_lang: Optional[str] = None,
-) -> Tuple[str, str, str]:
-    configured_mode = str(cfg.get("summary_mode", "disabled")).strip().lower()
-    mode = cli_mode or configured_mode
-    legacy_append_summary = cfg.get("append_summary")
-    if legacy_append_summary is False:
-        mode = "disabled"
-    elif legacy_append_summary is True and cli_mode is None and mode == "disabled":
-        mode = "short"
-    if mode not in SUMMARY_MODES:
-        raise ValueError(
-            f"Unknown summary_mode='{mode}'; expected one of: {', '.join(SUMMARY_MODES)}"
-        )
-
-    output = cli_output or str(cfg.get("summary_output", "append")).strip().lower()
-    if output not in SUMMARY_OUTPUTS:
-        raise ValueError(
-            f"Unknown summary_output='{output}'; expected one of: {', '.join(SUMMARY_OUTPUTS)}"
-        )
-
-    configured_long_lang = str(cfg.get("long_summary_lang", "default")).strip().lower()
-    requested_long_lang = cli_long_lang or configured_long_lang
-    long_lang = lecture_lang if requested_long_lang == "default" else requested_long_lang
-    if not re.fullmatch(r"[a-z]{2}", long_lang):
-        raise ValueError(
-            "long_summary_lang must be 'default' or a two-letter ISO-639-1 code"
-        )
-    return mode, output, long_lang
-
-
 def _append_summaries(
     full_markdown: str,
     summaries: Dict[str, str],
-    short_heading: str,
-    long_heading: str,
+    settings: SummarySettings,
 ) -> str:
     sections = []
-    if summaries.get("long", "").strip():
+    if summaries.get("long", "").strip() and settings.long.output == "append":
         sections.append(
-            _summary_block("long", summaries["long"], long_heading)
+            _summary_block("long", summaries["long"], settings.long.heading)
         )
-    if summaries.get("short", "").strip():
+    if summaries.get("short", "").strip() and settings.short.output == "append":
         sections.append(
-            _summary_block("short", summaries["short"], short_heading)
+            _summary_block("short", summaries["short"], settings.short.heading)
         )
     if not sections:
         return full_markdown
@@ -530,21 +527,24 @@ def _write_separate_summaries(
     outdir: Path,
     filename_stem: str,
     summaries: Dict[str, str],
-    short_heading: str,
-    long_heading: str,
+    settings: SummarySettings,
 ) -> List[Path]:
     paths = []
-    if summaries.get("long", "").strip():
-        long_summary_path = outdir / f"{filename_stem}-longsummary.md"
+    if summaries.get("long", "").strip() and settings.long.output == "separate":
+        long_summary_path = outdir / (
+            f"{filename_stem}{settings.long.file_suffix}.md"
+        )
         long_summary_path.write_text(
-            _standalone_summary("long", summaries["long"], long_heading),
+            _standalone_summary("long", summaries["long"], settings.long.heading),
             encoding="utf-8",
         )
         paths.append(long_summary_path)
-    if summaries.get("short", "").strip():
-        short_summary_path = outdir / f"{filename_stem}-summary.md"
+    if summaries.get("short", "").strip() and settings.short.output == "separate":
+        short_summary_path = outdir / (
+            f"{filename_stem}{settings.short.file_suffix}.md"
+        )
         short_summary_path.write_text(
-            _standalone_summary("short", summaries["short"], short_heading),
+            _standalone_summary("short", summaries["short"], settings.short.heading),
             encoding="utf-8",
         )
         paths.append(short_summary_path)
@@ -589,23 +589,74 @@ def main() -> int:
     ap.add_argument("--llm-provider", default=None, help="Override LLM provider: openai|gemini|kie|evolink|groq|deepseek|dummy|...")
     ap.add_argument("--request-delay", type=float, default=None, help="Delay in seconds between LLM requests (0 = no delay)")
     ap.add_argument("--retry-attempts", type=int, default=None, help="Retry failed LLM requests up to N times (1 = no retry)")
-    ap.add_argument(
-        "--summary-mode",
-        choices=SUMMARY_MODES,
-        default=None,
-        help="Summary generation: disabled|short|long|both",
+    short_summary_group = ap.add_mutually_exclusive_group()
+    short_summary_group.add_argument(
+        "--short-summary",
+        dest="short_summary_enabled",
+        action="store_true",
+        help="Enable short-summary generation",
     )
+    short_summary_group.add_argument(
+        "--no-short-summary",
+        dest="short_summary_enabled",
+        action="store_false",
+        help="Disable short-summary generation",
+    )
+    long_summary_group = ap.add_mutually_exclusive_group()
+    long_summary_group.add_argument(
+        "--long-summary",
+        dest="long_summary_enabled",
+        action="store_true",
+        help="Enable long-summary generation",
+    )
+    long_summary_group.add_argument(
+        "--no-long-summary",
+        dest="long_summary_enabled",
+        action="store_false",
+        help="Disable long-summary generation",
+    )
+    ap.set_defaults(short_summary_enabled=None, long_summary_enabled=None)
     ap.add_argument(
-        "--summary-output",
+        "--short-summary-output",
         choices=SUMMARY_OUTPUTS,
         default=None,
-        help="Summary destination: append|separate",
+        help="Short-summary destination: append|separate",
+    )
+    ap.add_argument(
+        "--long-summary-output",
+        choices=SUMMARY_OUTPUTS,
+        default=None,
+        help="Long-summary destination: append|separate",
+    )
+    ap.add_argument(
+        "--short-summary-file-suffix",
+        default=None,
+        help="Suffix for a separate short-summary filename",
+    )
+    ap.add_argument(
+        "--long-summary-file-suffix",
+        default=None,
+        help="Suffix for a separate long-summary filename",
     )
     ap.add_argument(
         "--long-summary-lang",
         default=None,
         help="Long-summary language: default or a two-letter ISO-639-1 code",
     )
+    long_references_group = ap.add_mutually_exclusive_group()
+    long_references_group.add_argument(
+        "--long-summary-references",
+        dest="long_summary_references",
+        action="store_true",
+        help="Add source block references to long-summary sections",
+    )
+    long_references_group.add_argument(
+        "--no-long-summary-references",
+        dest="long_summary_references",
+        action="store_false",
+        help="Do not add source references to the long summary",
+    )
+    long_references_group.set_defaults(long_summary_references=None)
     ap.add_argument("--chunks", type=str, default=None, help="Process only specified chunks, e.g. '1,3,7-9' (1-based indices)")
     ap.add_argument("--use-context-overlap", dest="use_context_overlap", choices=["raw","cleaned","none"], help="Source of overlap: raw ASR tail, cleaned previous tail, or none")
     # Per-input context files (user-level context). Can be passed multiple times; concatenated in order.
@@ -752,13 +803,28 @@ def main() -> int:
     lang = args.lang
     if args.long_summary_lang:
         args.long_summary_lang = args.long_summary_lang.strip().lower()
+    include_timecodes = bool(cfg.get("include_timecodes_in_headings", True))
+    include_timecodes_below = bool(cfg.get("include_timecodes_below_headings", False))
+    include_src_block_ids = bool(cfg.get("include_src_block_ids", False))
+    include_txt_block_ids = bool(cfg.get("include_txt_block_ids_for_untimed", False))
+    process_timecodes_by_ai = bool(cfg.get("process_timecodes_by_ai", False))
     try:
-        summary_mode, summary_output, long_summary_lang = _resolve_summary_settings(
+        summary_settings = _resolve_summary_settings(
             cfg,
             lang,
-            cli_mode=args.summary_mode,
-            cli_output=args.summary_output,
+            cli_short_enabled=args.short_summary_enabled,
+            cli_long_enabled=args.long_summary_enabled,
+            cli_short_output=args.short_summary_output,
+            cli_long_output=args.long_summary_output,
+            cli_short_suffix=args.short_summary_file_suffix,
+            cli_long_suffix=args.long_summary_file_suffix,
             cli_long_lang=args.long_summary_lang,
+            cli_long_references=args.long_summary_references,
+        )
+        _validate_summary_reference_dependencies(
+            summary_settings,
+            include_src_block_ids=include_src_block_ids,
+            include_txt_block_ids_for_untimed=include_txt_block_ids,
         )
     except ValueError as exc:
         log_error(str(exc))
@@ -795,11 +861,6 @@ def main() -> int:
     if args.retry_attempts is not None:
         attempts = max(1, int(args.retry_attempts))
     pause_between_attempts = float(cfg_retry_provider.get("pause_seconds", cfg_retry_global.get("pause_seconds", 0.0)) or 0.0)
-    include_timecodes = bool(cfg.get("include_timecodes_in_headings", True))
-    include_timecodes_below = bool(cfg.get("include_timecodes_below_headings", False))
-    include_src_block_ids = bool(cfg.get("include_src_block_ids", False))
-    include_txt_block_ids = bool(cfg.get("include_txt_block_ids_for_untimed", False))
-    process_timecodes_by_ai = bool(cfg.get("process_timecodes_by_ai", False))
     reference_options = HeadingReferenceOptions(
         include_inline=include_timecodes,
         include_below=include_timecodes_below,
@@ -831,8 +892,13 @@ def main() -> int:
         log_debug(f"Chunking -> rebalance_small_tail_chunks={rebalance_small_tail_chunks}")
         log_debug(f"Content mode -> {content_mode}; suppress_edit_comments={suppress_edit_comments}")
         log_debug(
-            f"Summary -> mode={summary_mode}, output={summary_output}, "
-            f"long_summary_lang={long_summary_lang}"
+            "Summary -> "
+            f"short={summary_settings.short.enabled}/"
+            f"{summary_settings.short.output}, "
+            f"long={summary_settings.long.enabled}/"
+            f"{summary_settings.long.output}, "
+            f"long_lang={summary_settings.long.lang}, "
+            f"references={summary_settings.long.references}"
         )
 
     # Load parasites for the language
@@ -1230,8 +1296,13 @@ def main() -> int:
 
     # Generate summaries only when all chunks succeeded.
     summaries: Dict[str, str] = {}
-    if summary_mode != "disabled" and fail_count == 0:
-        summary_label = "both summaries" if summary_mode == "both" else f"{summary_mode} summary"
+    enabled_summary_types = summary_settings.enabled_types()
+    if enabled_summary_types and fail_count == 0:
+        summary_label = (
+            "both summaries"
+            if len(enabled_summary_types) == 2
+            else f"{enabled_summary_types[0]} summary"
+        )
         log_info(f"Generating {summary_label}…")
         attempt_i = 1
         while attempt_i <= attempts:
@@ -1242,34 +1313,55 @@ def main() -> int:
                         log_debug(f"Sleeping {request_delay}s before summary request")
                     time.sleep(request_delay)
                 summary_source = strip_edit_comments(full_markdown)
-                if summary_mode == "both":
+                source_note = (
+                    ""
+                    if summary_settings.long.output == "append"
+                    else in_path.stem
+                )
+                source_link_prefix = (
+                    (source_note + "#")
+                    if summary_settings.long.references
+                    else None
+                )
+                if len(enabled_summary_types) == 2:
                     summaries = call_llm_combined_summaries(
                         adapter,
                         model,
                         summary_source,
-                        long_summary_lang,
+                        summary_settings.long.lang,
                         temperature=temperature,
                         top_p=top_p,
                         debug=debug,
                         trace=trace,
                         label=f"both summaries (attempt {attempt_i}/{attempts})",
+                        source_link_prefix=source_link_prefix,
                     )
                 else:
+                    summary_type = enabled_summary_types[0]
                     summary = call_llm_summary(
                         adapter,
                         model,
                         summary_source,
-                        summary_type=summary_mode,
-                        summary_lang=long_summary_lang,
+                        summary_type=summary_type,
+                        summary_lang=summary_settings.long.lang,
                         temperature=temperature,
                         top_p=top_p,
                         debug=debug,
                         trace=trace,
-                        label=f"{summary_mode} summary (attempt {attempt_i}/{attempts})",
+                        label=f"{summary_type} summary (attempt {attempt_i}/{attempts})",
+                        source_link_prefix=(
+                            source_link_prefix if summary_type == "long" else None
+                        ),
                     )
                     if not (summary or "").strip():
-                        raise RuntimeError(f"Empty response text ({summary_mode} summary)")
-                    summaries = {summary_mode: summary.strip()}
+                        raise RuntimeError(f"Empty response text ({summary_type} summary)")
+                    summaries = {summary_type: summary.strip()}
+                if summary_settings.long.references and "long" in summaries:
+                    validate_long_summary_references(
+                        summaries["long"],
+                        summary_source,
+                        source_note=source_note,
+                    )
                 break
             except Exception as e:
                 provider_name = adapter.name()
@@ -1299,20 +1391,20 @@ def main() -> int:
                     log_error(f"{provider_name} summary generation failed (attempt {attempt_i}/{attempts}): {e}")
                     summaries = {}
                     break
-        if summaries and summary_output == "append":
-            short_heading = cfg.get("summary_heading", "## Non-authorial AI generated summary")
-            long_heading = cfg.get("long_summary_heading", "## Detailed AI generated summary")
+        if summaries:
             full_markdown = _append_summaries(
                 full_markdown,
                 summaries,
-                short_heading,
-                long_heading,
+                summary_settings,
             )
-        elif summaries:
-            log_info("Summaries will be written to separate Markdown files.")
+            if any(
+                getattr(summary_settings, summary_type).output == "separate"
+                for summary_type in summaries
+            ):
+                log_info("Separate summaries will be written to Markdown files.")
         else:
             log_warn("Summary generation returned empty output.")
-    elif summary_mode != "disabled" and fail_count > 0:
+    elif enabled_summary_types and fail_count > 0:
         log_warn(f"Skipping summaries because {fail_count} chunk(s) failed.")
 
     # Append info comments if not suppressed
@@ -1334,15 +1426,12 @@ def main() -> int:
     if write_markdown:
         outfile_md.write_text(full_markdown, encoding="utf-8")
     summary_paths: List[Path] = []
-    if write_markdown and summaries and summary_output == "separate":
-        short_heading = cfg.get("summary_heading", "## Non-authorial AI generated summary")
-        long_heading = cfg.get("long_summary_heading", "## Detailed AI generated summary")
+    if write_markdown and summaries:
         summary_paths = _write_separate_summaries(
             outdir,
             in_path.stem,
             summaries,
-            short_heading,
-            long_heading,
+            summary_settings,
         )
     # QC report
     qc_path = None

@@ -186,22 +186,30 @@ highlight_asides_style: italic
 # !!!      Warning      !!! #
 # High token usage          #
 ############################# 
-# The full result Markdown is sent to the model to produce summaries.
-# Summary generation mode: disabled, short, long, or both.
-# "both" generates the long and short summaries in one optimized LLM request.
-summary_mode: disabled
-# Summary output: "append" to the main Markdown, or write "separate" sibling files.
-# Separate files use <filename>-summary.md and <filename>-longsummary.md.
-summary_output: append
-# Long-summary language: default follows --lang; otherwise use a two-letter
-# ISO-639-1 code such as uk, en, de, ru, pl, or es.
-long_summary_lang: default
-# Deprecated compatibility switch. When present, false disables all summaries,
-# regardless of summary_mode. Legacy true enables a short summary when
-# summary_mode is disabled. Prefer summary_mode for new configurations.
-# append_summary: false
-summary_heading: "## Summary (не авторський)"
-long_summary_heading: "## Long summary (не авторський)"
+# The full result Markdown is sent to the model to produce enabled summaries.
+# When both types are enabled, they are generated in one optimized LLM request.
+summary:
+  short:
+    enabled: false
+    heading: "## Summary (не авторський)"
+    output: append                    # append | separate
+    # Used only for separate output: <filename><file_suffix>.md.
+    # Must be non-empty and must not contain a path separator.
+    file_suffix: "-summary"
+
+  long:
+    enabled: false
+    heading: "## Long summary (не авторський)"
+    # default follows --lang; otherwise use a two-letter ISO-639-1 code.
+    lang: default
+    output: append                    # append | separate
+    # Used only for separate output: <filename><file_suffix>.md.
+    # Must be non-empty and must not contain a path separator.
+    file_suffix: "-longsummary"
+    # Add a compact source link below every generated ### and #### heading.
+    # Requires both include_src_block_ids and
+    # include_txt_block_ids_for_untimed to be true in the effective config.
+    references: false
 
 # Paths to stopword lists (one per language)
 parasites:

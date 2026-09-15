@@ -12,9 +12,6 @@ import yaml
 from config_loader import deep_merge, load_default_and_local
 
 
-DEPRECATED_COMPAT_PATHS = {"append_summary"}
-
-
 def _path_to_str(path: Tuple[str, ...]) -> str:
     return ".".join(path)
 
@@ -109,10 +106,9 @@ def _collect_diffs(
                         added_local.append(
                             {"path": path_str, "value": leaf_val}
                         )
-                        if path_str not in DEPRECATED_COMPAT_PATHS:
-                            stale_local.append(
-                                {"path": path_str, "value": leaf_val}
-                            )
+                        stale_local.append(
+                            {"path": path_str, "value": leaf_val}
+                        )
         else:
             if dv != lv:
                 label = "changed(list)" if isinstance(dv, list) or isinstance(lv, list) else "changed"
