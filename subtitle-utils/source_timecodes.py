@@ -210,7 +210,7 @@ def parse_label(value: str, line_number: int, issues: list[Issue]) -> Optional[i
         return None
 
 
-def youtube_base_url(value: str) -> tuple[str, str]:
+def parse_youtube_url(value: str) -> tuple[str, str, list[tuple[str, str]]]:
     try:
         parsed = urlsplit(value.strip())
     except ValueError as exc:
@@ -222,11 +222,23 @@ def youtube_base_url(value: str) -> tuple[str, str]:
         raise ValueError(f"unsupported video host: {host or '<empty>'}")
 
     path = parsed.path.rstrip("/")
+    base_path = parsed.path
     query = list(parse_qsl(parsed.query, keep_blank_values=True))
-    query_map = dict(query)
     if host in ("youtu.be", "www.youtu.be"):
-        video_id = path.lstrip("/").split("/", 1)[0]
+        path_parts = path.lstrip("/").split("/", 1)
+        short_path = path_parts[0]
+        if "&" in short_path:
+            # Older pipeline output used youtu.be/ID&t=SECONDS.  Although the
+            # timestamp is technically part of the URL path, treat the suffix
+            # as a query string so existing documents remain valid input.
+            video_id, legacy_query = short_path.split("&", 1)
+            query = list(parse_qsl(legacy_query, keep_blank_values=True)) + query
+            path_suffix = f"/{path_parts[1]}" if len(path_parts) == 2 else ""
+            base_path = f"/{video_id}{path_suffix}"
+        else:
+            video_id = short_path
     elif path == "/watch":
+        query_map = dict(query)
         video_id = query_map.get("v", "")
     elif path.startswith(("/shorts/", "/live/", "/embed/", "/v/")):
         parts = path.split("/", 2)
@@ -242,9 +254,14 @@ def youtube_base_url(value: str) -> tuple[str, str]:
         if key.lower() not in ("t", "start", "time_continue")
     ]
     base = urlunsplit(
-        (parsed.scheme, parsed.netloc, parsed.path, urlencode(cleaned_query, doseq=True), "")
+        (parsed.scheme, parsed.netloc, base_path, urlencode(cleaned_query, doseq=True), "")
     )
-    return video_id, base
+    return video_id, base, query
+
+
+def youtube_base_url(value: str) -> tuple[str, str]:
+    video_id, base_url, _ = parse_youtube_url(value)
+    return video_id, base_url
 
 
 def timestamp_url(base_url: str, seconds: int) -> str:
@@ -276,16 +293,14 @@ def parse_target(raw: Optional[str], line_number: int, issues: list[Issue]) -> T
         return TargetInfo(raw=value, seconds=seconds)
 
     try:
-        video_id, base_url = youtube_base_url(value)
+        video_id, base_url, query = parse_youtube_url(value)
     except ValueError as exc:
         issues.append(Issue("malformed_video_url", line_number, str(exc)))
         return TargetInfo(raw=value)
 
-    parsed = urlsplit(value)
-    query = dict(parse_qsl(parsed.query, keep_blank_values=True))
     timing_values = [
-        query[key]
-        for key in query
+        val
+        for key, val in query
         if key.lower() in ("t", "start", "time_continue")
     ]
     if not timing_values:

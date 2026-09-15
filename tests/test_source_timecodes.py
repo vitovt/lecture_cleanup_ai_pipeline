@@ -199,6 +199,41 @@ class SourceTimecodesCliTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0)
         self.assertIn("formats=I url=complete", result.stdout)
 
+    def test_legacy_short_youtube_timestamps_are_recognized(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = self.write_markdown(
+                directory,
+                "### First [00:00:09](https://youtu.be/d3uPlWyiBNg&t=9s)\n\n"
+                "### Second [00:17:38](https://youtu.be/d3uPlWyiBNg&t=1058s)\n",
+            )
+
+            result = self.run_tool(path)
+
+        self.assertEqual(result.returncode, 0)
+        self.assertEqual(
+            result.stdout,
+            "LEGEND I=inline B=below S=src\n"
+            "ANALYZE status=ok formats=I url=complete\n",
+        )
+        self.assertEqual(result.stderr, "")
+
+    def test_added_marker_canonicalizes_legacy_short_youtube_url(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = self.write_markdown(
+                directory,
+                "### First [00:01:00](https://youtu.be/abc&t=60s)\n",
+            )
+
+            transformed = self.run_tool("transform", path, "--add-below")
+            converted = self.write_markdown(directory, transformed.stdout, "converted.md")
+            analyzed = self.run_tool(converted)
+
+        self.assertEqual(transformed.returncode, 0)
+        self.assertIn("[00:01:00](https://youtu.be/abc&t=60s)", transformed.stdout)
+        self.assertIn("[🎥 00:01:00](https://youtu.be/abc?t=60s)", transformed.stdout)
+        self.assertEqual(analyzed.returncode, 0)
+        self.assertIn("formats=I+B url=complete", analyzed.stdout)
+
     def test_set_url_requires_inline_or_below_carrier(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             path = self.write_markdown(directory, "### Only source ID ^src-60\n")
