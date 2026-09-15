@@ -190,9 +190,12 @@ Diese Parameter werden über die `.sh`-Skripte an `scripts/run_pipeline.py` übe
 * `--request-delay <Sekunden>` — Verzögerung zwischen LLM-Anfragen (0 = aus)
 * `--chunks <Spezifikation>` — nur bestimmte Blöcke verarbeiten; z. B. `1,3,7-9,23` (1-basiert)
 * `--retry-attempts <N>` — fehlgeschlagene LLM-Anfragen bis zu N‑mal erneut versuchen (1 = kein Retry)
-* `--summary-mode {disabled,short,long,both}` — Zusammenfassungstypen auswählen; `both` verwendet eine optimierte LLM-Anfrage
-* `--summary-output {append,separate}` — Zusammenfassungen anhängen oder in benachbarte Dateien schreiben
+* `--short-summary` / `--no-short-summary` — kurze Zusammenfassung aktivieren oder deaktivieren
+* `--long-summary` / `--no-long-summary` — lange Zusammenfassung aktivieren oder deaktivieren; beide Typen gemeinsam verwenden weiterhin nur eine optimierte LLM-Anfrage
+* `--short-summary-output {append,separate}` / `--long-summary-output {append,separate}` — jede Zusammenfassung unabhängig anhängen oder in eine benachbarte Datei schreiben
+* `--short-summary-file-suffix <SUFFIX>` / `--long-summary-file-suffix <SUFFIX>` — nicht leere Dateinamenssuffixe für separate Zusammenfassungen
 * `--long-summary-lang <default|CODE>` — Vorlesungssprache verwenden oder mit einem ISO-639-1-Code überschreiben
+* `--long-summary-references` / `--no-long-summary-references` — validierte Obsidian-Quellenlinks in der langen Zusammenfassung aktivieren oder deaktivieren
 * `--context-file <Pfad>` — Datei mit dateispezifischem Kontext; wird im USER‑Prompt direkt nach dem allgemeinen Satz „Context“ eingefügt (gilt für alle Blöcke). Mehrfach nutzbar; Inhalte werden in Reihenfolge zusammengefügt.
 
 **Beispiele**
@@ -257,11 +260,12 @@ Allgemein
   * `creativeeditoral_technical`: redaktionelle Bereinigung mit konsistenter Formatierung von Code und technischen Bezeichnern sowie technischen Callouts für Korrekturen, Sicherheitsrisiken, Best Practices und Produktionseinschränkungen
 * `suppress_edit_comments`: entfernt HTML-Kommentare im finalen Markdown
 * `highlight_asides_style`: `italic` oder `blockquote` für Randbemerkungen/Witze
-* `summary_mode`: `disabled`, `short`, `long` oder `both`; im getrackten Standard deaktiviert
-* `summary_output`: `append` oder `separate`; separate Dateien liegen neben dem Haupt-Markdown
-* `long_summary_lang`: `default` folgt der Vorlesungssprache, alternativ ein zweistelliger ISO-639-1-Code
-* `summary_heading` / `long_summary_heading`: Überschriften für kurze und lange Zusammenfassungen
-* `append_summary`: veralteter Kompatibilitätsschalter; `false` deaktiviert alle Zusammenfassungen
+* `summary.short.enabled` / `summary.long.enabled`: kurze und lange Zusammenfassung unabhängig aktivieren; gemeinsam verwenden sie eine LLM-Anfrage
+* `summary.short.output` / `summary.long.output`: unabhängige Ausgabe als `append` oder `separate`
+* `summary.short.file_suffix` / `summary.long.file_suffix`: nicht leeres sicheres Suffix für separate Dateien; Standardwerte sind `-summary` und `-longsummary`
+* `summary.short.heading` / `summary.long.heading`: Überschriften für kurze und lange Zusammenfassungen
+* `summary.long.lang`: `default` folgt der Vorlesungssprache, alternativ ein zweistelliger ISO-639-1-Code
+* `summary.long.references`: fügt unter jedem `###`/`####` einen validierten Link auf `^src-*` oder `^txt-*` ein; erfordert `include_src_block_ids: true` und `include_txt_block_ids_for_untimed: true`
 * `parasites`: Pfade zu Füllwortlisten je Sprache
 * `llm.request_delay_seconds`: Verzögerung zwischen LLM-Anfragen (Sekunden); hilft gegen Rate Limits; 0 = aus
 * `retry.attempts`: globale Standardanzahl an Versuchen (1 = kein Retry)

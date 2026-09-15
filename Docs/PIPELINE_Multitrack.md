@@ -32,9 +32,9 @@ with `--workdir` and `--outdir`. Use `--name` for the combined basename and
 not resolve to one common cleanup language. `--overwrite` retranscribes;
 without it valid existing event files are reused.
 
-Cleanup options such as `--summary-mode`, `--context-file`, `--llm-provider`,
-and `--include-timecodes` are validated by the wrapper before transcription and
-forwarded to the final cleanup stage.
+Cleanup options such as `--short-summary`, `--long-summary`, `--context-file`,
+`--llm-provider`, and `--include-timecodes` are validated by the wrapper before
+transcription and forwarded to the final cleanup stage.
 
 The standalone stages are documented in [TOOL_TranscribeTracks.md](TOOL_TranscribeTracks.md)
 and [TOOL_MergeTranscripts.md](TOOL_MergeTranscripts.md).

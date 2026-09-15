@@ -187,9 +187,12 @@ These flags are passed to `scripts/run_pipeline.py` via the `.sh` wrappers.
 * `--request-delay <seconds>` — delay between LLM requests (0 disables)
 * `--chunks <spec>` — process only specific chunks; spec example: `1,3,7-9,23` (1-based indices)
 * `--retry-attempts <N>` — retry failed LLM requests up to N times (1 = no retry)
-* `--summary-mode {disabled,short,long,both}` — choose which summaries to generate; `both` uses one optimized LLM request
-* `--summary-output {append,separate}` — append summaries to the main Markdown or write sibling files
+* `--short-summary` / `--no-short-summary` — enable or disable the short summary
+* `--long-summary` / `--no-long-summary` — enable or disable the long summary; enabling both types still uses one optimized LLM request
+* `--short-summary-output {append,separate}` / `--long-summary-output {append,separate}` — independently append each summary or write it to a sibling file
+* `--short-summary-file-suffix <SUFFIX>` / `--long-summary-file-suffix <SUFFIX>` — non-empty filename suffixes for separate summaries
 * `--long-summary-lang <default|CODE>` — use the lecture language for the long summary or override it with an ISO-639-1 code
+* `--long-summary-references` / `--no-long-summary-references` — enable or disable validated Obsidian source links in the long summary
 * `--context-file <path>` — file with per-input context inserted into the USER prompt right after the generic "Context" sentence (affects all chunks). Can be passed multiple times; blocks are concatenated in order.
 
 **Examples**
@@ -254,11 +257,12 @@ General
   * `creativeeditoral_technical`: editorial cleanup with consistent formatting for code and technical identifiers, plus technical callouts for corrections, security risks, best practices, and production limitations
 * `suppress_edit_comments`: remove HTML comments from final Markdown
 * `highlight_asides_style`: `italic` or `blockquote` for asides/jokes
-* `summary_mode`: `disabled`, `short`, `long`, or `both`; the tracked default remains disabled
-* `summary_output`: `append` or `separate`; separate files are written beside the main Markdown
-* `long_summary_lang`: `default` follows the lecture language, or a two-letter ISO-639-1 override
-* `summary_heading` / `long_summary_heading`: headings for short and long summaries
-* `append_summary`: deprecated compatibility switch; `false` disables every summary mode
+* `summary.short.enabled` / `summary.long.enabled`: independently enable short and long summaries; when both are enabled they share one LLM request
+* `summary.short.output` / `summary.long.output`: independent `append` or `separate` output for each summary
+* `summary.short.file_suffix` / `summary.long.file_suffix`: non-empty safe suffix for a separate file; defaults are `-summary` and `-longsummary`
+* `summary.short.heading` / `summary.long.heading`: headings for short and long summaries
+* `summary.long.lang`: `default` follows the lecture language, or use a two-letter ISO-639-1 override
+* `summary.long.references`: add a validated `^src-*` or `^txt-*` link below every `###`/`####`; requires both `include_src_block_ids: true` and `include_txt_block_ids_for_untimed: true`
 * `parasites`: paths to filler-word lists by language
 * `llm.request_delay_seconds`: delay between LLM requests (seconds); helps avoid rate limits; 0 disables
 * `retry.attempts`: global default retry attempts (1 = no retry)

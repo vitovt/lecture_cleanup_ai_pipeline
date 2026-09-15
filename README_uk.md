@@ -176,9 +176,12 @@ YouTube, бо цей код потрібен для імені результа�
 - `--request-delay <секунди>`: пауза між LLM-запитами (0 вимикає).
 - `--chunks <список>`: обробити лише вказані блоки; приклад: `1,3,7-9,23` (нумерація з 1)
 - `--retry-attempts <N>`: повторювати невдалі LLM-запити до N разів (1 = без повторів)
-- `--summary-mode {disabled,short,long,both}`: вибрати типи підсумків; `both` використовує один оптимізований LLM-запит.
-- `--summary-output {append,separate}`: додати підсумки до основного Markdown або записати в сусідні файли.
+- `--short-summary` / `--no-short-summary`: увімкнути або вимкнути короткий підсумок.
+- `--long-summary` / `--no-long-summary`: увімкнути або вимкнути довгий підсумок; якщо ввімкнено обидва типи, використовується один оптимізований LLM-запит.
+- `--short-summary-output {append,separate}` / `--long-summary-output {append,separate}`: незалежно додати кожен підсумок до основного Markdown або записати його в сусідній файл.
+- `--short-summary-file-suffix <СУФІКС>` / `--long-summary-file-suffix <СУФІКС>`: непорожні суфікси назв окремих файлів.
 - `--long-summary-lang <default|КОД>`: мова лекції для довгого підсумку або перевизначення дволітерним кодом ISO-639-1.
+- `--long-summary-references` / `--no-long-summary-references`: увімкнути або вимкнути перевірені Obsidian-посилання на секції джерела в Long Summary.
 - `--context-file <шлях>`: файл із контекстом для конкретного вводу; додається до КОРИСТУВАЦЬКОГО промпту відразу після загального речення "Context" (діє для всіх блоків). Можна вказувати кілька разів; блоки об’єднуються послідовно.
 
 Приклади:
@@ -242,11 +245,12 @@ YouTube, бо цей код потрібен для імені результа�
   - `creativeeditoral_technical`: редакторське очищення з послідовним форматуванням коду й технічних ідентифікаторів, а також технічними callout’ами для виправлень, ризиків безпеки, найкращих практик і обмежень виробничого середовища.
 - `suppress_edit_comments`: якщо `true`, HTML-коментарі наприкінці кожного блоку видаляються з фінального Markdown.
 - `highlight_asides_style`: `italic` або `blockquote` для жартів/асайдів.
-- `summary_mode`: `disabled`, `short`, `long` або `both`; у базовій конфігурації генерація вимкнена.
-- `summary_output`: `append` або `separate`; окремі файли записуються поруч з основним Markdown.
-- `long_summary_lang`: `default` використовує мову лекції; також можна вказати дволітерний код ISO-639-1.
-- `summary_heading` / `long_summary_heading`: заголовки короткого й довгого підсумків.
-- `append_summary`: застарілий перемикач сумісності; `false` вимикає всі режими підсумків.
+- `summary.short.enabled` / `summary.long.enabled`: незалежно вмикають короткий і довгий підсумки; якщо ввімкнено обидва, вони генеруються одним LLM-запитом.
+- `summary.short.output` / `summary.long.output`: незалежний режим `append` або `separate` для кожного підсумку.
+- `summary.short.file_suffix` / `summary.long.file_suffix`: непорожній безпечний суфікс окремого файла; типові значення `-summary` і `-longsummary`.
+- `summary.short.heading` / `summary.long.heading`: заголовки короткого й довгого підсумків.
+- `summary.long.lang`: `default` використовує мову лекції; також можна вказати дволітерний код ISO-639-1.
+- `summary.long.references`: додає під кожним `###`/`####` перевірене посилання на `^src-*` або `^txt-*`; потребує одночасно `include_src_block_ids: true` та `include_txt_block_ids_for_untimed: true`.
 - `parasites`: шляхи до списків «слів-паразитів» по мовах.
 - `llm.request_delay_seconds`: пауза між LLM-запитами (секунди); допомагає уникати лімітів; 0 вимикає.
 - `retry.attempts`: глобальна кількість спроб (1 = без повторів)

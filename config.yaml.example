@@ -18,6 +18,12 @@ logging:
 # include_txt_block_ids_for_untimed: false
 # process_timecodes_by_ai: true
 # qc_report_mode: outdir
-# summary_mode: disabled       # disabled | short | long | both
-# summary_output: append       # append | separate
-# long_summary_lang: default   # default follows --lang, or use uk/en/de/...
+# summary:
+#   short:
+#     enabled: false
+#     output: append
+#   long:
+#     enabled: false
+#     lang: default
+#     output: separate
+#     references: false
