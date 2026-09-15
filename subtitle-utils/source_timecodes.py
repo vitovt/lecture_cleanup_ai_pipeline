@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import argparse
+import difflib
 import json
 import os
 import re
@@ -823,6 +824,21 @@ def atomic_write(path: Path, text: str, mode_source: Path) -> None:
                 pass
 
 
+def unified_diff(original: str, generated: str, source_path: Path) -> str:
+    generated_path = source_path.with_name(
+        f"{source_path.stem}.generated{source_path.suffix}"
+    )
+    return "".join(
+        difflib.unified_diff(
+            original.splitlines(keepends=True),
+            generated.splitlines(keepends=True),
+            fromfile=str(source_path),
+            tofile=str(generated_path),
+            n=3,
+        )
+    )
+
+
 def command_transform(args: argparse.Namespace) -> int:
     document = read_document(args.filename)
     if document.issues:
@@ -880,7 +896,10 @@ def command_transform(args: argparse.Namespace) -> int:
         destination = document.path
     else:
         destination = args.output
-    if destination:
+    if args.diff:
+        sys.stdout.write(unified_diff(document.text, transformed, document.path))
+        output_kind = "diff"
+    elif destination:
         check_output_path(destination)
         atomic_write(destination, transformed, document.path)
         output_kind = "overwrite" if args.overwrite else "file"
@@ -918,6 +937,11 @@ def add_transform_arguments(parser: argparse.ArgumentParser) -> None:
         help="atomically overwrite the original Markdown file",
     )
     destination.add_argument("-o", "--output", type=Path, metavar="FILE.md", help="write to another file")
+    destination.add_argument(
+        "--diff",
+        action="store_true",
+        help="print a unified diff with three context lines",
+    )
     parser.add_argument(
         "--force",
         action="store_true",
@@ -944,6 +968,7 @@ def detailed_parser() -> argparse.ArgumentParser:
             "  --set-url URL | --remove-url      set or remove the video URL\n"
             "  --overwrite                       atomically replace FILE.md\n"
             "  -o, --output FILE.md              write another file\n"
+            "  --diff                            print a unified three-line-context diff\n"
             "  --force                           allow irreversible timestamp removal\n\n"
             "Examples:\n"
             "  source_timecodes.py lecture.md\n"
@@ -952,7 +977,7 @@ def detailed_parser() -> argparse.ArgumentParser:
             "  source_timecodes.py transform lecture.md --remove-inline --add-below\n"
             "  source_timecodes.py transform lecture.md --add-below --set-url https://youtu.be/VIDEO_ID\n"
             "  source_timecodes.py transform lecture.md --add-src --overwrite\n\n"
-            "Transform writes Markdown to stdout unless --overwrite or --output is used.\n"
+            "Transform writes Markdown to stdout unless --overwrite, --output, or --diff is used.\n"
             "Diagnostics use stable DOCTOR, ANALYZE, TRANSFORM, WARNING, and ERROR prefixes."
         ),
     )

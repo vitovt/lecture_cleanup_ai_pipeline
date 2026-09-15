@@ -304,6 +304,40 @@ class SourceTimecodesCliTests(unittest.TestCase):
         self.assertEqual(updated, "### Time [00:01:00] ^src-60\n")
         self.assertIn("output=overwrite", result.stderr)
 
+    def test_diff_prints_preview_and_does_not_modify_input(self) -> None:
+        source = "### Time [00:01:00]\n"
+        with tempfile.TemporaryDirectory() as directory:
+            path = self.write_markdown(directory, source)
+
+            result = self.run_tool("transform", path, "--add-src", "--diff")
+            after = path.read_text(encoding="utf-8")
+
+        self.assertEqual(result.returncode, 0)
+        self.assertEqual(after, source)
+        self.assertIn(f"--- {path}", result.stdout)
+        self.assertIn(f"+++ {path.with_name('lecture.generated.md')}", result.stdout)
+        self.assertIn("@@ -1 +1 @@", result.stdout)
+        self.assertIn("-### Time [00:01:00]", result.stdout)
+        self.assertIn("+### Time [00:01:00] ^src-60", result.stdout)
+        self.assertIn("output=diff", result.stderr)
+
+    def test_diff_and_output_are_mutually_exclusive(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = self.write_markdown(directory, "### Time [00:01:00]\n")
+            output = Path(directory) / "output.md"
+
+            result = self.run_tool(
+                "transform",
+                path,
+                "--add-src",
+                "--diff",
+                "-o",
+                output,
+            )
+
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("not allowed with argument", result.stderr)
+
     def test_markers_in_fenced_code_are_ignored(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             path = self.write_markdown(
