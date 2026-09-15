@@ -9,8 +9,12 @@ import yaml
 
 from aiadapters.base import LLMConnectionError
 from scripts.run_pipeline import (
+    LONG_SUMMARY_BLOCK_END,
+    LONG_SUMMARY_BLOCK_START,
     LONG_SUMMARY_END,
     LONG_SUMMARY_START,
+    SHORT_SUMMARY_BLOCK_END,
+    SHORT_SUMMARY_BLOCK_START,
     SHORT_SUMMARY_END,
     SHORT_SUMMARY_START,
     _append_summaries,
@@ -226,8 +230,19 @@ class SummaryOutputTests(unittest.TestCase):
 
         self.assertEqual(
             output,
-            "Lecture\n\n## Long\n\nLong body\n\n## Short\n\nShort body\n",
+            f"Lecture\n\n{LONG_SUMMARY_BLOCK_START}\n"
+            f"## Long\n\nLong body\n{LONG_SUMMARY_BLOCK_END}\n\n"
+            f"{SHORT_SUMMARY_BLOCK_START}\n"
+            f"## Short\n\nShort body\n{SHORT_SUMMARY_BLOCK_END}\n",
         )
+
+    def test_summary_start_markers_warn_ai_inside_html_comment(self) -> None:
+        for marker in (LONG_SUMMARY_BLOCK_START, SHORT_SUMMARY_BLOCK_START):
+            with self.subTest(marker=marker):
+                self.assertTrue(marker.startswith("<!-- LECTURE_CLEANUP_"))
+                self.assertTrue(marker.endswith(" -->"))
+                self.assertIn("AI-generated summary", marker)
+                self.assertIn("Do not analyze it as source", marker)
 
     def test_separate_summaries_use_expected_sibling_names(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -246,11 +261,13 @@ class SummaryOutputTests(unittest.TestCase):
             )
             self.assertEqual(
                 (outdir / "lecture-longsummary.md").read_text(encoding="utf-8"),
-                "## Long\n\nLong body\n",
+                f"{LONG_SUMMARY_BLOCK_START}\n"
+                f"## Long\n\nLong body\n{LONG_SUMMARY_BLOCK_END}\n",
             )
             self.assertEqual(
                 (outdir / "lecture-summary.md").read_text(encoding="utf-8"),
-                "## Short\n\nShort body\n",
+                f"{SHORT_SUMMARY_BLOCK_START}\n"
+                f"## Short\n\nShort body\n{SHORT_SUMMARY_BLOCK_END}\n",
             )
 
     def test_pipeline_writes_both_separate_summaries_from_one_call(self) -> None:

@@ -44,6 +44,18 @@ LONG_SUMMARY_START = "<!-- LECTURE_CLEANUP_LONG_SUMMARY_START -->"
 LONG_SUMMARY_END = "<!-- LECTURE_CLEANUP_LONG_SUMMARY_END -->"
 SHORT_SUMMARY_START = "<!-- LECTURE_CLEANUP_SHORT_SUMMARY_START -->"
 SHORT_SUMMARY_END = "<!-- LECTURE_CLEANUP_SHORT_SUMMARY_END -->"
+SUMMARY_BLOCK_NOTICE = (
+    "AI NOTICE: This block is an AI-generated summary of the source text, "
+    "not additional source material. Do not analyze it as source."
+)
+LONG_SUMMARY_BLOCK_START = (
+    f"<!-- LECTURE_CLEANUP_LONG_SUMMARY_START | {SUMMARY_BLOCK_NOTICE} -->"
+)
+LONG_SUMMARY_BLOCK_END = "<!-- LECTURE_CLEANUP_LONG_SUMMARY_END -->"
+SHORT_SUMMARY_BLOCK_START = (
+    f"<!-- LECTURE_CLEANUP_SHORT_SUMMARY_START | {SUMMARY_BLOCK_NOTICE} -->"
+)
+SHORT_SUMMARY_BLOCK_END = "<!-- LECTURE_CLEANUP_SHORT_SUMMARY_END -->"
 
 def load_text(path: str) -> str:
     with open(path, "r", encoding="utf-8", errors="ignore") as f:
@@ -480,16 +492,30 @@ def _append_summaries(
 ) -> str:
     sections = []
     if summaries.get("long", "").strip():
-        sections.append(long_heading + "\n\n" + summaries["long"].strip())
+        sections.append(
+            _summary_block("long", summaries["long"], long_heading)
+        )
     if summaries.get("short", "").strip():
-        sections.append(short_heading + "\n\n" + summaries["short"].strip())
+        sections.append(
+            _summary_block("short", summaries["short"], short_heading)
+        )
     if not sections:
         return full_markdown
     return full_markdown.rstrip() + "\n\n" + "\n\n".join(sections) + "\n"
 
 
-def _standalone_summary(summary: str, heading: str) -> str:
-    return heading + "\n\n" + summary.strip() + "\n"
+def _summary_block(summary_type: str, summary: str, heading: str) -> str:
+    if summary_type == "long":
+        start, end = LONG_SUMMARY_BLOCK_START, LONG_SUMMARY_BLOCK_END
+    elif summary_type == "short":
+        start, end = SHORT_SUMMARY_BLOCK_START, SHORT_SUMMARY_BLOCK_END
+    else:
+        raise ValueError(f"Unsupported summary type: {summary_type}")
+    return f"{start}\n{heading}\n\n{summary.strip()}\n{end}"
+
+
+def _standalone_summary(summary_type: str, summary: str, heading: str) -> str:
+    return _summary_block(summary_type, summary, heading) + "\n"
 
 
 def _write_separate_summaries(
@@ -503,14 +529,14 @@ def _write_separate_summaries(
     if summaries.get("long", "").strip():
         long_summary_path = outdir / f"{filename_stem}-longsummary.md"
         long_summary_path.write_text(
-            _standalone_summary(summaries["long"], long_heading),
+            _standalone_summary("long", summaries["long"], long_heading),
             encoding="utf-8",
         )
         paths.append(long_summary_path)
     if summaries.get("short", "").strip():
         short_summary_path = outdir / f"{filename_stem}-summary.md"
         short_summary_path.write_text(
-            _standalone_summary(summaries["short"], short_heading),
+            _standalone_summary("short", summaries["short"], short_heading),
             encoding="utf-8",
         )
         paths.append(short_summary_path)
