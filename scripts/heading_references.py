@@ -1,34 +1,23 @@
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
 from typing import Optional
 
-
-TIME_LABEL = r"\d{1,3}:\d{2}(?::\d{2})?"
-HEADING_RE = re.compile(
-    r"^(?P<prefix>[ \t]{0,3}#{1,6}[ \t]+)"
-    r"(?P<body>[^\r\n]*)(?P<eol>\r\n|\n|\r)?$"
-)
-INLINE_RE = re.compile(
-    rf"(?P<separator>[ \t]+(?:—[ \t]+)?)"
-    rf"(?P<marker>\[(?P<label>{TIME_LABEL})\]"
-    rf"(?:\((?P<target>[^)\r\n]+)\))?)[ \t]*$"
-)
-BELOW_RE = re.compile(
-    rf"^[ \t]*\[🎥[ \t]+(?P<label>{TIME_LABEL})\]"
-    rf"(?:\((?P<target>[^)\r\n]+)\))?[ \t]*(?P<eol>\r\n|\n|\r)?$"
-)
-TRAILING_ID_RE = re.compile(
-    r"(?P<separator>[ \t]+)\^(?P<kind>src|txt)-"
-    r"(?P<number>\d+)(?:-(?P<collision>[2-9]|[1-9]\d+))?[ \t]*$"
-)
-FENCE_OPEN_RE = re.compile(r"^[ \t]{0,3}(?P<fence>`{3,}|~{3,})")
-SUMMARY_START_RE = re.compile(
-    r"^[ \t]*<!--[ \t]+LECTURE_CLEANUP_(?:LONG|SHORT)_SUMMARY_START(?:[ \t|]|-->)"
-)
-SUMMARY_END_RE = re.compile(
-    r"^[ \t]*<!--[ \t]+LECTURE_CLEANUP_(?:LONG|SHORT)_SUMMARY_END[ \t]*-->"
+from scripts.source_timecode_core import (
+    HEADING_RE,
+    TimestampMarker,
+    allocate_src,
+    canonical_below,
+    canonical_inline,
+    document_newline,
+    format_hms,
+    is_external_target,
+    parse_below_marker,
+    protected_line_mask,
+    render_below_marker,
+    render_inline_marker,
+    split_trailing_inline,
+    strip_trailing_block_ids,
 )
 
 
@@ -59,136 +48,9 @@ class HeadingReferenceResult:
     txt_ids: int
 
 
-@dataclass(frozen=True)
-class Marker:
-    label: str
-    seconds: int
-    target: Optional[str]
-    raw: str
-    separator: str = " — "
-
-
-def _split_eol(line: str) -> tuple[str, str]:
-    if line.endswith("\r\n"):
-        return line[:-2], "\r\n"
-    if line.endswith(("\n", "\r")):
-        return line[:-1], line[-1]
-    return line, ""
-
-
-def _document_newline(lines: list[str]) -> str:
-    for line in lines:
-        _, eol = _split_eol(line)
-        if eol:
-            return eol
-    return "\n"
-
-
-def _time_to_seconds(value: str) -> int:
-    parts = value.split(":")
-    if len(parts) == 2:
-        hours = 0
-        minutes, seconds = (int(part) for part in parts)
-    else:
-        hours, minutes, seconds = (int(part) for part in parts)
-    if minutes > 59 or seconds > 59:
-        raise ValueError("invalid timestamp")
-    return hours * 3600 + minutes * 60 + seconds
-
-
-def _format_hms(seconds: int) -> str:
-    hours = seconds // 3600
-    minutes = (seconds % 3600) // 60
-    remainder = seconds % 60
-    return f"{hours:02d}:{minutes:02d}:{remainder:02d}"
-
-
-def _protected_line_mask(lines: list[str]) -> list[bool]:
-    mask = [False] * len(lines)
-    fence_char: Optional[str] = None
-    fence_length = 0
-    inside_summary = False
-
-    for index, line in enumerate(lines):
-        body, _ = _split_eol(line)
-        if inside_summary:
-            mask[index] = True
-            if SUMMARY_END_RE.match(body):
-                inside_summary = False
-            continue
-        if SUMMARY_START_RE.match(body):
-            mask[index] = True
-            inside_summary = True
-            continue
-        if fence_char is None:
-            match = FENCE_OPEN_RE.match(body)
-            if match:
-                token = match.group("fence")
-                fence_char = token[0]
-                fence_length = len(token)
-                mask[index] = True
-            continue
-        mask[index] = True
-        if re.match(
-            rf"^[ \t]{{0,3}}{re.escape(fence_char)}{{{fence_length},}}[ \t]*$",
-            body,
-        ):
-            fence_char = None
-            fence_length = 0
-    return mask
-
-
-def _strip_trailing_ids(body: str) -> tuple[str, Optional[int]]:
-    src_seconds: Optional[int] = None
-    while True:
-        match = TRAILING_ID_RE.search(body)
-        if not match:
-            return body.rstrip(), src_seconds
-        if match.group("kind") == "src" and src_seconds is None:
-            src_seconds = int(match.group("number"))
-        body = body[:match.start()].rstrip()
-
-
-def _inline_marker(body: str) -> tuple[str, Optional[Marker]]:
-    match = INLINE_RE.search(body)
-    if not match:
-        return body.rstrip(), None
-    try:
-        seconds = _time_to_seconds(match.group("label"))
-    except ValueError:
-        return body.rstrip(), None
-    return (
-        body[:match.start()].rstrip(),
-        Marker(
-            label=match.group("label"),
-            seconds=seconds,
-            target=match.group("target"),
-            raw=match.group("marker"),
-            separator=match.group("separator"),
-        ),
-    )
-
-
-def _below_marker(line: str) -> Optional[Marker]:
-    match = BELOW_RE.match(line)
-    if not match:
-        return None
-    try:
-        seconds = _time_to_seconds(match.group("label"))
-    except ValueError:
-        return None
-    body, _ = _split_eol(line)
-    return Marker(
-        label=match.group("label"),
-        seconds=seconds,
-        target=match.group("target"),
-        raw=body.strip(),
-    )
-
-
-def _external_target(*markers: Optional[Marker]) -> Optional[str]:
+def _external_target(*markers: Optional[TimestampMarker]) -> Optional[str]:
     for marker in markers:
-        if marker and marker.target and marker.target.startswith(("http://", "https://")):
+        if marker and is_external_target(marker.target):
             return marker.target
     return None
 
@@ -197,14 +59,14 @@ def render_heading_references(
     markdown: str,
     options: HeadingReferenceOptions,
 ) -> HeadingReferenceResult:
-    """Render heading reference formats from one canonical timestamp marker."""
+    """Render requested heading formats from shared canonical markers."""
     lines = markdown.splitlines(keepends=True)
     if not lines and markdown:
         lines = [markdown]
-    protected = _protected_line_mask(lines)
-    newline = _document_newline(lines)
+    protected = protected_line_mask(lines)
+    newline = document_newline(lines)
     output: list[str] = []
-    src_occurrences: dict[int, int] = {}
+    used_src: set[str] = set()
     txt_number = 0
     heading_count = 0
     timed_count = 0
@@ -225,12 +87,26 @@ def render_heading_references(
             continue
 
         heading_count += 1
-        body, existing_src_seconds = _strip_trailing_ids(heading_match.group("body"))
-        base_body, inline = _inline_marker(body)
-        below: Optional[Marker] = None
+        body, identifiers = strip_trailing_block_ids(heading_match.group("body"))
+        existing_src_seconds = next(
+            (
+                identifier.number
+                for identifier in reversed(identifiers)
+                if identifier.kind == "src"
+            ),
+            None,
+        )
+        base_body, inline = split_trailing_inline(body)
+        if inline is not None and inline.seconds is None:
+            base_body = body.rstrip()
+            inline = None
+
+        below: Optional[TimestampMarker] = None
         below_index = index + 1
         if below_index < len(lines) and not protected[below_index]:
-            below = _below_marker(lines[below_index])
+            candidate = parse_below_marker(lines[below_index])
+            if candidate is not None and candidate.seconds is not None:
+                below = candidate
 
         if inline is not None:
             seconds = inline.seconds
@@ -243,18 +119,19 @@ def render_heading_references(
 
         if seconds is not None:
             timed_count += 1
-            label = _format_hms(seconds)
             if options.include_inline:
                 if inline is not None:
                     rendered_body += inline.separator + inline.raw
                 else:
-                    inline_target = target or f"#t={label}"
-                    rendered_body += f" — [{label}]({inline_target})"
+                    inline_text = (
+                        render_inline_marker(format_hms(seconds), target)
+                        if target
+                        else canonical_inline(seconds, local_link=True)
+                    )
+                    rendered_body += " — " + inline_text
             if options.include_src:
-                occurrence = src_occurrences.get(seconds, 0) + 1
-                src_occurrences[seconds] = occurrence
-                suffix = "" if occurrence == 1 else f"-{occurrence}"
-                rendered_body += f" ^src-{seconds}{suffix}"
+                src_id = allocate_src(seconds, used_src)
+                rendered_body += f" {src_id}"
                 src_count += 1
         elif options.include_txt_for_untimed:
             txt_number += 1
@@ -264,17 +141,21 @@ def render_heading_references(
         heading_eol = heading_match.group("eol") or ""
         if options.include_below and seconds is not None and not heading_eol:
             heading_eol = newline
-        output.append(heading_match.group("prefix") + rendered_body + heading_eol)
+        output.append(
+            (heading_match.group("bom") or "")
+            + heading_match.group("prefix")
+            + rendered_body
+            + heading_eol
+        )
 
         if options.include_below and seconds is not None:
-            label = _format_hms(seconds)
-            below_target = target or "#"
-            _, below_eol = (
-                _split_eol(lines[below_index])
-                if below is not None
-                else ("", newline)
+            below_text = (
+                render_below_marker(format_hms(seconds), target)
+                if target
+                else canonical_below(seconds)
             )
-            output.append(f"[🎥 {label}]({below_target}){below_eol or newline}")
+            below_eol = below.eol if below is not None else newline
+            output.append(below_text + (below_eol or newline))
 
         index += 2 if below is not None else 1
 

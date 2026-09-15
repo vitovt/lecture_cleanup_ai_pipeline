@@ -2,18 +2,17 @@
 import re, sys, json
 from typing import List, Dict, Tuple, Optional, Set
 
+from scripts.source_timecode_core import (
+    HEADING_RE,
+    canonical_inline,
+    protected_line_mask,
+    split_trailing_inline,
+)
+
 TIMESTAMPED_TXT_LINE = re.compile(
     r"^\s*\[(\d{2}):(\d{2}):(\d{2})(?:[\.,](\d{3}))?\]\s*(.*)$",
     re.UNICODE,
 )
-
-def format_hms(seconds: float) -> str:
-    seconds = max(0, int(round(seconds)))
-    hh = seconds // 3600
-    mm = (seconds % 3600) // 60
-    ss = seconds % 60
-    return f"{hh:02d}:{mm:02d}:{ss:02d}"
-
 
 def parse_timestamped_txt_lines(txt: str, keep_raw: bool = False) -> List[Dict]:
     """
@@ -42,40 +41,35 @@ def add_timecodes_to_headings(markdown: str, chunk_start_seconds: float, as_link
     """
     if chunk_start_seconds is None:
         return markdown
-    stamp = format_hms(chunk_start_seconds)
-    link_text = f"[{stamp}]" if not as_link else f"[{stamp}](#t={stamp})"
+    marker = canonical_inline(
+        chunk_start_seconds,
+        local_link=as_link,
+    )
+    lines = markdown.splitlines(keepends=True)
+    if not lines and markdown:
+        lines = [markdown]
+    protected = protected_line_mask(lines)
     out_lines = []
-    fence_char = None
-    fence_length = 0
-    for line in markdown.splitlines(keepends=True):
-        body = line.rstrip("\r\n")
-        eol = line[len(body):]
-        if fence_char is None:
-            fence = re.match(r"^[ \t]{0,3}(`{3,}|~{3,})", body)
-            if fence:
-                token = fence.group(1)
-                fence_char = token[0]
-                fence_length = len(token)
-                out_lines.append(line)
-                continue
-        else:
+    for index, line in enumerate(lines):
+        if protected[index]:
             out_lines.append(line)
-            if re.match(
-                rf"^[ \t]{{0,3}}{re.escape(fence_char)}{{{fence_length},}}[ \t]*$",
-                body,
-            ):
-                fence_char = None
-                fence_length = 0
             continue
 
-        heading = re.match(r"^[ \t]{0,3}#{1,6}[ \t]+", body)
-        has_timecode = re.search(
-            r"\[\d{1,3}:\d{2}:\d{2}\](?:\([^)]*\))?[ \t]*$",
-            body,
+        heading = HEADING_RE.match(line)
+        if not heading:
+            out_lines.append(line)
+            continue
+        _, existing = split_trailing_inline(heading.group("body"))
+        if existing:
+            out_lines.append(line)
+            continue
+        out_lines.append(
+            (heading.group("bom") or "")
+            + heading.group("prefix")
+            + heading.group("body").rstrip()
+            + f" — {marker}"
+            + (heading.group("eol") or "")
         )
-        if heading and not has_timecode:
-            body = f"{body.rstrip()} — {link_text}"
-        out_lines.append(body + eol)
     return "".join(out_lines) if out_lines else markdown
 
 def similarity_ratio(a: str, b: str) -> float:
@@ -461,10 +455,6 @@ def chunk_text_line_preserving(lines: List[str], chunk_chars: int = 6500, overla
 # Stitching deduplication helpers
 # -----------------------
 
-_TRAILING_TIMECODE_RE = re.compile(
-    r"\s+—\s+\[(\d{2}:\d{2}:\d{2})\](?:\(#t=\1\))?\s*$"
-)
-
 def _normalize_for_match(s: str) -> str:
     """Normalize a line for boundary matching.
     - trim
@@ -474,10 +464,12 @@ def _normalize_for_match(s: str) -> str:
     """
     if not s:
         return ""
+    base, marker = split_trailing_inline(s)
+    if marker:
+        s = base
     # unify unicode quotes and dashes
     s2 = s.replace("“", '"').replace("”", '"').replace("„", '"').replace("«", '"').replace("»", '"')
     s2 = s2.replace("–", "-").replace("—", "-").replace("−", "-")
-    s2 = _TRAILING_TIMECODE_RE.sub("", s2)
     # collapse whitespace
     s2 = re.sub(r"\s+", " ", s2.strip())
     return s2

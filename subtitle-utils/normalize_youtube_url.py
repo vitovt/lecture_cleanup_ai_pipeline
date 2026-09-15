@@ -11,52 +11,22 @@ from __future__ import annotations
 
 import argparse
 import sys
-from urllib.parse import parse_qs, urlparse
+from pathlib import Path
 
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
-def _clean_video_id(value: str) -> str:
-    """Remove trailing delimiters from a candidate video id."""
-    value = value.split("?")[0]
-    value = value.split("&")[0]
-    value = value.split("#")[0]
-    value = value.strip()
-    return value
+from scripts.source_timecode_core import extract_youtube_video_id
 
 
 def extract_video_id(raw_url: str) -> str | None:
     """Pull the video id from many possible YouTube URL shapes."""
-    raw_url = raw_url.strip()
-    if not raw_url:
-        return None
-
-    # Allow passing a bare video id (no slashes, no scheme)
-    if "://" not in raw_url and "/" not in raw_url:
-        return _clean_video_id(raw_url)
-
-    if not raw_url.startswith(("http://", "https://")):
-        raw_url = "https://" + raw_url
-
-    parsed = urlparse(raw_url)
-    host = parsed.netloc.lower()
-    path = parsed.path
-    query = parse_qs(parsed.query)
-    parts = [p for p in path.split("/") if p]
-
-    video_id = None
-
-    if host.endswith("youtu.be"):
-        if parts:
-            video_id = parts[0]
-    elif "youtube" in host:
-        if "v" in query:
-            video_id = query["v"][0]
-        elif len(parts) >= 2 and parts[0] in {"shorts", "embed", "live", "v"}:
-            video_id = parts[1]
-
-    if not video_id:
-        return None
-
-    return _clean_video_id(video_id)
+    return extract_youtube_video_id(
+        raw_url,
+        allow_bare=True,
+        allow_missing_scheme=True,
+    )
 
 
 def normalize_youtube_url(raw_url: str, output_format: str = "short") -> str | None:

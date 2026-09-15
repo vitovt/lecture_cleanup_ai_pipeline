@@ -9,7 +9,7 @@ from scripts.heading_references import (
     HeadingReferenceOptions,
     render_heading_references,
 )
-from scripts.utils import add_timecodes_to_headings
+from scripts.utils import add_timecodes_to_headings, dedup_overlapping_boundary
 
 
 PROJECT = Path(__file__).resolve().parents[1]
@@ -149,6 +149,17 @@ class CanonicalTimecodeTests(unittest.TestCase):
 
         self.assertEqual(second, first)
         self.assertIn("```md\n### Example\n```", first)
+
+    def test_stitch_dedup_ignores_canonical_heading_timestamp(self) -> None:
+        current, removed, mode = dedup_overlapping_boundary(
+            "Body.\n### Repeated — [00:01:00](#t=00:01:00)",
+            "### Repeated\n\nNext body.",
+            500,
+        )
+
+        self.assertEqual(removed, 1)
+        self.assertEqual(mode, "lines")
+        self.assertEqual(current, "\nNext body.")
 
 
 if __name__ == "__main__":

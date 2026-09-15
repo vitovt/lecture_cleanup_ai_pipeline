@@ -3,134 +3,64 @@
 import argparse
 import difflib
 import os
-import re
 import stat
 import sys
 import tempfile
 from pathlib import Path
-from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
-YOUTUBE_HOSTS = {
-    "youtube.com", "www.youtube.com", "m.youtube.com", "music.youtube.com",
-    "youtu.be", "www.youtu.be",
-    "youtube-nocookie.com", "www.youtube-nocookie.com",
-}
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
-# Only ATX Markdown headings (# ... through ###### ...).
-HEADING_RE = re.compile(
-    r"^(?P<bom>\ufeff?)(?P<prefix>[ \t]{0,3}#{1,6}[ \t]+)"
-    r"(?P<body>[^\r\n]*)(?P<eol>\r\n|\n|\r)?$"
-)
-
-TIME_LABEL = r"\d{1,3}:\d{2}(?::\d{2})?"
-LOCAL_TARGET = r"(?:\(\s*#(?:t=[^)\s]+)?\s*\)|(?!\())"
-INLINE_TIMECODE_RE = re.compile(
-    rf"\[(?P<label>{TIME_LABEL})\]{LOCAL_TARGET}"
-)
-BELOW_TIMECODE_RE = re.compile(
-    rf"\[🎥[ \t]+(?P<label>{TIME_LABEL})\]{LOCAL_TARGET}"
+from scripts.source_timecode_core import (
+    HEADING_RE,
+    find_inline_markers,
+    is_local_target,
+    parse_below_marker,
+    protected_line_mask,
+    render_below_marker,
+    render_inline_marker,
+    timestamp_url,
+    youtube_base_url,
 )
 
 
 def video_url(value):
     """argparse validator + normalization for a YouTube URL."""
     try:
-        p = urlsplit(value)
+        _, base_url = youtube_base_url(value)
     except ValueError as exc:
         raise argparse.ArgumentTypeError("invalid URL: %s" % exc)
-
-    if p.scheme not in ("http", "https") or not p.netloc:
-        raise argparse.ArgumentTypeError(
-            "video URL must be an absolute http:// or https:// URL"
-        )
-
-    host = (p.hostname or "").lower()
-    if host not in YOUTUBE_HOSTS:
-        raise argparse.ArgumentTypeError(
-            "unsupported host '%s'; expected a YouTube URL" % host
-        )
-
-    query = dict(parse_qsl(p.query, keep_blank_values=True))
-    path = p.path.rstrip("/")
-
-    if host in ("youtu.be", "www.youtu.be"):
-        if not path.lstrip("/").split("/", 1)[0]:
-            raise argparse.ArgumentTypeError("youtu.be URL has no video ID")
-    elif path == "/watch":
-        if not query.get("v"):
-            raise argparse.ArgumentTypeError(
-                "youtube.com/watch URL has no 'v' video ID"
-            )
-    elif path.startswith(("/shorts/", "/live/", "/embed/")):
-        if len(path.split("/")) < 3 or not path.split("/", 2)[2]:
-            raise argparse.ArgumentTypeError("YouTube URL has no video ID")
-    else:
-        raise argparse.ArgumentTypeError(
-            "unsupported YouTube URL form; use youtu.be/<id>, "
-            "youtube.com/watch?v=<id>, /shorts/<id>, /live/<id>, or /embed/<id>"
-        )
-
-    # Remove a pre-existing timestamp and fragment. Every marker gets its own time.
-    q = [
-        (k, v) for k, v in parse_qsl(p.query, keep_blank_values=True)
-        if k.lower() not in ("t", "start", "time_continue")
-    ]
-    return urlunsplit((p.scheme, p.netloc, p.path, urlencode(q, doseq=True), ""))
-
-
-def time_to_seconds(value):
-    """Accept 427s, 427, MM:SS or HH:MM:SS."""
-    value = value.strip()
-
-    m = re.fullmatch(r"\d+s?", value, flags=re.IGNORECASE)
-    if m:
-        return int(value[:-1] if value.lower().endswith("s") else value)
-
-    parts = value.split(":")
-    if len(parts) not in (2, 3) or not all(x.isdigit() for x in parts):
-        raise ValueError("expected seconds, MM:SS, or HH:MM:SS")
-
-    nums = [int(x) for x in parts]
-    if len(nums) == 2:
-        minutes, seconds = nums
-        if seconds > 59:
-            raise ValueError("seconds must be 00..59")
-        return minutes * 60 + seconds
-
-    hours, minutes, seconds = nums
-    if minutes > 59 or seconds > 59:
-        raise ValueError("minutes and seconds must be 00..59")
-    return hours * 3600 + minutes * 60 + seconds
-
-
-def timestamp_url(base_url, seconds):
-    p = urlsplit(base_url)
-    q = [
-        (k, v) for k, v in parse_qsl(p.query, keep_blank_values=True)
-        if k.lower() not in ("t", "start", "time_continue")
-    ]
-    q.append(("t", "%ds" % seconds))
-    return urlunsplit((p.scheme, p.netloc, p.path, urlencode(q, doseq=True), ""))
+    return base_url
 
 
 def convert(text, base_url):
     output = []
     changed = 0
+    lines = text.splitlines(keepends=True)
+    if not lines and text:
+        lines = [text]
+    protected = protected_line_mask(lines)
 
-    # splitlines(True) preserves LF/CRLF line endings.
-    for line in text.splitlines(True):
-        def replace_inline(match):
-            nonlocal changed
-            label = match.group("label")
-            changed += 1
-            return "[%s](%s)" % (
-                label,
-                timestamp_url(base_url, time_to_seconds(label)),
-            )
+    for index, line in enumerate(lines):
+        if protected[index]:
+            output.append(line)
+            continue
 
         heading = HEADING_RE.match(line)
         if heading:
-            body = INLINE_TIMECODE_RE.sub(replace_inline, heading.group("body"))
+            body = heading.group("body")
+            for marker in reversed(find_inline_markers(body)):
+                if not is_local_target(marker.target):
+                    continue
+                if marker.seconds is None:
+                    raise ValueError(marker.error or "invalid timestamp")
+                replacement = render_inline_marker(
+                    marker.label,
+                    timestamp_url(base_url, marker.seconds),
+                )
+                body = body[:marker.start] + replacement + body[marker.end:]
+                changed += 1
             output.append(
                 heading.group("bom")
                 + heading.group("prefix")
@@ -142,17 +72,18 @@ def convert(text, base_url):
         line_body = line.rstrip("\r\n")
         eol = line[len(line_body):]
         stripped = line_body.strip()
-        below = BELOW_TIMECODE_RE.fullmatch(stripped)
-        if below:
-            label = below.group("label")
+        below = parse_below_marker(stripped)
+        if below and is_local_target(below.target):
+            if below.seconds is None:
+                raise ValueError(below.error or "invalid timestamp")
             leading = line_body[:len(line_body) - len(line_body.lstrip())]
             trailing = line_body[len(line_body.rstrip()):]
             changed += 1
             output.append(
                 leading
-                + "[🎥 %s](%s)" % (
-                    label,
-                    timestamp_url(base_url, time_to_seconds(label)),
+                + render_below_marker(
+                    below.label,
+                    timestamp_url(base_url, below.seconds),
                 )
                 + trailing
                 + eol

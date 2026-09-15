@@ -88,6 +88,28 @@ class AddVideoUrlTests(unittest.TestCase):
         self.assertEqual(second.stdout, first.stdout)
         self.assertIn("output is unchanged", second.stderr)
 
+    def test_ignores_markers_in_code_and_generated_summaries(self) -> None:
+        source = (
+            "```md\n### Example [00:01:00](#)\n```\n"
+            "<!-- LECTURE_CLEANUP_SHORT_SUMMARY_START | AI NOTICE -->\n"
+            "### Summary [00:02:00](#)\n"
+            "<!-- LECTURE_CLEANUP_SHORT_SUMMARY_END -->\n"
+            "### Source [00:03:00](#)\n"
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            path = self.write_markdown(directory, source)
+
+            result = self.run_tool("-u", VIDEO_URL, path)
+
+        self.assertEqual(result.returncode, 0)
+        self.assertIn("### Example [00:01:00](#)", result.stdout)
+        self.assertIn("### Summary [00:02:00](#)", result.stdout)
+        self.assertIn(
+            "### Source [00:03:00]"
+            "(https://www.youtube.com/watch?v=A5qE7Eg7zPk&t=180s)",
+            result.stdout,
+        )
+
     def test_diff_prints_preview_and_does_not_modify_input(self) -> None:
         source = "### Heading [00:01:00](#t=60s)\n"
         with tempfile.TemporaryDirectory() as directory:

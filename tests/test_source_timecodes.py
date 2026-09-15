@@ -351,6 +351,22 @@ class SourceTimecodesCliTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0)
         self.assertIn("formats=I", result.stdout)
 
+    def test_generated_summary_blocks_are_ignored(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = self.write_markdown(
+                directory,
+                "<!-- LECTURE_CLEANUP_LONG_SUMMARY_START | AI NOTICE -->\n"
+                "### Summary [00:01:00] ^src-61\n"
+                "<!-- LECTURE_CLEANUP_LONG_SUMMARY_END -->\n"
+                "### Source [00:02:00] ^src-120\n",
+            )
+
+            result = self.run_tool(path)
+
+        self.assertEqual(result.returncode, 0)
+        self.assertIn("formats=I+S", result.stdout)
+        self.assertNotIn("timestamp_conflict", result.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()

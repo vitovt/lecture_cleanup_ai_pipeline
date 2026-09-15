@@ -342,6 +342,7 @@ class YoutubeLanguageDefaultTests(unittest.TestCase):
             for relative_path in (
                 "auto_process_youtube_via_groq.sh",
                 "scripts/groq_shell_common.sh",
+                "scripts/source_timecode_core.py",
                 "subtitle-utils/normalize_youtube_url.py",
                 "subtitle-utils/sanitize_filename.sh",
             ):

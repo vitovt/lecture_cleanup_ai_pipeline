@@ -8,56 +8,41 @@ import argparse
 import difflib
 import json
 import os
-import re
 import stat
 import sys
 import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Iterable, Optional
-from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from scripts.source_timecode_core import (
+    HEADING_RE,
+    SRC_FULL_RE,
+    SRC_TOKEN_RE,
+    SRC_TRAILING_RE,
+    TIMESTAMP_QUERY_KEYS,
+    allocate_src,
+    canonical_below,
+    canonical_inline,
+    document_newline,
+    find_inline_markers,
+    parse_below_marker,
+    parse_youtube_url,
+    protected_line_mask,
+    split_eol,
+    split_trailing_inline,
+    time_to_seconds,
+    youtube_base_url,
+)
 
 
 LEGEND = "LEGEND I=inline B=below S=src"
 EMPTY_FORMATS = "∅"
 COMMANDS = {"doctor", "analyze", "transform"}
-YOUTUBE_HOSTS = {
-    "youtube.com",
-    "www.youtube.com",
-    "m.youtube.com",
-    "music.youtube.com",
-    "youtu.be",
-    "www.youtu.be",
-    "youtube-nocookie.com",
-    "www.youtube-nocookie.com",
-}
-
-HEADING_RE = re.compile(
-    r"^(?P<bom>\ufeff?)(?P<prefix>[ \t]{0,3}#{1,6}[ \t]+)"
-    r"(?P<body>[^\r\n]*)(?P<eol>\r\n|\n|\r)?$"
-)
-TIME_LABEL = r"\d{1,3}:\d{2}(?::\d{2})?"
-INLINE_RE = re.compile(
-    rf"(?P<separator>[ \t]+(?:—[ \t]+)?)"
-    rf"(?P<marker>\[(?P<label>{TIME_LABEL})\]"
-    rf"(?:\((?P<target>[^)\r\n]+)\))?)[ \t]*$"
-)
-INLINE_ANY_RE = re.compile(rf"\[{TIME_LABEL}\](?:\([^)\r\n]*\))?")
-BELOW_RE = re.compile(
-    rf"^[ \t]*\[(?P<icon>🎥)[ \t]+(?P<label>{TIME_LABEL})\]"
-    rf"(?:\((?P<target>[^)\r\n]+)\))?[ \t]*(?P<eol>\r\n|\n|\r)?$"
-)
-COLLISION_NUMBER = r"(?:[2-9]|[1-9]\d+)"
-SRC_RE = re.compile(
-    rf"(?<!\S)\^src-(?P<seconds>\d+)(?:-(?P<collision>{COLLISION_NUMBER}))?(?=\s|$)"
-)
-SRC_TRAILING_RE = re.compile(
-    r"(?P<separator>[ \t]+)(?P<identifier>\^src-(?P<seconds>\d+)"
-    rf"(?:-(?P<collision>{COLLISION_NUMBER}))?)[ \t]*$"
-)
-SRC_TOKEN_RE = re.compile(r"(?<!\S)(?P<identifier>\^src\S*)")
-SRC_FULL_RE = re.compile(rf"^\^src-\d+(?:-{COLLISION_NUMBER})?$")
-FENCE_OPEN_RE = re.compile(r"^[ \t]{0,3}(?P<fence>`{3,}|~{3,})")
 
 
 class ToolError(Exception):
@@ -151,143 +136,6 @@ def format_set(values: Iterable[str]) -> str:
     return "+".join(ordered) if ordered else EMPTY_FORMATS
 
 
-def split_eol(line: str) -> tuple[str, str]:
-    if line.endswith("\r\n"):
-        return line[:-2], "\r\n"
-    if line.endswith(("\n", "\r")):
-        return line[:-1], line[-1]
-    return line, ""
-
-
-def document_newline(lines: list[str]) -> str:
-    for line in lines:
-        _, eol = split_eol(line)
-        if eol:
-            return eol
-    return os.linesep
-
-
-def time_to_seconds(value: str) -> int:
-    value = value.strip()
-    numeric = re.fullmatch(r"(\d+)(?:s)?", value, flags=re.IGNORECASE)
-    if numeric:
-        return int(numeric.group(1))
-
-    youtube_units = re.fullmatch(
-        r"(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?",
-        value,
-        flags=re.IGNORECASE,
-    )
-    if youtube_units and any(group is not None for group in youtube_units.groups()):
-        hours, minutes, seconds = (int(group or 0) for group in youtube_units.groups())
-        return hours * 3600 + minutes * 60 + seconds
-
-    parts = value.split(":")
-    if len(parts) not in (2, 3) or not all(part.isdigit() for part in parts):
-        raise ValueError("expected seconds, MM:SS, or HH:MM:SS")
-    values = [int(part) for part in parts]
-    if len(values) == 2:
-        minutes, seconds = values
-        if seconds > 59:
-            raise ValueError("seconds must be 00..59")
-        return minutes * 60 + seconds
-    hours, minutes, seconds = values
-    if minutes > 59 or seconds > 59:
-        raise ValueError("minutes and seconds must be 00..59")
-    return hours * 3600 + minutes * 60 + seconds
-
-
-def format_hms(seconds: int) -> str:
-    seconds = max(0, int(seconds))
-    hours = seconds // 3600
-    minutes = (seconds % 3600) // 60
-    remainder = seconds % 60
-    return f"{hours:02d}:{minutes:02d}:{remainder:02d}"
-
-
-def parse_label(value: str, line_number: int, issues: list[Issue]) -> Optional[int]:
-    try:
-        return time_to_seconds(value)
-    except ValueError as exc:
-        issues.append(Issue("malformed_timestamp", line_number, str(exc)))
-        return None
-
-
-def parse_youtube_url(
-    value: str,
-) -> tuple[str, str, list[tuple[str, str]], bool]:
-    try:
-        parsed = urlsplit(value.strip())
-    except ValueError as exc:
-        raise ValueError(f"invalid URL: {exc}") from exc
-    if parsed.scheme not in ("http", "https") or not parsed.netloc:
-        raise ValueError("video URL must be an absolute HTTP(S) URL")
-    host = (parsed.hostname or "").lower()
-    if host not in YOUTUBE_HOSTS:
-        raise ValueError(f"unsupported video host: {host or '<empty>'}")
-
-    path = parsed.path.rstrip("/")
-    base_path = parsed.path
-    query = list(parse_qsl(parsed.query, keep_blank_values=True))
-    legacy_youtube_url = False
-    if host in ("youtu.be", "www.youtu.be"):
-        path_parts = path.lstrip("/").split("/", 1)
-        short_path = path_parts[0]
-        if "&" in short_path:
-            # Older pipeline output used youtu.be/ID&t=SECONDS.  Although the
-            # timestamp is technically part of the URL path, treat the suffix
-            # as a query string so existing documents remain valid input.
-            video_id, legacy_query = short_path.split("&", 1)
-            legacy_pairs = list(parse_qsl(legacy_query, keep_blank_values=True))
-            query = legacy_pairs + query
-            legacy_youtube_url = any(
-                key.lower() in ("t", "start", "time_continue")
-                for key, _ in legacy_pairs
-            )
-            path_suffix = f"/{path_parts[1]}" if len(path_parts) == 2 else ""
-            base_path = f"/{video_id}{path_suffix}"
-        else:
-            video_id = short_path
-    elif path == "/watch":
-        query_map = dict(query)
-        video_id = query_map.get("v", "")
-    elif path.startswith(("/shorts/", "/live/", "/embed/", "/v/")):
-        parts = path.split("/", 2)
-        video_id = parts[2] if len(parts) == 3 else ""
-    else:
-        video_id = ""
-    if not video_id:
-        raise ValueError("YouTube URL has no supported video ID")
-
-    cleaned_query = [
-        (key, val)
-        for key, val in query
-        if key.lower() not in ("t", "start", "time_continue")
-    ]
-    base = urlunsplit(
-        (parsed.scheme, parsed.netloc, base_path, urlencode(cleaned_query, doseq=True), "")
-    )
-    return video_id, base, query, legacy_youtube_url
-
-
-def youtube_base_url(value: str) -> tuple[str, str]:
-    video_id, base_url, _, _ = parse_youtube_url(value)
-    return video_id, base_url
-
-
-def timestamp_url(base_url: str, seconds: int) -> str:
-    parsed = urlsplit(base_url)
-    query = [
-        (key, val)
-        for key, val in parse_qsl(parsed.query, keep_blank_values=True)
-        if key.lower() not in ("t", "start", "time_continue")
-    ]
-    query.append(("t", f"{seconds}s"))
-    return urlunsplit(
-        (parsed.scheme, parsed.netloc, parsed.path, urlencode(query, doseq=True), "")
-    )
-
-
 def parse_target(raw: Optional[str], line_number: int, issues: list[Issue]) -> TargetInfo:
     if raw is None:
         return TargetInfo(raw=None)
@@ -304,15 +152,15 @@ def parse_target(raw: Optional[str], line_number: int, issues: list[Issue]) -> T
         return TargetInfo(raw=value, seconds=seconds)
 
     try:
-        video_id, base_url, query, legacy_youtube_url = parse_youtube_url(value)
+        parsed_url = parse_youtube_url(value)
     except ValueError as exc:
         issues.append(Issue("malformed_video_url", line_number, str(exc)))
         return TargetInfo(raw=value)
 
     timing_values = [
         val
-        for key, val in query
-        if key.lower() in ("t", "start", "time_continue")
+        for key, val in parsed_url.query
+        if key.lower() in TIMESTAMP_QUERY_KEYS
     ]
     if not timing_values:
         issues.append(Issue("missing_url_timestamp", line_number, "video URL has no t/start parameter"))
@@ -326,32 +174,11 @@ def parse_target(raw: Optional[str], line_number: int, issues: list[Issue]) -> T
     return TargetInfo(
         raw=value,
         external=True,
-        video_id=video_id,
+        video_id=parsed_url.video_id,
         seconds=target_seconds,
-        base_url=base_url,
-        legacy_youtube_url=legacy_youtube_url,
+        base_url=parsed_url.base_url,
+        legacy_youtube_url=parsed_url.legacy_timestamp_syntax,
     )
-
-
-def code_fence_mask(lines: list[str]) -> list[bool]:
-    mask = [False] * len(lines)
-    fence_char: Optional[str] = None
-    fence_length = 0
-    for index, line in enumerate(lines):
-        body, _ = split_eol(line)
-        if fence_char is None:
-            match = FENCE_OPEN_RE.match(body)
-            if match:
-                token = match.group("fence")
-                fence_char = token[0]
-                fence_length = len(token)
-                mask[index] = True
-            continue
-        mask[index] = True
-        if re.match(rf"^[ \t]{{0,3}}{re.escape(fence_char)}{{{fence_length},}}[ \t]*$", body):
-            fence_char = None
-            fence_length = 0
-    return mask
 
 
 def parse_document(path: Path, text: str) -> Document:
@@ -361,26 +188,28 @@ def parse_document(path: Path, text: str) -> Document:
     issues: list[Issue] = []
     warnings: list[Issue] = []
     headings: list[Heading] = []
-    fence_mask = code_fence_mask(lines)
+    protected = protected_line_mask(lines)
     below_candidates: dict[int, Marker] = {}
 
     for index, line in enumerate(lines):
-        if fence_mask[index]:
+        if protected[index]:
             continue
-        below_match = BELOW_RE.match(line)
-        if below_match:
-            label = below_match.group("label")
-            seconds = parse_label(label, index + 1, issues)
-            target = parse_target(below_match.group("target"), index + 1, issues)
+        parsed_below = parse_below_marker(line)
+        if parsed_below:
+            if parsed_below.error:
+                issues.append(
+                    Issue("malformed_timestamp", index + 1, parsed_below.error)
+                )
+            target = parse_target(parsed_below.target, index + 1, issues)
             below_candidates[index] = Marker(
                 "B",
                 index,
                 index + 1,
-                label,
-                seconds,
-                split_eol(line)[0].strip(),
+                parsed_below.label,
+                parsed_below.seconds,
+                parsed_below.raw,
                 target,
-                eol=below_match.group("eol") or "",
+                eol=parsed_below.eol,
             )
 
         match = HEADING_RE.match(line)
@@ -408,30 +237,29 @@ def parse_document(path: Path, text: str) -> Document:
                 issues.append(Issue("misplaced_src", index + 1, "src identifier must end the heading"))
 
         inline: Optional[Marker] = None
-        inline_match = INLINE_RE.search(body_without_src)
-        inline_tokens = list(INLINE_ANY_RE.finditer(body_without_src))
+        base_body, parsed_inline = split_trailing_inline(body_without_src)
+        inline_tokens = find_inline_markers(body_without_src)
         if len(inline_tokens) > 1:
             issues.append(Issue("multiple_inline", index + 1, "heading contains multiple inline timestamps"))
-        elif inline_tokens and not inline_match:
+        elif inline_tokens and not parsed_inline:
             issues.append(Issue("misplaced_inline", index + 1, "inline timestamp must end the heading or precede src"))
-        if inline_match:
-            label = inline_match.group("label")
-            seconds = parse_label(label, index + 1, issues)
-            target = parse_target(inline_match.group("target"), index + 1, issues)
+        if parsed_inline:
+            if parsed_inline.error:
+                issues.append(
+                    Issue("malformed_timestamp", index + 1, parsed_inline.error)
+                )
+            target = parse_target(parsed_inline.target, index + 1, issues)
             inline = Marker(
                 "I",
                 index,
                 index + 1,
-                label,
-                seconds,
-                inline_match.group("marker"),
+                parsed_inline.label,
+                parsed_inline.seconds,
+                parsed_inline.raw,
                 target,
-                separator=inline_match.group("separator"),
+                separator=parsed_inline.separator,
                 eol=match.group("eol") or "",
             )
-            base_body = body_without_src[: inline_match.start()].rstrip()
-        else:
-            base_body = body_without_src.rstrip()
 
         headings.append(
             Heading(
@@ -613,32 +441,6 @@ class FinalState:
     below: bool
     src: bool
     src_id: Optional[str]
-
-
-def canonical_inline(seconds: int, base_url: Optional[str]) -> str:
-    label = format_hms(seconds)
-    if base_url:
-        return f"[{label}]({timestamp_url(base_url, seconds)})"
-    return f"[{label}]"
-
-
-def canonical_below(seconds: int, base_url: Optional[str]) -> str:
-    label = format_hms(seconds)
-    target = timestamp_url(base_url, seconds) if base_url else "#"
-    return f"[🎥 {label}]({target})"
-
-
-def allocate_src(seconds: int, used: set[str]) -> str:
-    base = f"^src-{seconds}"
-    if base not in used:
-        used.add(base)
-        return base
-    collision = 2
-    while f"{base}-{collision}" in used:
-        collision += 1
-    result = f"{base}-{collision}"
-    used.add(result)
-    return result
 
 
 def warn_redundant(document: Document, args: argparse.Namespace) -> None:
