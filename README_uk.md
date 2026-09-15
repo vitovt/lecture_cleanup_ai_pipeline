@@ -181,7 +181,7 @@ YouTube, бо цей код потрібен для імені результа�
 - `--short-summary-output {append,separate}` / `--long-summary-output {append,separate}`: незалежно додати кожен підсумок до основного Markdown або записати його в сусідній файл.
 - `--short-summary-file-suffix <СУФІКС>` / `--long-summary-file-suffix <СУФІКС>`: непорожні суфікси назв окремих файлів.
 - `--long-summary-lang <default|КОД>`: мова лекції для довгого підсумку або перевизначення дволітерним кодом ISO-639-1.
-- `--long-summary-references` / `--no-long-summary-references`: увімкнути або вимкнути перевірені Obsidian-посилання на секції джерела в Long Summary.
+- `--long-summary-references` / `--no-long-summary-references`: увімкнути або вимкнути перевірені посилання на секції джерела в Long Summary.
 - `--context-file <шлях>`: файл із контекстом для конкретного вводу; додається до КОРИСТУВАЦЬКОГО промпту відразу після загального речення "Context" (діє для всіх блоків). Можна вказувати кілька разів; блоки об’єднуються послідовно.
 
 Приклади:
@@ -251,7 +251,8 @@ YouTube, бо цей код потрібен для імені результа�
 - `summary.short.heading` / `summary.long.heading`: заголовки короткого й довгого підсумків.
 - `summary.long.lang`: `default` використовує мову лекції; також можна вказати дволітерний код ISO-639-1.
 - `summary.long.references.enabled`: додає під кожним `###`/`####` перевірене посилання на `^src-*` або `^txt-*`; потребує одночасно `include_src_block_ids: true` та `include_txt_block_ids_for_untimed: true`.
-- `summary.long.references.display`: програмно формує видимий текст посилання після AI-валідації. `label` задає сталий текст, `heading` приймає `none`, `title` або `markdown`, `timestamp` керує показом доступного часу, а `separator` з’єднує компоненти. `markdown` зберігає реальний рівень source-заголовка як звичайний текст wikilink alias.
+- `summary.long.references.link_style`: `markdown` (типово) формує `[label](#^src-N)` і відображається як посилання у звичайних Markdown-viewer’ах; `wikilink` формує `[[#^src-N|label]]` для Obsidian. Окремий summary містить URL-encoded ім’я файла джерела, наприклад `[label](My%20Lecture.md#^src-N)`. В обох стилях точний перехід до блоків `^src-*`/`^txt-*` залишається Obsidian-специфічним.
+- `summary.long.references.display`: програмно формує видимий текст посилання після AI-валідації. `label` задає сталий текст, `heading` приймає `none`, `title` або `markdown`, `timestamp` керує показом доступного часу, а `separator` з’єднує компоненти. `markdown` зберігає реальний рівень source-заголовка як звичайний текст label.
 - `parasites`: шляхи до списків «слів-паразитів» по мовах.
 - `llm.request_delay_seconds`: пауза між LLM-запитами (секунди); допомагає уникати лімітів; 0 вимикає.
 - `retry.attempts`: глобальна кількість спроб (1 = без повторів)

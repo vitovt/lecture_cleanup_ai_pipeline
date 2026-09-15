@@ -192,7 +192,7 @@ These flags are passed to `scripts/run_pipeline.py` via the `.sh` wrappers.
 * `--short-summary-output {append,separate}` / `--long-summary-output {append,separate}` — independently append each summary or write it to a sibling file
 * `--short-summary-file-suffix <SUFFIX>` / `--long-summary-file-suffix <SUFFIX>` — non-empty filename suffixes for separate summaries
 * `--long-summary-lang <default|CODE>` — use the lecture language for the long summary or override it with an ISO-639-1 code
-* `--long-summary-references` / `--no-long-summary-references` — enable or disable validated Obsidian source links in the long summary
+* `--long-summary-references` / `--no-long-summary-references` — enable or disable validated source links in the long summary
 * `--context-file <path>` — file with per-input context inserted into the USER prompt right after the generic "Context" sentence (affects all chunks). Can be passed multiple times; blocks are concatenated in order.
 
 **Examples**
@@ -263,7 +263,8 @@ General
 * `summary.short.heading` / `summary.long.heading`: headings for short and long summaries
 * `summary.long.lang`: `default` follows the lecture language, or use a two-letter ISO-639-1 override
 * `summary.long.references.enabled`: add a validated `^src-*` or `^txt-*` link below every `###`/`####`; requires both `include_src_block_ids: true` and `include_txt_block_ids_for_untimed: true`
-* `summary.long.references.display`: programmatically render the visible link text after AI validation. `label` supplies fixed text, `heading` accepts `none`, `title`, or `markdown`, `timestamp` controls the available time, and `separator` joins components. `markdown` preserves the real source-heading level as plain wikilink alias text
+* `summary.long.references.link_style`: `markdown` (default) renders `[label](#^src-N)` and works as link syntax in standard Markdown viewers; `wikilink` renders `[[#^src-N|label]]` for Obsidian. A separate summary includes the URL-encoded source filename, for example `[label](My%20Lecture.md#^src-N)`. In both styles, exact `^src-*`/`^txt-*` block navigation remains Obsidian-specific.
+* `summary.long.references.display`: programmatically render the visible link text after AI validation. `label` supplies fixed text, `heading` accepts `none`, `title`, or `markdown`, `timestamp` controls the available time, and `separator` joins components. `markdown` preserves the real source-heading level as ordinary link-label text
 * `parasites`: paths to filler-word lists by language
 * `llm.request_delay_seconds`: delay between LLM requests (seconds); helps avoid rate limits; 0 disables
 * `retry.attempts`: global default retry attempts (1 = no retry)

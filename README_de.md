@@ -195,7 +195,7 @@ Diese Parameter werden über die `.sh`-Skripte an `scripts/run_pipeline.py` übe
 * `--short-summary-output {append,separate}` / `--long-summary-output {append,separate}` — jede Zusammenfassung unabhängig anhängen oder in eine benachbarte Datei schreiben
 * `--short-summary-file-suffix <SUFFIX>` / `--long-summary-file-suffix <SUFFIX>` — nicht leere Dateinamenssuffixe für separate Zusammenfassungen
 * `--long-summary-lang <default|CODE>` — Vorlesungssprache verwenden oder mit einem ISO-639-1-Code überschreiben
-* `--long-summary-references` / `--no-long-summary-references` — validierte Obsidian-Quellenlinks in der langen Zusammenfassung aktivieren oder deaktivieren
+* `--long-summary-references` / `--no-long-summary-references` — validierte Quellenlinks in der langen Zusammenfassung aktivieren oder deaktivieren
 * `--context-file <Pfad>` — Datei mit dateispezifischem Kontext; wird im USER‑Prompt direkt nach dem allgemeinen Satz „Context“ eingefügt (gilt für alle Blöcke). Mehrfach nutzbar; Inhalte werden in Reihenfolge zusammengefügt.
 
 **Beispiele**
@@ -266,7 +266,8 @@ Allgemein
 * `summary.short.heading` / `summary.long.heading`: Überschriften für kurze und lange Zusammenfassungen
 * `summary.long.lang`: `default` folgt der Vorlesungssprache, alternativ ein zweistelliger ISO-639-1-Code
 * `summary.long.references.enabled`: fügt unter jedem `###`/`####` einen validierten Link auf `^src-*` oder `^txt-*` ein; erfordert `include_src_block_ids: true` und `include_txt_block_ids_for_untimed: true`
-* `summary.long.references.display`: rendert den sichtbaren Linktext nach der AI-Validierung programmgesteuert. `label` liefert festen Text, `heading` akzeptiert `none`, `title` oder `markdown`, `timestamp` steuert die verfügbare Zeit und `separator` verbindet die Komponenten. `markdown` erhält die echte Ebene der Quellüberschrift als normalen Wikilink-Aliastext
+* `summary.long.references.link_style`: `markdown` (Standard) rendert `[label](#^src-N)` und erscheint in gewöhnlichen Markdown-Viewern als Link; `wikilink` rendert `[[#^src-N|label]]` für Obsidian. Eine separate Zusammenfassung enthält den URL-codierten Quelldateinamen, zum Beispiel `[label](My%20Lecture.md#^src-N)`. In beiden Stilen bleibt die genaue Navigation zu `^src-*`/`^txt-*`-Blöcken Obsidian-spezifisch.
+* `summary.long.references.display`: rendert den sichtbaren Linktext nach der AI-Validierung programmgesteuert. `label` liefert festen Text, `heading` akzeptiert `none`, `title` oder `markdown`, `timestamp` steuert die verfügbare Zeit und `separator` verbindet die Komponenten. `markdown` erhält die echte Ebene der Quellüberschrift als normalen Linktext
 * `parasites`: Pfade zu Füllwortlisten je Sprache
 * `llm.request_delay_seconds`: Verzögerung zwischen LLM-Anfragen (Sekunden); hilft gegen Rate Limits; 0 = aus
 * `retry.attempts`: globale Standardanzahl an Versuchen (1 = kein Retry)
