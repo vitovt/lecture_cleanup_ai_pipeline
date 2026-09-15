@@ -6,7 +6,7 @@ It preserves the content without loss, corrects punctuation, capitalization, and
 * **Input:** `.txt` (lines, optionally with `[HH:MM:SS,mmm]`) or `.srt` (in development due to format variations).
 * **Output:** a single `.md` file and a `.csv` QC report.
 * Works in overlapping chunks and supports hints for consistent terminology across parts.
-* Has three editing modes: `strict`, `normal`, `creative`.
+* Has six predefined editing modes: `strict`, `normal`, `creative`, `creativedetailed`, `creativeeditoral`, `creativeeditoral_technical`.
 
 ## How It Works (Short Overview)
 
@@ -44,7 +44,7 @@ It preserves the content without loss, corrects punctuation, capitalization, and
   * Context = last `txt_overlap_chars` of the previous chunk (read-only).
 * **LLM provider call:**
 
-  * System prompt depends on mode: `strict` / `normal` / `creative`.
+  * System prompt depends on mode: `strict` / `normal` / `creative` / `creativedetailed` / `creativeeditoral` / `creativeeditoral_technical`.
   * User prompt includes: language, filler-word lists, aside/joke style, `TERM_HINTS` (hidden), “context,” and the fragment.
 * **Terminology normalization:**
 
@@ -237,11 +237,14 @@ General
 - `stitch_dedup_window_chars`: deduplication window (null = same as overlap, 0 = off)
 - `include_timecodes_in_headings`: add timecodes to headings (for TXT)
 - `process_timecodes_by_ai`: keep raw timestamps in the prompt and ask the LLM to place per-heading timecodes (TXT with timestamps)
-- `content_mode`: `strict` / `normal` / `creative`
+- `content_mode`: `strict` / `normal` / `creative` / `creativedetailed` / `creativeeditoral` / `creativeeditoral_technical`
 
   * `strict`: minimal surface corrections only
   * `normal`: readable phrasing, minor reorderings allowed
   * `creative`: freer structuring; prioritizes contextual term normalization to avoid frequent ASR biases
+  * `creativedetailed`: creative cleanup that retains verbosity, the speaker's tone, and small interjections
+  * `creativeeditoral`: detailed cleanup with richer Markdown structure and selective Obsidian editorial callouts
+  * `creativeeditoral_technical`: editorial cleanup with consistent formatting for code and technical identifiers, plus technical callouts for corrections, security risks, best practices, and production limitations
 * `suppress_edit_comments`: remove HTML comments from final Markdown
 * `highlight_asides_style`: `italic` or `blockquote` for asides/jokes
 * `summary_mode`: `disabled`, `short`, `long`, or `both`; the tracked default remains disabled

@@ -158,11 +158,12 @@ qc_report_mode: outdir
 # Provide file name relative to prompts/system_ (without .md).
 #
 # Predefined modes:
-# - normal   : balanced cleanup (default). Keeps meaning; light structure.
-# - strict   : no reordering; only punctuation/casing; remove safe fillers.
-# - creative : allows stronger rephrasing/merging short sentences; normalizes term variants.
-# - creativedetailed : allows stronger rephrasing/merging short sentences; normalizes term variants but keep verbosity and original mood.
-# - creativeeditoral : same as crearive detailed (allows stronger rephrasing/merging, keeps verbosity) + additional meaningfull blocks formating + Editorial callouts
+# - strict: no reordering; only punctuation/casing; removes safe fillers.
+# - normal: balanced cleanup that preserves meaning and adds light structure.
+# - creative: stronger rephrasing and sentence merging; normalizes term variants (tracked default).
+# - creativedetailed: creative cleanup that preserves verbosity, tone, and small interjections.
+# - creativeeditoral: detailed cleanup with richer Markdown structure and editorial callouts.
+# - creativeeditoral_technical: editorial cleanup with technical formatting and technical callouts.
 content_mode: creative
 
 # Edit comments emitted at end of each output block (HTML comments like <!-- fixed: ... -->, <!-- merged_terms: ... -->).

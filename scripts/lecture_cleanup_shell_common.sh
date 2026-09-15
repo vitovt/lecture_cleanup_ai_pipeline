@@ -63,6 +63,10 @@ Forwarded lecture cleanup options:
   --log-level LEVEL             Cleanup logging: quiet|error|info|debug|trace
   --trace                       Trace full cleanup prompts and responses
 
+Configured content modes (set content_mode in config.yaml):
+  strict | normal | creative | creativedetailed
+  creativeeditoral | creativeeditoral_technical
+
 Workflow wrappers prepare a TXT transcript, so cleanup --input is managed
 internally; media wrappers also manage --format. Wrapper-specific help above
 documents source, language, output, context, overwrite, and debug options.

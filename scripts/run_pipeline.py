@@ -520,7 +520,8 @@ def main() -> int:
     ap = argparse.ArgumentParser(
         description=(
             "Turn long lecture transcripts into clean Markdown with CONTEXT-overlap,\n"
-            "mode-specific editing (normal/strict/creative), and stitching dedup."
+            "mode-specific editing (strict/normal/creative/creativedetailed/\n"
+            "creativeeditoral/creativeeditoral_technical), and stitching dedup."
         ),
         formatter_class=argparse.RawTextHelpFormatter,
     )

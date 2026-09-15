@@ -7,7 +7,7 @@ Außerdem fügt es eine einfache Struktur hinzu und sorgt für konsistente Termi
 * **Eingabe:** `.txt` (Zeilen, optional mit `[HH:MM:SS,mmm]`) oder `.srt` (noch in Entwicklung aufgrund unterschiedlicher Formate).
 * **Ausgabe:** eine `.md`-Datei und ein `.csv`-Bericht mit QC-Metriken.
 * Arbeitet in überlappenden Textblöcken („Chunks“) und unterstützt Terminologie-Hinweise zwischen Abschnitten.
-* Unterstützt drei Bearbeitungsmodi: `strict`, `normal`, `creative`.
+* Unterstützt sechs vordefinierte Bearbeitungsmodi: `strict`, `normal`, `creative`, `creativedetailed`, `creativeeditoral`, `creativeeditoral_technical`.
 
 ## Funktionsweise (Kurzüberblick)
 
@@ -45,7 +45,7 @@ Außerdem fügt es eine einfache Struktur hinzu und sorgt für konsistente Termi
   * Kontext = die letzten `txt_overlap_chars` des vorherigen Blocks (nur lesend).
 * **LLM-Anbieter-Aufruf:**
 
-  * System-Prompt abhängig vom Modus: `strict` / `normal` / `creative`.
+  * System-Prompt abhängig vom Modus: `strict` / `normal` / `creative` / `creativedetailed` / `creativeeditoral` / `creativeeditoral_technical`.
   * Benutzer-Prompt enthält: Sprache, Füllwort-Listen, Stil für Randbemerkungen/Witze, `TERM_HINTS` (versteckt), „Kontext“ und den eigentlichen Textblock.
 * **Terminologie-Normalisierung:**
 
@@ -240,11 +240,14 @@ Allgemein
 - `stitch_dedup_window_chars`: Fenster zur Deduplizierung (null = wie Überlappung, 0 = aus)
 - `include_timecodes_in_headings`: Zeitcodes in Überschriften (für TXT)
 - `process_timecodes_by_ai`: Rohzeitcodes im Prompt lassen und das Modell pro Überschrift Zeitcodes setzen lassen (TXT mit Zeitstempeln)
-- `content_mode`: `strict` / `normal` / `creative`
+- `content_mode`: `strict` / `normal` / `creative` / `creativedetailed` / `creativeeditoral` / `creativeeditoral_technical`
 
   * `strict`: nur minimale Oberflächenkorrekturen
   * `normal`: bessere Lesbarkeit, leichte Umstellungen erlaubt
   * `creative`: freiere Strukturierung; kontextbasierte Terminologie hat Vorrang vor Häufigkeit (zur Vermeidung von ASR-Fehlern)
+  * `creativedetailed`: kreative Bereinigung unter Beibehaltung von Ausführlichkeit, Sprecherton und kurzen Einwürfen
+  * `creativeeditoral`: detaillierte Bereinigung mit reichhaltigerer Markdown-Struktur und gezielten redaktionellen Obsidian-Callouts
+  * `creativeeditoral_technical`: redaktionelle Bereinigung mit konsistenter Formatierung von Code und technischen Bezeichnern sowie technischen Callouts für Korrekturen, Sicherheitsrisiken, Best Practices und Produktionseinschränkungen
 * `suppress_edit_comments`: entfernt HTML-Kommentare im finalen Markdown
 * `highlight_asides_style`: `italic` oder `blockquote` für Randbemerkungen/Witze
 * `summary_mode`: `disabled`, `short`, `long` oder `both`; im getrackten Standard deaktiviert
