@@ -5,7 +5,7 @@ import time
 from pathlib import Path
 from typing import Any, Callable
 
-from ..errors import ProviderError, RetryExhaustedError
+from ..errors import ProviderError, ProviderRequestError, RetryExhaustedError
 from ..formatter import normalize_words
 
 
@@ -89,9 +89,22 @@ class GeminiProvider:
             except Exception as exc:  # SDK exposes several evolving transport classes.
                 last_error = exc
                 status = getattr(exc, "status_code", None) or getattr(exc, "code", None)
+                try:
+                    status = int(status) if status is not None else None
+                except (TypeError, ValueError):
+                    status = None
                 retryable = status in {408, 409, 429, 500, 502, 503, 504} or status is None
                 if not retryable:
-                    raise ProviderError(f"Gemini request failed: {exc}") from exc
+                    message = str(exc)
+                    account_wide = status in {401, 403, 404} or any(
+                        marker in message.casefold()
+                        for marker in (
+                            "api key", "billing", "quota", "permission",
+                            "model not found", "model is not found",
+                        )
+                    )
+                    error_type = ProviderError if account_wide else ProviderRequestError
+                    raise error_type(f"Gemini request failed: {message}") from exc
                 if attempt + 1 >= self.attempts:
                     break
                 delay = min(self.max_delay, self.initial_delay * self.multiplier**attempt)
