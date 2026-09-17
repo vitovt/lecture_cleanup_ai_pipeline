@@ -18,7 +18,8 @@ class VocabularyTests(unittest.TestCase):
                 ["terms.txt"],
                 ["stateful firewall"],
                 [],
-                base_dir=root,
+                config_base_dir=root,
+                cli_base_dir=root,
                 limit=1000,
             )
             self.assertEqual(
@@ -29,7 +30,8 @@ class VocabularyTests(unittest.TestCase):
     def test_provider_limit_is_checked_after_merge(self):
         with self.assertRaises(InputError):
             merge_vocabulary(
-                ["one", "two"], [], [], [], base_dir=Path.cwd(), limit=1
+                ["one", "two"], [], [], [],
+                config_base_dir=Path.cwd(), cli_base_dir=Path.cwd(), limit=1
             )
 
 

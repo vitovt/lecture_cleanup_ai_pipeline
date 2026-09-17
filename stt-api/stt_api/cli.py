@@ -117,7 +117,8 @@ def _effective_settings(
         config_files,
         args.custom_vocabulary,
         args.custom_vocabulary_file,
-        base_dir=config_base,
+        config_base_dir=config_base,
+        cli_base_dir=Path.cwd(),
         limit=1000,
     )
 

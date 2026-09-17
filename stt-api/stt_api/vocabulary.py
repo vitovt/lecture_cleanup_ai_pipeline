@@ -22,14 +22,20 @@ def merge_vocabulary(
     cli_terms: Iterable[str],
     cli_files: Iterable[str],
     *,
-    base_dir: Path,
+    config_base_dir: Path,
+    cli_base_dir: Path,
     limit: int,
 ) -> list[str]:
     candidates = [str(term).strip() for term in config_terms]
-    for raw in [*config_files, *cli_files]:
+    for raw in config_files:
         path = Path(raw).expanduser()
         if not path.is_absolute():
-            path = base_dir / path
+            path = config_base_dir / path
+        candidates.extend(_file_terms(path))
+    for raw in cli_files:
+        path = Path(raw).expanduser()
+        if not path.is_absolute():
+            path = cli_base_dir / path
         candidates.extend(_file_terms(path))
     candidates.extend(str(term).strip() for term in cli_terms)
 
