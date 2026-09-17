@@ -62,7 +62,7 @@ Mandatory:
   <youtube_url>          YouTube watch, youtu.be, Shorts, live, or embed URL
   --lang CODE           Primary language for cleanup and output filenames
 
-Language format (same rules for primary and additional languages):
+Language format:
   --lang CODE              Required, with a two-letter base language. Accepts
                            uk or uk-UA, de or de-DE, en or en-US, ru or ru-RU
   --additional-lang CODE   Additional spoken language; repeatable

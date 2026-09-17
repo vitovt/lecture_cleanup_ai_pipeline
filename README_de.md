@@ -149,6 +149,42 @@ Sprachcode benötigen. Fehlen diese Metadaten, muss `--lang CODE` angegeben
 werden. Die vollständige aktuelle Optionsliste zeigt jedes Skript mit
 `--help`.
 
+### Mehrsprachiges Audio mit Gemini STT
+
+Die Gemini-Abläufe unterstützen Code-Switching innerhalb eines Satzes und
+zwischen Sätzen. Zuerst wird die getrennte Audio-Provider-Umgebung eingerichtet:
+
+```bash
+./stt-api/setup_venv.sh
+# danach GEMINI_API_KEY=... in stt-api/.env eintragen
+```
+
+Der Transkriptionsschlüssel liegt ausschließlich in `stt-api/.env`. Die
+Root-Datei `.env` und `GOOGLE_API_KEY` konfigurieren weiterhin die
+LLM-Verarbeitung des fertigen Transkripts.
+
+```bash
+# Ukrainisch primär, Deutsch und Englisch zusätzlich
+./StartMe.sh youtube-gemini --lang uk \
+  --additional-lang de --additional-lang en "https://youtu.be/ID"
+
+# Lokale Datei mit Fachwortliste; Vocabulary erfordert timestamps off
+./StartMe.sh local-gemini --lang uk --additional-lang de \
+  --timestamps off --custom-vocabulary-file ./terms.txt ./lesson.m4a
+```
+
+`--lang` ist obligatorisch und bestimmt Cleanup-Sprache und Dateisuffix.
+`--additional-lang` kann wiederholt werden. Beide Optionen akzeptieren die
+Kurzformen `uk`, `de`, `en`, `ru` oder vollständige BCP-47-Codes `uk-UA`,
+`de-DE`, `en-US`, `ru-RU`. Einzelne Begriffe werden mit wiederholtem
+`--custom-vocabulary`, UTF-8-Dateien mit einem Eintrag pro Zeile mit
+`--custom-vocabulary-file` übergeben.
+
+Die vier Modi heißen `youtube-gemini`, `youtube-gemini-list`, `local-gemini`
+und `local-gemini-list`. Vollständige Konfiguration, Limits,
+Chunking/Checkpoints und inkompatible Optionen stehen in
+[`stt-api/README.md`](stt-api/README.md).
+
 * **Einzeldatei:**
 
   ```bash
