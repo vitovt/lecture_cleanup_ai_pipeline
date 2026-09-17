@@ -8,3 +8,7 @@ config.yaml
 speechcoreai-api/
 groq-api/
 pyannote-diarization/
+stt-api/.env
+stt-api/.venv/
+stt-api/config.yaml
+stt-api/.stt-cache/
