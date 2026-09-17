@@ -17,15 +17,24 @@ gemini_log_rank() {
 }
 
 gemini_info() {
-    (( $(gemini_log_rank "${LOG_LEVEL:-info}") >= 2 )) && printf '[INFO] %s\n' "$*"
+    if (( $(gemini_log_rank "${LOG_LEVEL:-info}") >= 2 )); then
+        printf '[INFO] %s\n' "$*"
+    fi
+    return 0
 }
 
 gemini_debug() {
-    (( $(gemini_log_rank "${LOG_LEVEL:-info}") >= 3 )) && printf '[DEBUG] %s\n' "$*"
+    if (( $(gemini_log_rank "${LOG_LEVEL:-info}") >= 3 )); then
+        printf '[DEBUG] %s\n' "$*"
+    fi
+    return 0
 }
 
 gemini_warn() {
-    (( $(gemini_log_rank "${LOG_LEVEL:-info}") >= 2 )) && printf '[WARN] %s\n' "$*" >&2
+    if (( $(gemini_log_rank "${LOG_LEVEL:-info}") >= 2 )); then
+        printf '[WARN] %s\n' "$*" >&2
+    fi
+    return 0
 }
 
 gemini_init() {
@@ -99,6 +108,7 @@ gemini_validate_options() {
         return 2
     }
     gemini_debug "$validation"
+    return 0
 }
 
 gemini_preflight() {
