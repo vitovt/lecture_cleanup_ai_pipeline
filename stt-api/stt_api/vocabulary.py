@@ -13,7 +13,15 @@ def _file_terms(path: Path) -> list[str]:
         lines = path.read_text(encoding="utf-8").splitlines()
     except UnicodeDecodeError as exc:
         raise InputError(f"custom vocabulary file is not UTF-8: {path}") from exc
-    return [line.strip() for line in lines if line.strip() and not line.lstrip().startswith("#")]
+    result: list[str] = []
+    for line in lines:
+        value = line.strip()
+        if not value or value.startswith("#"):
+            continue
+        if value.startswith("```") or value.startswith("~~~"):
+            continue
+        result.append(value)
+    return result
 
 
 def merge_vocabulary(
@@ -53,3 +61,22 @@ def merge_vocabulary(
             f"merged custom vocabulary has {len(result)} entries; provider limit is {limit}"
         )
     return result
+
+
+def validate_elevenlabs_keyterms(terms: Iterable[str]) -> None:
+    unsupported = set("<>{}[]\\")
+    for term in terms:
+        if len(term) >= 50:
+            raise InputError(
+                f"ElevenLabs keyterm must be shorter than 50 characters: {term!r}"
+            )
+        if len(term.split()) > 5:
+            raise InputError(
+                f"ElevenLabs keyterm must contain at most 5 words: {term!r}"
+            )
+        invalid = sorted(set(term) & unsupported)
+        if invalid:
+            rendered = "".join(invalid)
+            raise InputError(
+                f"ElevenLabs keyterm contains unsupported character(s) {rendered!r}: {term!r}"
+            )

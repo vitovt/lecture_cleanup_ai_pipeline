@@ -58,6 +58,50 @@ class CliValidationTests(unittest.TestCase):
                     2,
                 )
 
+    def test_elevenlabs_accepts_keyterms_with_timestamps_and_diarization(self):
+        with patch.dict(os.environ, {"ELEVENLABS_API_KEY": "test-only"}, clear=False):
+            self.assertEqual(
+                main(
+                    [
+                        "validate",
+                        "--provider", "elevenlabs",
+                        "--language-code", "uk",
+                        "--language-code", "de-DE",
+                        "--custom-vocabulary", "Halbleiter",
+                        "--timestamps", "on",
+                        "--diarization", "on",
+                    ]
+                ),
+                0,
+            )
+
+    def test_elevenlabs_keyterm_validation_precedes_credentials(self):
+        with patch.dict(os.environ, {"ELEVENLABS_API_KEY": ""}, clear=False):
+            self.assertEqual(
+                main(
+                    [
+                        "validate",
+                        "--provider", "elevenlabs",
+                        "--language-code", "uk",
+                        "--custom-vocabulary", "invalid[keyterm]",
+                    ]
+                ),
+                2,
+            )
+
+    def test_elevenlabs_requires_its_own_credentials(self):
+        with patch.dict(os.environ, {"ELEVENLABS_API_KEY": ""}, clear=False):
+            self.assertEqual(
+                main(
+                    [
+                        "validate",
+                        "--provider", "elevenlabs",
+                        "--language-code", "uk",
+                    ]
+                ),
+                2,
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

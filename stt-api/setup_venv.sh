@@ -10,7 +10,7 @@ python3 -m venv "$SCRIPT_DIR/.venv"
 
 if [[ ! -f "$SCRIPT_DIR/.env" ]]; then
     cp "$SCRIPT_DIR/.env_default" "$SCRIPT_DIR/.env"
-    echo "Created $SCRIPT_DIR/.env; add GEMINI_API_KEY before transcription."
+    echo "Created $SCRIPT_DIR/.env; add the API key for each STT provider you use."
 fi
 if [[ ! -f "$SCRIPT_DIR/config.yaml" ]]; then
     cp "$SCRIPT_DIR/config.yaml.example" "$SCRIPT_DIR/config.yaml"

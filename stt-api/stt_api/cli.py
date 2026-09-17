@@ -14,8 +14,8 @@ from .errors import ConfigError, InputError, SttError
 from .formatter import format_events, merge_plain_text, words_to_events
 from .languages import normalize_languages
 from .media import prepare_audio, probe_duration
-from .providers import GeminiProvider
-from .vocabulary import merge_vocabulary
+from .providers import ElevenLabsProvider, GeminiProvider
+from .vocabulary import merge_vocabulary, validate_elevenlabs_keyterms
 
 
 PROJECT_DIR = Path(__file__).resolve().parent.parent
@@ -23,7 +23,9 @@ LOG = logging.getLogger("stt-api")
 
 
 def _add_provider_options(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("--provider", choices=("gemini",), help="STT provider override.")
+    parser.add_argument(
+        "--provider", choices=("gemini", "elevenlabs"), help="STT provider override."
+    )
     parser.add_argument("--config", help="YAML override; defaults to stt-api/config.yaml.")
     parser.add_argument("--model", help="Provider model override.")
     parser.add_argument(
@@ -78,9 +80,12 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def _apply_overrides(config: dict[str, Any], args: argparse.Namespace) -> None:
+    if args.provider is not None:
+        set_path(config, "provider", args.provider)
+    provider = str(get_path(config, "provider", "")).strip()
+    if args.model is not None and provider:
+        set_path(config, f"providers.{provider}.model", args.model)
     for dotted, value in (
-        ("provider", args.provider),
-        ("providers.gemini.model", args.model),
         ("transcription.mode.type", args.mode),
         ("processing.resume.enabled", None if args.resume is None else args.resume == "on"),
         ("processing.resume.checkpoint_directory", args.cache_dir),
@@ -101,11 +106,13 @@ def _effective_settings(
     config: dict[str, Any], args: argparse.Namespace, config_base: Path
 ) -> dict[str, Any]:
     provider = str(get_path(config, "provider", "")).strip()
-    if provider != "gemini":
-        raise ConfigError(f"unsupported provider '{provider}'; currently available: gemini")
-    model = str(get_path(config, "providers.gemini.model", "")).strip()
+    if provider not in {"gemini", "elevenlabs"}:
+        raise ConfigError(
+            f"unsupported provider '{provider}'; available: gemini, elevenlabs"
+        )
+    model = str(get_path(config, f"providers.{provider}.model", "")).strip()
     if not model:
-        raise ConfigError("providers.gemini.model cannot be empty")
+        raise ConfigError(f"providers.{provider}.model cannot be empty")
 
     raw_languages = get_path(config, "transcription.languages.codes", [])
     if not isinstance(raw_languages, list):
@@ -125,6 +132,8 @@ def _effective_settings(
         cli_base_dir=Path.cwd(),
         limit=1000,
     )
+    if provider == "elevenlabs":
+        validate_elevenlabs_keyterms(vocabulary)
 
     mode = str(get_path(config, "transcription.mode.type", "verbatim")).lower()
     timestamps = bool(get_path(config, "transcription.timestamps.enabled", True))
@@ -132,26 +141,35 @@ def _effective_settings(
     if mode not in {"verbatim", "smart"}:
         raise ConfigError("transcription.mode.type must be verbatim or smart")
     conflicts: list[str] = []
-    if vocabulary and timestamps:
-        conflicts.append("custom vocabulary cannot be combined with word timestamps")
-    if vocabulary and diarization:
-        conflicts.append("custom vocabulary cannot be combined with speaker diarization")
-    if mode == "smart" and timestamps:
-        conflicts.append("smart mode cannot be combined with word timestamps")
-    if mode == "smart" and diarization:
-        conflicts.append("smart mode cannot be combined with speaker diarization")
+    if provider == "gemini":
+        if vocabulary and timestamps:
+            conflicts.append("custom vocabulary cannot be combined with word timestamps")
+        if vocabulary and diarization:
+            conflicts.append("custom vocabulary cannot be combined with speaker diarization")
+        if mode == "smart" and timestamps:
+            conflicts.append("smart mode cannot be combined with word timestamps")
+        if mode == "smart" and diarization:
+            conflicts.append("smart mode cannot be combined with speaker diarization")
     if conflicts:
         raise InputError("; ".join(conflicts))
 
-    max_seconds = float(
-        get_path(
-            config,
-            "media.chunking.timed_chunk_seconds" if (timestamps or diarization)
-            else "media.chunking.untimed_chunk_seconds",
-            1500 if (timestamps or diarization) else 3300,
+    if provider == "gemini":
+        max_seconds = float(
+            get_path(
+                config,
+                "media.chunking.timed_chunk_seconds" if (timestamps or diarization)
+                else "media.chunking.untimed_chunk_seconds",
+                1500 if (timestamps or diarization) else 3300,
+            )
         )
-    )
-    overlap = float(get_path(config, "media.chunking.overlap_seconds", 5))
+        overlap = float(get_path(config, "media.chunking.overlap_seconds", 5))
+    else:
+        max_seconds = float(
+            get_path(config, "providers.elevenlabs.chunking.max_seconds", 32400)
+        )
+        overlap = float(
+            get_path(config, "providers.elevenlabs.chunking.overlap_seconds", 5)
+        )
     if max_seconds <= 0:
         raise ConfigError("media chunk duration must be positive")
     return {
@@ -164,11 +182,20 @@ def _effective_settings(
         "diarization": diarization,
         "max_seconds": max_seconds,
         "overlap": overlap,
+        "provider_language_code": (
+            languages[0].split("-", 1)[0].lower() if len(languages) == 1 else ""
+        ),
     }
 
 
-def _provider(config: dict[str, Any], settings: dict[str, Any]) -> GeminiProvider:
-    env_name = str(get_path(config, "providers.gemini.api_key_env", "GEMINI_API_KEY"))
+def _provider(
+    config: dict[str, Any], settings: dict[str, Any]
+) -> GeminiProvider | ElevenLabsProvider:
+    provider_name = settings["provider"]
+    default_env = "GEMINI_API_KEY" if provider_name == "gemini" else "ELEVENLABS_API_KEY"
+    env_name = str(
+        get_path(config, f"providers.{provider_name}.api_key_env", default_env)
+    )
     api_key = os.environ.get(env_name, "").strip()
     if not api_key:
         raise ConfigError(
@@ -177,19 +204,38 @@ def _provider(config: dict[str, Any], settings: dict[str, Any]) -> GeminiProvide
     attempts = int(get_path(config, "processing.retry.attempts", 4))
     if attempts < 1:
         raise ConfigError("processing.retry.attempts must be at least 1")
-    return GeminiProvider(
+    common: dict[str, Any] = {
+        "attempts": attempts,
+        "initial_delay": float(
+            get_path(config, "processing.retry.initial_delay_seconds", 2)
+        ),
+        "multiplier": float(
+            get_path(config, "processing.retry.backoff_multiplier", 2)
+        ),
+        "max_delay": float(get_path(config, "processing.retry.max_delay_seconds", 30)),
+        "jitter": float(get_path(config, "processing.retry.jitter_seconds", 0.25)),
+        "request_timeout": float(
+            get_path(
+                config,
+                f"providers.{provider_name}.request.timeout_seconds",
+                180 if provider_name == "gemini" else 900,
+            )
+        ),
+    }
+    if provider_name == "gemini":
+        return GeminiProvider(api_key, **common)
+    return ElevenLabsProvider(
         api_key,
-        attempts=attempts,
-        initial_delay=float(get_path(config, "processing.retry.initial_delay_seconds", 2)),
-        multiplier=float(get_path(config, "processing.retry.backoff_multiplier", 2)),
-        max_delay=float(get_path(config, "processing.retry.max_delay_seconds", 30)),
-        jitter=float(get_path(config, "processing.retry.jitter_seconds", 0.25)),
-        request_timeout=float(get_path(config, "providers.gemini.request.timeout_seconds", 180)),
+        tag_audio_events=bool(
+            get_path(config, "providers.elevenlabs.tag_audio_events", False)
+        ),
+        **common,
     )
 
 
-def _validate_credentials(config: dict[str, Any]) -> None:
-    env_name = str(get_path(config, "providers.gemini.api_key_env", "GEMINI_API_KEY"))
+def _validate_credentials(config: dict[str, Any], provider: str) -> None:
+    default_env = "GEMINI_API_KEY" if provider == "gemini" else "ELEVENLABS_API_KEY"
+    env_name = str(get_path(config, f"providers.{provider}.api_key_env", default_env))
     if not os.environ.get(env_name, "").strip():
         raise ConfigError(
             f"{env_name} is not set; add it to stt-api/.env or the process environment"
@@ -256,6 +302,7 @@ def transcribe(config: dict[str, Any], args: argparse.Namespace, settings: dict[
     all_events: list[dict[str, Any]] = []
     plain_parts: list[str] = []
     raw_parts: list[dict[str, Any]] = []
+    detected_languages: list[dict[str, Any]] = []
     try:
         for index, part in enumerate(prepared.parts):
             checkpoint_settings = {**settings, "offset": part.offset, "duration": part.duration}
@@ -276,6 +323,14 @@ def transcribe(config: dict[str, Any], args: argparse.Namespace, settings: dict[
             else:
                 LOG.info("Reusing checkpoint for part %d/%d", index + 1, len(prepared.parts))
             raw_parts.append(result)
+            detected = str(result.get("language_code") or "").strip()
+            if detected:
+                detected_languages.append(
+                    {
+                        "code": detected,
+                        "probability": result.get("language_probability"),
+                    }
+                )
             words = result.get("words") or []
             if words:
                 adjusted: list[dict[str, Any]] = []
@@ -297,13 +352,17 @@ def transcribe(config: dict[str, Any], args: argparse.Namespace, settings: dict[
     if bool(get_path(config, "output.write_events", True)):
         _write_json(events_path, all_events)
     if bool(get_path(config, "output.save_raw_response", True)):
-        _write_json(raw_path, {"provider": "gemini", "parts": raw_parts})
+        _write_json(raw_path, {"provider": settings["provider"], "parts": raw_parts})
 
     metadata = {
-        "provider": "gemini",
+        "provider": settings["provider"],
         "model": settings["model"],
         "language_codes": settings["language_codes"],
-        "detected_language": "",
+        "provider_language_code": settings["provider_language_code"],
+        "detected_language": (
+            detected_languages[0]["code"] if detected_languages else ""
+        ),
+        "detected_languages": detected_languages,
         "transcript_file": str(transcript_path),
         "events_file": str(events_path) if events_path.is_file() else "",
         "raw_response_file": str(raw_path) if raw_path.is_file() else "",
@@ -335,13 +394,15 @@ def main(argv: list[str] | None = None) -> int:
         config_base = override.parent if override else PROJECT_DIR
         settings = _effective_settings(config, args, config_base)
         if args.command == "validate":
-            _validate_credentials(config)
+            _validate_credentials(config, settings["provider"])
             print(
                 "VALID status=ok provider={provider} model={model} languages={langs} "
-                "timestamps={timestamps} diarization={diarization} vocabulary={vocabulary}".format(
+                "provider_language={provider_language} timestamps={timestamps} "
+                "diarization={diarization} vocabulary={vocabulary}".format(
                     provider=settings["provider"],
                     model=settings["model"],
                     langs=",".join(settings["language_codes"]) or "auto",
+                    provider_language=settings["provider_language_code"] or "auto",
                     timestamps="on" if settings["timestamps"] else "off",
                     diarization="on" if settings["diarization"] else "off",
                     vocabulary=len(settings["vocabulary"]),

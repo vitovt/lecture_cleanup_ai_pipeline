@@ -1,2 +1,5 @@
 google-genai>=2.21,<3
+# 2.60 fixes repeated multipart serialization for keyterms. Do not lower the
+# minimum without re-testing ElevenLabs custom vocabulary requests.
+elevenlabs>=2.60,<3
 PyYAML>=6,<7

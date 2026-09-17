@@ -8,8 +8,8 @@
 # API keys NEVER belong in YAML. stt-api reads its own .env next to this file;
 # an already exported process environment variable has higher precedence.
 
-# Provider used when --provider is omitted. Only Gemini is implemented now;
-# the provider-neutral structure is ready for a future ElevenLabs adapter.
+# Provider used when --provider is omitted. Workflow scripts always pass their
+# provider explicitly; this value mainly affects direct stt_api.sh calls.
 provider: gemini
 
 providers:
@@ -26,16 +26,41 @@ providers:
       timeout_seconds: 180
 
   elevenlabs:
-    # Reserved for the next provider implementation.
-    model: null
+    # ElevenLabs batch Speech-to-Text model. scribe_v2 is optimized for long,
+    # multilingual recordings and supports timestamps, diarization, keyterms,
+    # and automatic language switching in one file.
+    model: scribe_v2
+
+    # Environment variable read from stt-api/.env. Do not put the key here.
     api_key_env: ELEVENLABS_API_KEY
+
+    request:
+      # Timeout for one synchronous batch request. Long recordings can take
+      # several minutes; retries reopen the local file from the beginning.
+      timeout_seconds: 900
+
+    # false keeps laughter/music/etc. tags out of lecture cleanup input. The
+    # provider response still includes spoken words and punctuation.
+    tag_audio_events: false
+
+    chunking:
+      # ElevenLabs accepts standard single-channel files up to 10 hours and
+      # 5 GB. The conservative 9-hour split point avoids the duration edge.
+      # Ordinary lectures therefore use one request rather than Gemini-sized
+      # 25/55-minute chunks. Files above this value are split with ffmpeg.
+      max_seconds: 32400
+      overlap_seconds: 5
 
 transcription:
   languages:
-    # Ordered BCP-47 hints sent to the provider. The first code is the primary
-    # language. An empty list enables Gemini automatic language detection and
-    # code-switching. Workflow scripts normally build this list from required
-    # --lang plus repeatable --additional-lang options.
+    # Ordered workflow languages. The first code is the primary cleanup/output
+    # language. Workflow scripts normally build this list from required --lang
+    # plus repeatable --additional-lang options.
+    #
+    # Gemini receives the entire ordered list as language hints. ElevenLabs
+    # batch accepts only one language_code: with exactly one configured language
+    # its base ISO code is sent; with zero or multiple languages the hint is
+    # omitted so Scribe v2 uses automatic multilingual detection.
     #
     # Both shortcuts and full codes are accepted:
     #   uk or uk-UA, de or de-DE, en or en-US, ru or ru-RU
@@ -44,32 +69,37 @@ transcription:
 
   mode:
     # verbatim preserves filler words, repetitions, and false starts.
-    # smart improves readability, but cannot be combined with timestamps or
-    # diarization. The CLI rejects incompatible combinations before upload.
+    # smart improves readability. For Gemini it cannot be combined with
+    # timestamps or diarization. For ElevenLabs it maps to no_verbatim=true and
+    # remains compatible with timestamps, diarization, and keyterms.
     type: verbatim
 
   timestamps:
     # Word timestamps allow downstream generation of source timecodes and
     # ^src-SECONDS identifiers. Gemini documents that timestamps can reduce
     # recognition accuracy and are incompatible with custom vocabulary.
+    # ElevenLabs supports word timestamps together with keyterms/diarization.
     enabled: true
     granularity: word
 
   diarization:
-    # Gemini speaker attribution supports up to eight speakers. Attribution
-    # with three or more speakers is currently documented as experimental.
-    # It is incompatible with custom vocabulary and with smart mode.
+    # Gemini speaker attribution supports up to eight speakers and is
+    # incompatible with custom vocabulary and smart mode. ElevenLabs supports
+    # up to 32 speakers and allows diarization with keyterms and no_verbatim.
     enabled: false
 
   vocabulary:
-    # Domain terms, acronyms, names, or short phrases. Gemini accepts at most
-    # 1000 merged entries and recommends roughly 100 or fewer for best results.
+    # Domain terms, acronyms, names, or short phrases. Both providers accept at
+    # most 1000 merged entries; a focused list of about 100 or fewer is easier
+    # to evaluate. ElevenLabs charges a 20% keyterm surcharge. Each ElevenLabs
+    # keyterm must be under 50 characters, contain no more than 5 words, and
+    # cannot contain < > { } [ ] or backslash. These rules are checked locally.
     # CLI --custom-vocabulary entries are appended, then case-insensitive exact
     # duplicates are removed while preserving the first spelling and order.
     terms: []
 
-    # UTF-8 text files containing one term or phrase per line. Empty lines and
-    # lines whose first non-space character is # are ignored. Relative paths
+    # UTF-8 text files containing one term or phrase per line. Empty lines,
+    # # comments, and Markdown ```/~~~ fence lines are ignored. Relative paths
     # are resolved from the directory containing the selected config file.
     files: []
 
