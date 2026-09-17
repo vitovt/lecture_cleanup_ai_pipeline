@@ -9,6 +9,9 @@ processing remain in the four top-level Gemini scripts.
 Gemini is currently implemented. The provider-neutral layout is intended to
 support ElevenLabs later without changing the existing workflow entrypoints.
 
+Provider and mode comparisons, including the Ukrainian/German Gemini baseline
+for future ElevenLabs testing, are recorded in [BENCHMARKS.md](BENCHMARKS.md).
+
 ## Setup
 
 ```bash
