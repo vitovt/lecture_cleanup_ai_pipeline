@@ -42,8 +42,8 @@ Mandatory:
   file1 ... OR --all    Explicit files, or known media in the current directory
 
 Language format:
-  --lang CODE              Required; uk/uk-UA, de/de-DE, en/en-US, ru/ru-RU,
-                           or another full BCP-47 code
+  --lang CODE              Required, with a two-letter base: uk/uk-UA,
+                           de/de-DE, en/en-US, or ru/ru-RU
   --additional-lang CODE   Extra code-switching language; repeatable; accepts
                            the same shortcut/full-code formats as --lang
 

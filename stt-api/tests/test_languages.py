@@ -21,6 +21,9 @@ class LanguageTests(unittest.TestCase):
         with self.assertRaises(InputError):
             normalize_language("german")
 
+    def test_valid_bcp47_language_without_region_is_accepted(self):
+        self.assertEqual(normalize_language("ceb"), "ceb")
+
 
 if __name__ == "__main__":
     unittest.main()

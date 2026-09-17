@@ -1,5 +1,7 @@
 import os
+import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 from stt_api.cli import main
@@ -37,6 +39,24 @@ class CliValidationTests(unittest.TestCase):
                 ),
                 0,
             )
+
+    def test_output_basename_cannot_escape_output_directory(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "audio.wav"
+            source.write_bytes(b"not-read-before-basename-validation")
+            with patch.dict(os.environ, {"GEMINI_API_KEY": "test-only"}, clear=False):
+                self.assertEqual(
+                    main(
+                        [
+                            "transcribe",
+                            "--input-file", str(source),
+                            "--output-dir", directory,
+                            "--output-basename", "../escape",
+                            "--language-code", "uk",
+                        ]
+                    ),
+                    2,
+                )
 
 
 if __name__ == "__main__":

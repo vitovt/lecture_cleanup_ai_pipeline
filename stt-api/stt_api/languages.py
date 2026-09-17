@@ -16,7 +16,7 @@ ALIASES = {
     "ru": "ru-RU",
     "ru-ru": "ru-RU",
 }
-BCP47_RE = re.compile(r"^[A-Za-z]{2,3}(?:-[A-Za-z]{2,4}){1,2}$")
+BCP47_RE = re.compile(r"^[A-Za-z]{2,3}(?:-[A-Za-z]{2,4}){0,2}$")
 
 
 def normalize_language(value: str, *, allow_auto: bool = False) -> str:

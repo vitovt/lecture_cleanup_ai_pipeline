@@ -60,7 +60,8 @@ Mandatory:
   --lang CODE              Primary language; required for cleanup and filenames
 
 Language format:
-  --lang CODE              Primary spoken/cleanup language. Both forms work:
+  --lang CODE              Primary spoken/cleanup language (two-letter base).
+                           Both forms work:
                            uk or uk-UA, de or de-DE, en or en-US, ru or ru-RU
   --additional-lang CODE   Additional spoken language; repeatable; accepts the
                            same shortcuts and full BCP-47 format as --lang
@@ -225,10 +226,9 @@ if [[ -f "$OUT_MD" && "$OVERWRITE" -ne 1 ]]; then
     exit 0
 fi
 
-METADATA_FILE="$(mktemp)"
-trap 'rm -f "$METADATA_FILE"' EXIT
+METADATA_FILE="$SRTOUTDIR/${BASE_SAFE}.${LANG_LABEL}.metadata.json"
 gemini_info "Stage 2/4: transcribing with Gemini"
-gemini_transcribe "$AUDIO_INPUT_PATH" "$SRTOUTDIR" "$METADATA_FILE" >/dev/null
+gemini_transcribe "$AUDIO_INPUT_PATH" "$SRTOUTDIR" "$METADATA_FILE" "${BASE_SAFE}.${LANG_LABEL}" >/dev/null
 rc=$?
 [[ "$rc" -eq 0 ]] || exit "$rc"
 RAW_TXT_PATH="$(gemini_json_field "$METADATA_FILE" transcript_file)"

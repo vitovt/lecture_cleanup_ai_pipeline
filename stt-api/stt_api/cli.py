@@ -63,6 +63,10 @@ def build_parser() -> argparse.ArgumentParser:
     _add_provider_options(transcribe)
     transcribe.add_argument("--input-file", required=True)
     transcribe.add_argument("--output-dir", default=".")
+    transcribe.add_argument(
+        "--output-basename",
+        help="Basename (without .txt) shared by TXT/events/raw/metadata outputs.",
+    )
     transcribe.add_argument("--metadata-output")
     transcribe.add_argument("--events-output")
     transcribe.add_argument("--preflight", action="store_true")
@@ -235,7 +239,9 @@ def transcribe(config: dict[str, Any], args: argparse.Namespace, settings: dict[
 
     output_dir = Path(args.output_dir).expanduser().resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
-    base = input_path.stem
+    base = args.output_basename or input_path.stem
+    if not base or base in {".", ".."} or Path(base).name != base:
+        raise InputError("--output-basename must be one filename component")
     transcript_path = output_dir / f"{base}.txt"
     events_path = Path(args.events_output).expanduser().resolve() if args.events_output else output_dir / f"{base}.events.json"
     raw_path = output_dir / f"{base}.raw.json"
@@ -307,8 +313,13 @@ def transcribe(config: dict[str, Any], args: argparse.Namespace, settings: dict[
         "diarization": settings["diarization"],
         "vocabulary_entries": len(settings["vocabulary"]),
     }
-    if args.metadata_output:
-        _write_json(Path(args.metadata_output).expanduser().resolve(), metadata)
+    metadata_path = (
+        Path(args.metadata_output).expanduser().resolve()
+        if args.metadata_output
+        else output_dir / f"{base}.metadata.json"
+    )
+    if args.metadata_output or bool(get_path(config, "output.write_metadata", True)):
+        _write_json(metadata_path, metadata)
     print(json.dumps(metadata, ensure_ascii=False))
     return 0
 

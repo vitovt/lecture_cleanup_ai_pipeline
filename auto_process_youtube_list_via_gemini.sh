@@ -43,8 +43,8 @@ Mandatory:
 
 Selection and languages:
   --videos SPEC           1-based items: 1-6 | 2,4,6 | 1-3,5,7-9
-  --lang CODE             Required; shortcuts uk/de/en/ru or full BCP-47 such
-                          as uk-UA, de-DE, en-US, ru-RU
+  --lang CODE             Required, with a two-letter base; shortcuts uk/de/en/ru
+                          or full codes uk-UA, de-DE, en-US, ru-RU
   --additional-lang CODE  Additional code-switching language; repeatable;
                           accepts the same formats as --lang
 

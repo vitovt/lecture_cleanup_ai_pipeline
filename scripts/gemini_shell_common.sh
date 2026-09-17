@@ -62,7 +62,7 @@ gemini_resolve_log_level() {
 gemini_primary_label() {
     local value="${1,,}"
     value="${value%%-*}"
-    [[ "$value" =~ ^[a-z]{2,3}$ ]] || return 1
+    [[ "$value" =~ ^[a-z]{2}$ ]] || return 1
     printf '%s' "$value"
 }
 
@@ -115,11 +115,13 @@ gemini_transcribe() {
     local input_file="$1"
     local output_dir="$2"
     local metadata_file="$3"
+    local output_basename="$4"
     local log_level="$LOG_LEVEL"
     [[ "$log_level" == "trace" ]] && log_level=debug
     "$STT_RUNNER" transcribe \
         --input-file "$input_file" \
         --output-dir "$output_dir" \
+        --output-basename "$output_basename" \
         --metadata-output "$metadata_file" \
         --log-level "$log_level" \
         "${GEMINI_STT_FLAGS[@]}"

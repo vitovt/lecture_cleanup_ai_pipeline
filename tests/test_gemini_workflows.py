@@ -42,6 +42,21 @@ printf '<%s>\n' "${GEMINI_STT_FLAGS[@]}"
             ["<--provider>", "<gemini>", "<--language-code>", "<uk>"],
         )
 
+    def test_primary_workflow_language_must_have_two_letter_base(self):
+        command = """
+SCRIPT_DIR="$1"
+source "$SCRIPT_DIR/scripts/gemini_shell_common.sh"
+gemini_primary_label ceb
+"""
+        result = subprocess.run(
+            ["bash", "-c", command, "bash", str(PROJECT)],
+            cwd=PROJECT,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        self.assertNotEqual(result.returncode, 0)
+
     def test_every_workflow_has_detailed_help(self):
         for script in SCRIPTS:
             with self.subTest(script=script):

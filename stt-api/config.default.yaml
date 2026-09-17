@@ -109,6 +109,10 @@ output:
   # included. Disable only when minimizing retained artifacts is important.
   save_raw_response: true
 
+  # Write a compact metadata JSON beside direct low-level outputs. Workflow
+  # scripts always request this file explicitly for downstream frontmatter.
+  write_metadata: true
+
   # Write provider-neutral timestamp/speaker events beside the transcript.
   # Untimed transcription writes an empty event list.
   write_events: true

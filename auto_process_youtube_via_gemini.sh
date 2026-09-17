@@ -63,8 +63,8 @@ Mandatory:
   --lang CODE           Primary language for cleanup and output filenames
 
 Language format (same rules for primary and additional languages):
-  --lang CODE              Required. Accepts uk or uk-UA, de or de-DE,
-                           en or en-US, ru or ru-RU, or another BCP-47 code
+  --lang CODE              Required, with a two-letter base language. Accepts
+                           uk or uk-UA, de or de-DE, en or en-US, ru or ru-RU
   --additional-lang CODE   Additional spoken language; repeatable
 
 The primary language is the first Gemini hint and controls cleanup/output. For
@@ -223,11 +223,11 @@ if [[ -f "$OUT_MD" && "$OVERWRITE" -ne 1 ]]; then
     exit 0
 fi
 
-METADATA_FILE="$(mktemp)"
+METADATA_FILE="$SRTOUTDIR/${base}.${LANG_LABEL}.metadata.json"
 TMP_CTX=""
-trap 'rm -f "$METADATA_FILE" "${TMP_CTX:-}"' EXIT
+trap 'rm -f "${TMP_CTX:-}"' EXIT
 gemini_info "Stage 3/5: transcribing with Gemini"
-gemini_transcribe "$MP3_PATH" "$SRTOUTDIR" "$METADATA_FILE" >/dev/null
+gemini_transcribe "$MP3_PATH" "$SRTOUTDIR" "$METADATA_FILE" "${base}.${LANG_LABEL}" >/dev/null
 rc=$?
 [[ "$rc" -eq 0 ]] || exit "$rc"
 RAW_TXT_PATH="$(gemini_json_field "$METADATA_FILE" transcript_file)"
