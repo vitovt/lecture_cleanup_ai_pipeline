@@ -184,6 +184,14 @@ def _provider(config: dict[str, Any], settings: dict[str, Any]) -> GeminiProvide
     )
 
 
+def _validate_credentials(config: dict[str, Any]) -> None:
+    env_name = str(get_path(config, "providers.gemini.api_key_env", "GEMINI_API_KEY"))
+    if not os.environ.get(env_name, "").strip():
+        raise ConfigError(
+            f"{env_name} is not set; add it to stt-api/.env or the process environment"
+        )
+
+
 def _write_json(path: Path, value: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(path.suffix + ".tmp")
@@ -316,6 +324,7 @@ def main(argv: list[str] | None = None) -> int:
         config_base = override.parent if override else PROJECT_DIR
         settings = _effective_settings(config, args, config_base)
         if args.command == "validate":
+            _validate_credentials(config)
             print(
                 "VALID status=ok provider={provider} model={model} languages={langs} "
                 "timestamps={timestamps} diarization={diarization} vocabulary={vocabulary}".format(
