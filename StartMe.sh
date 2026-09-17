@@ -58,10 +58,10 @@ colorize_help() {
         -v example="$C_EXAMPLE" \
         -v help_type="$help_type" '
         function colored(color, text) { return color text reset }
-        /^(Usage:.*|usage:.*|Global color options.*:|Typical flow:|More help:|Options:|Examples?:|Description:|Mandatory:|Optional:|Notes:|Input modes.*:|Preflight:|Language:|Pipeline options:|Groq options:|Forwarded pipeline options:|Forwarded lecture cleanup options:|Forwarded Groq options:|Selection and language:|Detailed command help:|Commands:)$/ {
+        /^(Usage:.*|usage:.*|Global color options.*:|Typical flow:|More help:|Options:|Examples?:|Description:|Mandatory:|Optional:|Notes:|Input modes.*:|Preflight:|Language:|Language format:|Pipeline options:|Groq options:|Gemini transcription options:|Custom vocabulary.*:|Vocabulary.*:|Batch and pipeline options:|Forwarded pipeline options:|Forwarded lecture cleanup options:|Forwarded Groq options:|Forwarded Gemini options:|Selection and language:|Selection and languages:|Detailed command help:|Commands:)$/ {
             print colored(section, $0); next
         }
-        /^(Transcript cleanup|YouTube subtitles.*|SpeechCore transcription.*|Groq transcription.*|Multitrack transcription and cleanup|Provider-level tools|Setup and maintenance|Utilities)$/ {
+        /^(Transcript cleanup|YouTube subtitles.*|SpeechCore transcription.*|Groq transcription.*|Gemini code-switching transcription.*|Multitrack transcription and cleanup|Provider-level tools|Setup and maintenance|Utilities)$/ {
             print colored(section, $0); next
         }
         help_type == "overview" && /^  [a-z][a-z-]*$/ {
@@ -106,7 +106,8 @@ delegates detailed help or execution to the corresponding project script.
 
 Typical flow:
   1. Choose the source: transcript, YouTube subtitles, YouTube audio, or local media.
-  2. Choose a transcription provider when audio must be transcribed: Groq or SpeechCore.
+  2. Choose a transcription provider when audio must be transcribed: Gemini,
+     Groq, or SpeechCore.
   3. Run detailed help: $PROGRAM help MODE
   4. Run the mode:         $PROGRAM MODE [arguments]
 
@@ -169,6 +170,24 @@ Groq transcription, optional pyannote speakers, and cleanup
   local-groq-list
     Preflight cost/size and process multiple local files through Groq.
     Example: $PROGRAM local-groq-list --lang uk --all --oversize-policy chunk
+
+Gemini code-switching transcription and cleanup
+  youtube-gemini
+    Download one YouTube video's audio and transcribe multilingual speech with Gemini.
+    --lang is required; add repeatable --additional-lang for code-switching.
+    Example: $PROGRAM youtube-gemini --lang uk --additional-lang de "VIDEO_URL"
+
+  youtube-gemini-list
+    Process selected playlist videos with the same Gemini language/vocabulary settings.
+    Example: $PROGRAM youtube-gemini-list --lang uk --additional-lang de --videos 1-3 "PLAYLIST_URL"
+
+  local-gemini
+    Transcribe and clean one local audio/video file with Gemini.
+    Example: $PROGRAM local-gemini --lang uk --additional-lang de ./lesson.m4a
+
+  local-gemini-list
+    Preflight and process explicit local files or media in the current directory.
+    Example: $PROGRAM local-gemini-list --lang uk --additional-lang de --all
 
 Multitrack transcription and cleanup
   multitrack
@@ -241,6 +260,10 @@ resolve_mode() {
         youtube-groq-list) TARGET="$SCRIPT_DIR/auto_process_youtube_list_via_groq.sh" ;;
         local-groq) TARGET="$SCRIPT_DIR/process_localaudiovideo_via_groq.sh" ;;
         local-groq-list) TARGET="$SCRIPT_DIR/process_localaudiovideo_via_groq_list.sh" ;;
+        youtube-gemini) TARGET="$SCRIPT_DIR/auto_process_youtube_via_gemini.sh" ;;
+        youtube-gemini-list) TARGET="$SCRIPT_DIR/auto_process_youtube_list_via_gemini.sh" ;;
+        local-gemini) TARGET="$SCRIPT_DIR/process_localaudiovideo_via_gemini.sh" ;;
+        local-gemini-list) TARGET="$SCRIPT_DIR/process_localaudiovideo_via_gemini_list.sh" ;;
         multitrack) TARGET="$SCRIPT_DIR/process_multitrack.sh" ;;
         groq-api) TARGET="$SCRIPT_DIR/groq-api/groq_api.sh" ;;
         diarize) TARGET="$SCRIPT_DIR/pyannote-diarization/pyannote_diarization.sh" ;;
