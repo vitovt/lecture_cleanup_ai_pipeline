@@ -68,6 +68,16 @@ be repeated for other languages spoken in the recording:
   'https://youtu.be/VIDEO_ID'
 ```
 
+ElevenLabs workflows also accept `--multilingual` when the additional
+languages are unknown:
+
+```bash
+./auto_process_youtube_via_elevenlabs.sh \
+  --lang uk \
+  --multilingual \
+  'https://youtu.be/VIDEO_ID'
+```
+
 Both primary and additional options accept these shortcuts:
 
 | Shortcut | Normalized workflow code |
@@ -85,10 +95,11 @@ cleanup/output language.
 
 Gemini receives every normalized code as an ordered language hint. ElevenLabs
 batch Scribe accepts only one language hint: with only `--lang`, its base ISO
-code is sent; when one or more `--additional-lang` options are present, the
-hint is omitted and Scribe v2 uses automatic multilingual detection. The
-additional codes therefore document intent and deliberately select automatic
-code-switching rather than being sent as an unsupported array.
+code is sent; when `--multilingual` or one or more `--additional-lang` options
+are present, the hint is omitted and Scribe v2 automatically detects any
+number of languages. ElevenLabs does not receive the additional codes as an
+allowlist. They document expected languages and select the same automatic
+mode; use `--multilingual` when those languages are not known in advance.
 
 ## Custom vocabulary
 
