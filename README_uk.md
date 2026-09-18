@@ -136,14 +136,16 @@ YouTube, бо цей код потрібен для імені результа�
 метаданих немає, передайте `--lang CODE`. Повний актуальний список параметрів
 кожного скрипту доступний через `--help`.
 
-### Багатомовне аудіо через Gemini STT
+### Багатомовне аудіо через Gemini та ElevenLabs STT
 
-Gemini workflow призначені для записів із code-switching усередині речень або
-між реченнями. Спочатку окремо налаштуйте аудіопровайдера:
+Gemini та ElevenLabs workflow призначені для записів із code-switching усередині
+речень або між реченнями. Спочатку окремо налаштуйте аудіопровайдера:
 
 ```bash
 ./stt-api/setup_venv.sh
-# потім додайте GEMINI_API_KEY=... у stt-api/.env
+# потім додайте потрібні ключі в stt-api/.env:
+# GEMINI_API_KEY=...
+# ELEVENLABS_API_KEY=...
 ```
 
 Ключ для транскрипції зберігається лише в `stt-api/.env`. Кореневий `.env` і
@@ -157,6 +159,12 @@ Gemini workflow призначені для записів із code-switching �
 # Локальний файл зі словником термінів; vocabulary потребує timestamps off
 ./StartMe.sh local-gemini --lang uk --additional-lang de \
   --timestamps off --custom-vocabulary-file ./terms.txt ./lesson.m4a
+
+# ElevenLabs Scribe v2: vocabulary сумісний із timestamps і diarization
+./StartMe.sh youtube-elevenlabs --lang uk --additional-lang de \
+  --custom-vocabulary-file ./terms.txt "https://youtu.be/ID"
+
+./StartMe.sh local-elevenlabs --lang uk --additional-lang de ./lesson.m4a
 ```
 
 `--lang` обов’язковий і визначає cleanup-мову та суфікс файла.
@@ -165,9 +173,15 @@ Gemini workflow призначені для записів із code-switching �
 `ru-RU`. Окремі терміни додаються повторюваним `--custom-vocabulary`, файли —
 `--custom-vocabulary-file` (UTF-8, один термін/фраза на рядок).
 
-Доступні режими `youtube-gemini`, `youtube-gemini-list`, `local-gemini`,
-`local-gemini-list`. Повний опис конфігів, лімітів, chunking/checkpoints та
-несумісних опцій див. у [`stt-api/README.md`](stt-api/README.md).
+Для ElevenLabs наявність `--additional-lang` вмикає automatic multilingual
+detection, бо batch API приймає лише один явний language hint. `--lang` і далі
+визначає cleanup-мову та суфікс. Keyterms підтримуються разом із timestamps і
+diarization; кожен має бути коротшим за 50 символів і містити не більше 5 слів.
+
+Доступні також режими `youtube-elevenlabs`, `youtube-elevenlabs-list`,
+`local-elevenlabs`, `local-elevenlabs-list`. Повний опис усіх Gemini/ElevenLabs
+режимів, конфігів, лімітів, chunking/checkpoints та несумісних опцій див. у
+[`stt-api/README.md`](stt-api/README.md).
 
 - Один файл:
 

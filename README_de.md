@@ -149,14 +149,17 @@ Sprachcode benötigen. Fehlen diese Metadaten, muss `--lang CODE` angegeben
 werden. Die vollständige aktuelle Optionsliste zeigt jedes Skript mit
 `--help`.
 
-### Mehrsprachiges Audio mit Gemini STT
+### Mehrsprachiges Audio mit Gemini und ElevenLabs STT
 
-Die Gemini-Abläufe unterstützen Code-Switching innerhalb eines Satzes und
-zwischen Sätzen. Zuerst wird die getrennte Audio-Provider-Umgebung eingerichtet:
+Die Gemini- und ElevenLabs-Abläufe unterstützen Code-Switching innerhalb eines
+Satzes und zwischen Sätzen. Zuerst wird die getrennte Audio-Provider-Umgebung
+eingerichtet:
 
 ```bash
 ./stt-api/setup_venv.sh
-# danach GEMINI_API_KEY=... in stt-api/.env eintragen
+# danach die verwendeten Schlüssel in stt-api/.env eintragen:
+# GEMINI_API_KEY=...
+# ELEVENLABS_API_KEY=...
 ```
 
 Der Transkriptionsschlüssel liegt ausschließlich in `stt-api/.env`. Die
@@ -171,6 +174,12 @@ LLM-Verarbeitung des fertigen Transkripts.
 # Lokale Datei mit Fachwortliste; Vocabulary erfordert timestamps off
 ./StartMe.sh local-gemini --lang uk --additional-lang de \
   --timestamps off --custom-vocabulary-file ./terms.txt ./lesson.m4a
+
+# ElevenLabs Scribe v2: Keyterms funktionieren mit Timestamps und Diarization
+./StartMe.sh youtube-elevenlabs --lang uk --additional-lang de \
+  --custom-vocabulary-file ./terms.txt "https://youtu.be/ID"
+
+./StartMe.sh local-elevenlabs --lang uk --additional-lang de ./lesson.m4a
 ```
 
 `--lang` ist obligatorisch und bestimmt Cleanup-Sprache und Dateisuffix.
@@ -180,9 +189,15 @@ Kurzformen `uk`, `de`, `en`, `ru` oder vollständige BCP-47-Codes `uk-UA`,
 `--custom-vocabulary`, UTF-8-Dateien mit einem Eintrag pro Zeile mit
 `--custom-vocabulary-file` übergeben.
 
-Die vier Modi heißen `youtube-gemini`, `youtube-gemini-list`, `local-gemini`
-und `local-gemini-list`. Vollständige Konfiguration, Limits,
-Chunking/Checkpoints und inkompatible Optionen stehen in
+Bei ElevenLabs aktiviert `--additional-lang` die automatische mehrsprachige
+Erkennung, da die Batch-API nur einen expliziten Sprachhinweis akzeptiert.
+`--lang` bestimmt weiterhin Cleanup-Sprache und Dateisuffix. Keyterms sind mit
+Timestamps und Diarization kompatibel; jeder Eintrag muss kürzer als 50 Zeichen
+sein und darf höchstens 5 Wörter enthalten.
+
+Zusätzliche Modi heißen `youtube-elevenlabs`, `youtube-elevenlabs-list`,
+`local-elevenlabs` und `local-elevenlabs-list`. Vollständige Gemini/ElevenLabs-
+Konfiguration, Limits, Chunking/Checkpoints und Kompatibilitätsregeln stehen in
 [`stt-api/README.md`](stt-api/README.md).
 
 * **Einzeldatei:**

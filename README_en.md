@@ -146,14 +146,16 @@ result filename and cleanup stage need a concrete language code. Pass
 `--lang CODE` when that metadata is unavailable. Run each script with `--help`
 for its complete current option list.
 
-### Multilingual audio through Gemini STT
+### Multilingual audio through Gemini and ElevenLabs STT
 
-The Gemini workflows handle intra-sentence and inter-sentence code-switching.
-Set up the separate audio-provider environment first:
+The Gemini and ElevenLabs workflows handle intra-sentence and inter-sentence
+code-switching. Set up the separate audio-provider environment first:
 
 ```bash
 ./stt-api/setup_venv.sh
-# then add GEMINI_API_KEY=... to stt-api/.env
+# then add the keys you use to stt-api/.env:
+# GEMINI_API_KEY=...
+# ELEVENLABS_API_KEY=...
 ```
 
 The transcription key lives only in `stt-api/.env`. The root `.env` and its
@@ -167,6 +169,12 @@ The transcription key lives only in `stt-api/.env`. The root `.env` and its
 # Local media with terminology hints; vocabulary requires timestamps off
 ./StartMe.sh local-gemini --lang uk --additional-lang de \
   --timestamps off --custom-vocabulary-file ./terms.txt ./lesson.m4a
+
+# ElevenLabs Scribe v2: keyterms work with timestamps and diarization
+./StartMe.sh youtube-elevenlabs --lang uk --additional-lang de \
+  --custom-vocabulary-file ./terms.txt "https://youtu.be/ID"
+
+./StartMe.sh local-elevenlabs --lang uk --additional-lang de ./lesson.m4a
 ```
 
 `--lang` is mandatory and controls cleanup language and filename suffix.
@@ -175,9 +183,16 @@ Repeat `--additional-lang` for code-switching languages. Both options accept
 BCP-47 codes. Repeat `--custom-vocabulary` for terms and
 `--custom-vocabulary-file` for UTF-8 one-entry-per-line files.
 
-The four modes are `youtube-gemini`, `youtube-gemini-list`, `local-gemini`, and
-`local-gemini-list`. See [`stt-api/README.md`](stt-api/README.md) for complete
-configuration, limits, chunking/checkpoints, and incompatible-option rules.
+For ElevenLabs, adding `--additional-lang` selects automatic multilingual
+detection because the batch API accepts only one explicit language hint.
+`--lang` still controls cleanup and the filename suffix. Keyterms work with
+timestamps and diarization; each must be shorter than 50 characters and no
+longer than 5 words.
+
+Additional modes are `youtube-elevenlabs`, `youtube-elevenlabs-list`,
+`local-elevenlabs`, and `local-elevenlabs-list`. See
+[`stt-api/README.md`](stt-api/README.md) for complete Gemini/ElevenLabs
+configuration, limits, chunking/checkpoints, and compatibility rules.
 
 * **Single file:**
 
