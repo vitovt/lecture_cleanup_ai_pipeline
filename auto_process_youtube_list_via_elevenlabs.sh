@@ -10,6 +10,7 @@ PLAYLIST_URL=""
 VIDEOS_SPEC=""
 LANG=""
 ADDITIONAL_LANGS=()
+ELEVENLABS_MULTILINGUAL=0
 CUSTOM_VOCABULARY=()
 CUSTOM_VOCABULARY_FILES=()
 CONTEXT_FILES=()
@@ -45,10 +46,15 @@ Selection and languages:
   --videos SPEC           1-based items: 1-6 | 2,4,6 | 1-3,5,7-9
   --lang CODE             Required, with a two-letter base; shortcuts uk/de/en/ru
                           or full codes uk-UA, de-DE, en-US, ru-RU
+  --multilingual          Automatically detect every language in each video;
+                          no --additional-lang values are required
   --additional-lang CODE  Additional code-switching language; repeatable;
                           accepts the same formats as --lang
 
-With additional languages, Scribe v2 uses automatic multilingual detection;
+With --multilingual or any --additional-lang, Scribe v2 automatically detects
+any number of languages. ElevenLabs does not use --additional-lang values as a
+restrictive list; they only document expected languages and enable the same
+automatic mode. Use --multilingual when the additional languages are unknown.
 --lang continues to control cleanup language and output filenames.
 
 Vocabulary (optional, repeatable):
@@ -84,6 +90,7 @@ upload. Provider-wide authentication/retry failures abort the remaining list.
 
 Examples:
   ./${0##*/} --lang uk 'https://youtube.com/playlist?list=PLAYLIST_ID'
+  ./${0##*/} --lang uk --multilingual --videos 1-5 'PLAYLIST_URL'
   ./${0##*/} --lang uk-UA --additional-lang de-DE --videos 1-5 'PLAYLIST_URL'
   ./${0##*/} --lang uk --additional-lang de --additional-lang en \
       --videos 2,4,7 'PLAYLIST_URL'
@@ -100,6 +107,7 @@ while [[ $# -gt 0 ]]; do
         -h|--help) print_help; exit 0 ;;
         --videos) need_value "$1" "${2:-}"; VIDEOS_SPEC="$2"; shift 2 ;;
         --lang) need_value "$1" "${2:-}"; LANG="$2"; shift 2 ;;
+        --multilingual) ELEVENLABS_MULTILINGUAL=1; shift ;;
         --additional-lang) need_value "$1" "${2:-}"; ADDITIONAL_LANGS+=("$2"); shift 2 ;;
         --custom-vocabulary) need_value "$1" "${2:-}"; CUSTOM_VOCABULARY+=("$2"); shift 2 ;;
         --custom-vocabulary-file) need_value "$1" "${2:-}"; CUSTOM_VOCABULARY_FILES+=("$2"); shift 2 ;;
@@ -154,6 +162,7 @@ elevenlabs_resolve_log_level || exit $?
 elevenlabs_validate_options || exit $?
 
 CHILD_FLAGS=("${LECTURE_CLEANUP_FLAGS[@]}" --lang "$LANG")
+[[ "$ELEVENLABS_MULTILINGUAL" -eq 1 ]] && CHILD_FLAGS+=(--multilingual)
 for value in "${ADDITIONAL_LANGS[@]}"; do CHILD_FLAGS+=(--additional-lang "$value"); done
 for value in "${CUSTOM_VOCABULARY[@]}"; do CHILD_FLAGS+=(--custom-vocabulary "$value"); done
 for value in "${CUSTOM_VOCABULARY_FILES[@]}"; do CHILD_FLAGS+=(--custom-vocabulary-file "$value"); done

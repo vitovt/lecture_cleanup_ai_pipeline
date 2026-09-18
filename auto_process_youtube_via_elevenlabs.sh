@@ -17,6 +17,7 @@ OUTDIR="${ELEVENLABS_YOUTUBE_MDOUTDIR:-${AUTOYOUTUBE_MDOUTDIR:-$MDOUTDIR_DEFAULT
 URL=""
 LANG=""
 ADDITIONAL_LANGS=()
+ELEVENLABS_MULTILINGUAL=0
 CUSTOM_VOCABULARY=()
 CUSTOM_VOCABULARY_FILES=()
 CONTEXT_FLAGS=()
@@ -65,12 +66,18 @@ Mandatory:
 Language format:
   --lang CODE              Required, with a two-letter base language. Accepts
                            uk or uk-UA, de or de-DE, en or en-US, ru or ru-RU
+  --multilingual           Automatically detect every language in the audio;
+                           no --additional-lang values are required
   --additional-lang CODE   Additional spoken language; repeatable
 
 With only --lang, its base ISO code is sent as the Scribe language hint. If any
---additional-lang is present, the single-language hint is omitted and Scribe v2
-uses automatic multilingual detection. --lang still controls cleanup and the
-filename suffix: --lang uk-UA writes .uk.txt/.uk.md.
+--additional-lang is present, or if --multilingual is used, the single-language
+hint is omitted and Scribe v2 automatically detects any number of languages.
+ElevenLabs does not receive --additional-lang values as a restrictive list;
+they only document expected languages and enable the same automatic mode.
+Therefore use --multilingual when the additional languages are unknown.
+--lang remains mandatory because it controls cleanup and the filename suffix:
+--lang uk-UA writes .uk.txt/.uk.md.
 
 Custom vocabulary (optional, repeatable):
   --custom-vocabulary TERM       One domain term or short phrase
@@ -107,6 +114,7 @@ Preflight:
 
 Examples:
   ./${0##*/} --lang uk 'https://www.youtube.com/watch?v=VIDEO_ID'
+  ./${0##*/} --lang uk --multilingual 'https://youtu.be/VIDEO_ID'
   ./${0##*/} --lang uk-UA --additional-lang de-DE 'https://youtu.be/VIDEO_ID'
   ./${0##*/} --lang uk --additional-lang de --additional-lang en \
       'https://youtu.be/VIDEO_ID'
@@ -123,6 +131,7 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         -h|--help) print_help; exit 0 ;;
         --lang) need_value "$1" "${2:-}"; LANG="$2"; shift 2 ;;
+        --multilingual) ELEVENLABS_MULTILINGUAL=1; shift ;;
         --additional-lang) need_value "$1" "${2:-}"; ADDITIONAL_LANGS+=("$2"); shift 2 ;;
         --custom-vocabulary) need_value "$1" "${2:-}"; CUSTOM_VOCABULARY+=("$2"); shift 2 ;;
         --custom-vocabulary-file) need_value "$1" "${2:-}"; CUSTOM_VOCABULARY_FILES+=("$2"); shift 2 ;;

@@ -19,6 +19,7 @@ OUTDIR="${ELEVENLABS_LOCAL_MDOUTDIR:-${AUTOLOCAL_MDOUTDIR:-$MDOUTDIR_DEFAULT}}"
 INPUT_FILE=""
 LANG=""
 ADDITIONAL_LANGS=()
+ELEVENLABS_MULTILINGUAL=0
 CUSTOM_VOCABULARY=()
 CUSTOM_VOCABULARY_FILES=()
 CONTEXT_FLAGS=()
@@ -63,13 +64,18 @@ Language format:
   --lang CODE              Primary spoken/cleanup language (two-letter base).
                            Both forms work:
                            uk or uk-UA, de or de-DE, en or en-US, ru or ru-RU
+  --multilingual           Automatically detect every language in the audio;
+                           no --additional-lang values are required
   --additional-lang CODE   Additional spoken language; repeatable; accepts the
                            same shortcuts and full BCP-47 format as --lang
 
 With only --lang, its base ISO code is sent as the Scribe language hint. If an
---additional-lang is present, Scribe v2 uses automatic multilingual detection.
-The primary language still controls cleanup and filenames; for example,
---lang uk-UA produces the .uk.md suffix.
+--additional-lang is present, or if --multilingual is used, Scribe v2
+automatically detects any number of languages. ElevenLabs does not receive
+--additional-lang values as a restrictive list; they only document expected
+languages and enable the same automatic mode. Use --multilingual when the
+additional languages are unknown. The primary language still controls cleanup
+and filenames; for example, --lang uk-UA produces the .uk.md suffix.
 
 Custom vocabulary (optional, repeatable):
   --custom-vocabulary TERM       One exact term or short phrase
@@ -109,6 +115,7 @@ Preflight:
 
 Examples:
   ./${0##*/} --lang uk ./lesson.mp4
+  ./${0##*/} --lang uk --multilingual ./unknown-languages.m4a
   ./${0##*/} --lang uk-UA --additional-lang de-DE ./bilingual.m4a
   ./${0##*/} --lang uk --additional-lang de --additional-lang en ./lesson.wav
   ./${0##*/} --lang uk --additional-lang de \
@@ -127,6 +134,7 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         -h|--help) print_help; exit 0 ;;
         --lang) need_value "$1" "${2:-}"; LANG="$2"; shift 2 ;;
+        --multilingual) ELEVENLABS_MULTILINGUAL=1; shift ;;
         --additional-lang) need_value "$1" "${2:-}"; ADDITIONAL_LANGS+=("$2"); shift 2 ;;
         --custom-vocabulary) need_value "$1" "${2:-}"; CUSTOM_VOCABULARY+=("$2"); shift 2 ;;
         --custom-vocabulary-file) need_value "$1" "${2:-}"; CUSTOM_VOCABULARY_FILES+=("$2"); shift 2 ;;

@@ -78,6 +78,65 @@ printf '<%s>\n' "${ELEVENLABS_STT_FLAGS[@]}"
             ["<--provider>", "<elevenlabs>", "<--language-code>", "<uk>"],
         )
 
+    def test_multilingual_builder_explicitly_selects_auto_detection(self):
+        command = """
+SCRIPT_DIR="$1"
+source "$SCRIPT_DIR/scripts/elevenlabs_shell_common.sh"
+LANG=uk
+ADDITIONAL_LANGS=()
+ELEVENLABS_MULTILINGUAL=1
+CUSTOM_VOCABULARY=()
+CUSTOM_VOCABULARY_FILES=()
+STT_CONFIG= ELEVENLABS_MODEL= ELEVENLABS_MODE= ELEVENLABS_TIMESTAMPS=
+ELEVENLABS_DIARIZATION= ELEVENLABS_RESUME= ELEVENLABS_CACHE_DIR= OVERWRITE=0
+elevenlabs_build_stt_flags
+printf '<%s>\n' "${ELEVENLABS_STT_FLAGS[@]}"
+"""
+        result = subprocess.run(
+            ["bash", "-c", command, "bash", str(PROJECT)],
+            cwd=PROJECT,
+            text=True,
+            capture_output=True,
+            check=True,
+        )
+        self.assertEqual(
+            result.stdout.splitlines(),
+            ["<--provider>", "<elevenlabs>", "<--language-code>", "<auto>"],
+        )
+
+    def test_multilingual_builder_validates_documented_additional_languages(self):
+        command = """
+SCRIPT_DIR="$1"
+source "$SCRIPT_DIR/scripts/elevenlabs_shell_common.sh"
+LANG=uk
+ADDITIONAL_LANGS=(de-DE)
+ELEVENLABS_MULTILINGUAL=1
+CUSTOM_VOCABULARY=()
+CUSTOM_VOCABULARY_FILES=()
+STT_CONFIG= ELEVENLABS_MODEL= ELEVENLABS_MODE= ELEVENLABS_TIMESTAMPS=
+ELEVENLABS_DIARIZATION= ELEVENLABS_RESUME= ELEVENLABS_CACHE_DIR= OVERWRITE=0
+elevenlabs_build_stt_flags
+printf '<%s>\n' "${ELEVENLABS_STT_FLAGS[@]}"
+"""
+        result = subprocess.run(
+            ["bash", "-c", command, "bash", str(PROJECT)],
+            cwd=PROJECT,
+            text=True,
+            capture_output=True,
+            check=True,
+        )
+        self.assertEqual(
+            result.stdout.splitlines(),
+            [
+                "<--provider>",
+                "<elevenlabs>",
+                "<--language-code>",
+                "<uk>",
+                "<--language-code>",
+                "<de-DE>",
+            ],
+        )
+
     def test_primary_workflow_language_must_have_two_letter_base(self):
         command = """
 SCRIPT_DIR="$1"
@@ -104,12 +163,28 @@ elevenlabs_primary_label ceb
                     check=False,
                 )
                 self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertIn("--multilingual", result.stdout)
                 self.assertIn("--additional-lang CODE", result.stdout)
+                self.assertIn("any number of languages", result.stdout)
                 self.assertIn("--custom-vocabulary-file FILE", result.stdout)
                 self.assertIn("uk-UA", result.stdout)
                 self.assertIn("ru-RU", result.stdout)
                 self.assertIn("20%", result.stdout)
                 self.assertIn("Examples:", result.stdout)
+                self.assertIn("--lang uk --multilingual", result.stdout)
+
+    def test_list_workflows_forward_multilingual_to_single_workflows(self):
+        for script in (
+            "process_localaudiovideo_via_elevenlabs_list.sh",
+            "auto_process_youtube_list_via_elevenlabs.sh",
+        ):
+            with self.subTest(script=script):
+                content = (PROJECT / script).read_text(encoding="utf-8")
+                self.assertIn(
+                    '[[ "$ELEVENLABS_MULTILINGUAL" -eq 1 ]] '
+                    '&& CHILD_FLAGS+=(--multilingual)',
+                    content,
+                )
 
     def test_unknown_options_fail_before_dependencies(self):
         for script in SCRIPTS:

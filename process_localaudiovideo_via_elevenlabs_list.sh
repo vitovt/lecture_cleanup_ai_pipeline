@@ -8,6 +8,7 @@ CHILD_SCRIPT="$SCRIPT_DIR/process_localaudiovideo_via_elevenlabs.sh"
 
 LANG=""
 ADDITIONAL_LANGS=()
+ELEVENLABS_MULTILINGUAL=0
 CUSTOM_VOCABULARY=()
 CUSTOM_VOCABULARY_FILES=()
 CONTEXT_FILES=()
@@ -44,10 +45,15 @@ Mandatory:
 Language format:
   --lang CODE              Required, with a two-letter base: uk/uk-UA,
                            de/de-DE, en/en-US, or ru/ru-RU
+  --multilingual           Automatically detect every language in each file;
+                           no --additional-lang values are required
   --additional-lang CODE   Extra code-switching language; repeatable; accepts
                            the same shortcut/full-code formats as --lang
 
-With additional languages, Scribe v2 uses automatic multilingual detection;
+With --multilingual or any --additional-lang, Scribe v2 automatically detects
+any number of languages. ElevenLabs does not use --additional-lang values as a
+restrictive list; they only document expected languages and enable the same
+automatic mode. Use --multilingual when the additional languages are unknown.
 --lang continues to select cleanup language and filename suffixes.
 
 Vocabulary (optional, repeatable):
@@ -84,6 +90,7 @@ auth/retry failure aborts the remaining batch; an ordinary file failure does not
 
 Examples:
   ./${0##*/} --lang uk file1.mp4 file2.m4a
+  ./${0##*/} --lang uk --multilingual --all
   ./${0##*/} --lang uk-UA --additional-lang de-DE --all
   ./${0##*/} --lang uk --additional-lang de --additional-lang en --all
   ./${0##*/} --lang uk --additional-lang de \
@@ -98,6 +105,7 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         -h|--help) print_help; exit 0 ;;
         --lang) need_value "$1" "${2:-}"; LANG="$2"; shift 2 ;;
+        --multilingual) ELEVENLABS_MULTILINGUAL=1; shift ;;
         --additional-lang) need_value "$1" "${2:-}"; ADDITIONAL_LANGS+=("$2"); shift 2 ;;
         --custom-vocabulary) need_value "$1" "${2:-}"; CUSTOM_VOCABULARY+=("$2"); shift 2 ;;
         --custom-vocabulary-file) need_value "$1" "${2:-}"; CUSTOM_VOCABULARY_FILES+=("$2"); shift 2 ;;
@@ -164,6 +172,7 @@ for path in "${INPUT_FILES[@]}"; do
 done
 
 CHILD_FLAGS=("${LECTURE_CLEANUP_FLAGS[@]}" --lang "$LANG")
+[[ "$ELEVENLABS_MULTILINGUAL" -eq 1 ]] && CHILD_FLAGS+=(--multilingual)
 for value in "${ADDITIONAL_LANGS[@]}"; do CHILD_FLAGS+=(--additional-lang "$value"); done
 for value in "${CUSTOM_VOCABULARY[@]}"; do CHILD_FLAGS+=(--custom-vocabulary "$value"); done
 for value in "${CUSTOM_VOCABULARY_FILES[@]}"; do CHILD_FLAGS+=(--custom-vocabulary-file "$value"); done

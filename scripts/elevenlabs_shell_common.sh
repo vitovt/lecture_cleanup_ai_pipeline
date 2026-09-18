@@ -80,7 +80,12 @@ elevenlabs_primary_label() {
 }
 
 elevenlabs_build_stt_flags() {
-    ELEVENLABS_STT_FLAGS=(--provider elevenlabs --language-code "$LANG")
+    ELEVENLABS_STT_FLAGS=(--provider elevenlabs)
+    if [[ "${ELEVENLABS_MULTILINGUAL:-0}" -eq 1 && ${#ADDITIONAL_LANGS[@]} -eq 0 ]]; then
+        ELEVENLABS_STT_FLAGS+=(--language-code auto)
+    else
+        ELEVENLABS_STT_FLAGS+=(--language-code "$LANG")
+    fi
     local value
     for value in "${ADDITIONAL_LANGS[@]}"; do
         ELEVENLABS_STT_FLAGS+=(--language-code "$value")
