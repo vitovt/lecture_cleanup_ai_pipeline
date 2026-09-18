@@ -167,11 +167,20 @@ elevenlabs_primary_label ceb
                 self.assertIn("--additional-lang CODE", result.stdout)
                 self.assertIn("any number of languages", result.stdout)
                 self.assertIn("--custom-vocabulary-file FILE", result.stdout)
+                self.assertIn("keyterms array", result.stdout)
+                self.assertIn("--diarization on", result.stdout)
+                self.assertIn("speaker_0", result.stdout)
                 self.assertIn("uk-UA", result.stdout)
                 self.assertIn("ru-RU", result.stdout)
                 self.assertIn("20%", result.stdout)
                 self.assertIn("Examples:", result.stdout)
                 self.assertIn("--lang uk --multilingual", result.stdout)
+
+    def test_vocabulary_file_option_remains_accepted(self):
+        for script in SCRIPTS:
+            with self.subTest(script=script):
+                content = (PROJECT / script).read_text(encoding="utf-8")
+                self.assertIn("--custom-vocabulary-file)", content)
 
     def test_list_workflows_forward_multilingual_to_single_workflows(self):
         for script in (

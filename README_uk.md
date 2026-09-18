@@ -160,9 +160,9 @@ Gemini та ElevenLabs workflow призначені для записів із 
 ./StartMe.sh local-gemini --lang uk --additional-lang de \
   --timestamps off --custom-vocabulary-file ./terms.txt ./lesson.m4a
 
-# ElevenLabs Scribe v2: vocabulary сумісний із timestamps і diarization
-./StartMe.sh youtube-elevenlabs --lang uk --additional-lang de \
-  --custom-vocabulary-file ./terms.txt "https://youtu.be/ID"
+# ElevenLabs Scribe v2: автоматичні мови та розділення викладача/учня
+./StartMe.sh youtube-elevenlabs --lang uk --multilingual \
+  --diarization on --custom-vocabulary-file ./terms.txt "https://youtu.be/ID"
 
 ./StartMe.sh local-elevenlabs --lang uk --additional-lang de ./lesson.m4a
 ```
@@ -170,13 +170,17 @@ Gemini та ElevenLabs workflow призначені для записів із 
 `--lang` обов’язковий і визначає cleanup-мову та суфікс файла.
 `--additional-lang` можна повторювати. Для обох опцій дозволені скорочення
 `uk`, `de`, `en`, `ru` або повні BCP-47 коди `uk-UA`, `de-DE`, `en-US`,
-`ru-RU`. Окремі терміни додаються повторюваним `--custom-vocabulary`, файли —
-`--custom-vocabulary-file` (UTF-8, один термін/фраза на рядок).
+`ru-RU`. Окремі терміни додаються повторюваним `--custom-vocabulary`, а
+UTF-8-файли з одним терміном або фразою на рядок — повторюваним
+`--custom-vocabulary-file`.
 
-Для ElevenLabs наявність `--additional-lang` вмикає automatic multilingual
-detection, бо batch API приймає лише один явний language hint. `--lang` і далі
-визначає cleanup-мову та суфікс. Keyterms підтримуються разом із timestamps і
-diarization; кожен має бути коротшим за 50 символів і містити не більше 5 слів.
+Для ElevenLabs `--multilingual` або наявність `--additional-lang` вмикає
+automatic multilingual detection. `--lang` і далі визначає cleanup-мову та
+суфікс. `--diarization on` додає до timestamped TXT та events JSON анонімні
+мітки `speaker_0`, `speaker_1` тощо. Keyterms передаються повторюваним
+`--custom-vocabulary` або завантажуються з `--custom-vocabulary-file`: wrapper
+об’єднує їх у масив keyterms для API. Кожен має бути коротшим за 50 символів і
+містити не більше 5 слів.
 
 Доступні також режими `youtube-elevenlabs`, `youtube-elevenlabs-list`,
 `local-elevenlabs`, `local-elevenlabs-list`. Повний опис усіх Gemini/ElevenLabs

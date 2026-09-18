@@ -170,9 +170,9 @@ The transcription key lives only in `stt-api/.env`. The root `.env` and its
 ./StartMe.sh local-gemini --lang uk --additional-lang de \
   --timestamps off --custom-vocabulary-file ./terms.txt ./lesson.m4a
 
-# ElevenLabs Scribe v2: keyterms work with timestamps and diarization
-./StartMe.sh youtube-elevenlabs --lang uk --additional-lang de \
-  --custom-vocabulary-file ./terms.txt "https://youtu.be/ID"
+# ElevenLabs Scribe v2: automatic languages and teacher/student separation
+./StartMe.sh youtube-elevenlabs --lang uk --multilingual \
+  --diarization on --custom-vocabulary-file ./terms.txt "https://youtu.be/ID"
 
 ./StartMe.sh local-elevenlabs --lang uk --additional-lang de ./lesson.m4a
 ```
@@ -180,14 +180,16 @@ The transcription key lives only in `stt-api/.env`. The root `.env` and its
 `--lang` is mandatory and controls cleanup language and filename suffix.
 Repeat `--additional-lang` for code-switching languages. Both options accept
 `uk`, `de`, `en`, `ru` shortcuts or full `uk-UA`, `de-DE`, `en-US`, `ru-RU`
-BCP-47 codes. Repeat `--custom-vocabulary` for terms and
+BCP-47 codes. Repeat `--custom-vocabulary` for individual terms and
 `--custom-vocabulary-file` for UTF-8 one-entry-per-line files.
 
-For ElevenLabs, adding `--additional-lang` selects automatic multilingual
-detection because the batch API accepts only one explicit language hint.
-`--lang` still controls cleanup and the filename suffix. Keyterms work with
-timestamps and diarization; each must be shorter than 50 characters and no
-longer than 5 words.
+For ElevenLabs, `--multilingual` or any `--additional-lang` selects automatic
+multilingual detection. `--lang` still controls cleanup and the filename
+suffix. `--diarization on` writes anonymous `speaker_0`, `speaker_1`, and
+similar labels to timestamped TXT and events JSON. Pass ElevenLabs keyterms
+with repeatable `--custom-vocabulary` and/or `--custom-vocabulary-file`; the
+wrapper merges files into the keyterms array sent to the API. Each term must be
+shorter than 50 characters and no longer than 5 words.
 
 Additional modes are `youtube-elevenlabs`, `youtube-elevenlabs-list`,
 `local-elevenlabs`, and `local-elevenlabs-list`. See

@@ -101,9 +101,9 @@ number of languages. ElevenLabs does not receive the additional codes as an
 allowlist. They document expected languages and select the same automatic
 mode; use `--multilingual` when those languages are not known in advance.
 
-## Custom vocabulary
+## Custom vocabulary and keyterms
 
-Pass individual terms and/or any number of UTF-8 files:
+Gemini workflows accept individual terms and any number of UTF-8 files:
 
 ```bash
 ./process_localaudiovideo_via_gemini.sh \
@@ -128,17 +128,25 @@ conversion, or upload; it never silently changes the selected mode.
 
 Smart transcription is likewise incompatible with timestamps and diarization.
 
-ElevenLabs calls vocabulary entries `keyterms`. They are compatible with word
+ElevenLabs calls vocabulary entries `keyterms`. Pass individual keyterms with
+repeatable `--custom-vocabulary` and/or one-entry-per-line files with
+repeatable `--custom-vocabulary-file`. The wrapper reads and merges the files,
+then sends one keyterms array to ElevenLabs. Keyterms are compatible with word
 timestamps, diarization, and `--mode smart` (`no_verbatim=true`):
 
 ```bash
 ./process_localaudiovideo_via_elevenlabs.sh \
   --lang uk \
-  --additional-lang de \
+  --multilingual \
+  --diarization on \
   --custom-vocabulary 'Halbleiter' \
   --custom-vocabulary-file ./physics-de.txt \
   ./lesson.m4a
 ```
+
+With diarization enabled, timestamped TXT and events JSON use anonymous labels
+such as `speaker_0` and `speaker_1`. The labels distinguish voices but do not
+identify people by name.
 
 Scribe v2 batch accepts at most 1000 keyterms. Each must be shorter than 50
 characters, contain at most 5 words, and cannot contain `<`, `>`, `{`, `}`,

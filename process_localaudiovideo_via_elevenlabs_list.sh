@@ -56,15 +56,16 @@ restrictive list; they only document expected languages and enable the same
 automatic mode. Use --multilingual when the additional languages are unknown.
 --lang continues to select cleanup language and filename suffixes.
 
-Vocabulary (optional, repeatable):
-  --custom-vocabulary TERM
+Keyterms (optional, repeatable):
+  --custom-vocabulary TERM  One term or short phrase; repeat for every term
   --custom-vocabulary-file FILE
-                           UTF-8, one phrase per line; blanks/# comments ignored
+                            UTF-8, one term/phrase per line; repeatable
 
-Vocabulary is merged/deduplicated and limited to 1000 keyterms. Each keyterm
+The wrapper reads every vocabulary file, merges it with individual terms, and
+sends one deduplicated keyterms array to ElevenLabs (maximum: 1000). Each term
 must be under 50 characters, contain at most 5 words, and exclude < > { } [ ]
-and backslash. It remains compatible with timestamps and diarization and adds
-a 20% provider surcharge.
+and backslash. Keyterms remain compatible with timestamps and diarization and
+add a 20% provider surcharge.
 
 Forwarded ElevenLabs options:
   --stt-config FILE
@@ -76,6 +77,8 @@ Forwarded ElevenLabs options:
   --cache-dir DIR
 
 Invalid provider options and keyterm syntax are rejected before file preflight.
+With --diarization on, Scribe labels turns as speaker_0, speaker_1, and so on in
+each timestamped TXT and events JSON. These are anonymous labels, not names.
 
 Batch and pipeline options:
   --all                  Scan current directory, not recursively
@@ -93,8 +96,8 @@ Examples:
   ./${0##*/} --lang uk --multilingual --all
   ./${0##*/} --lang uk-UA --additional-lang de-DE --all
   ./${0##*/} --lang uk --additional-lang de --additional-lang en --all
-  ./${0##*/} --lang uk --additional-lang de \
-      --custom-vocabulary-file ./terms.txt lesson1.mp4 lesson2.mp4
+  ./${0##*/} --lang uk --multilingual --diarization on --all
+  ./${0##*/} --lang uk --custom-vocabulary-file ./terms.txt --all
 EOF
     lecture_cleanup_print_forwarded_help
 }

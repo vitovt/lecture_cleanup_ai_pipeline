@@ -175,9 +175,9 @@ LLM-Verarbeitung des fertigen Transkripts.
 ./StartMe.sh local-gemini --lang uk --additional-lang de \
   --timestamps off --custom-vocabulary-file ./terms.txt ./lesson.m4a
 
-# ElevenLabs Scribe v2: Keyterms funktionieren mit Timestamps und Diarization
-./StartMe.sh youtube-elevenlabs --lang uk --additional-lang de \
-  --custom-vocabulary-file ./terms.txt "https://youtu.be/ID"
+# ElevenLabs Scribe v2: automatische Sprachen und Sprechertrennung
+./StartMe.sh youtube-elevenlabs --lang uk --multilingual \
+  --diarization on --custom-vocabulary-file ./terms.txt "https://youtu.be/ID"
 
 ./StartMe.sh local-elevenlabs --lang uk --additional-lang de ./lesson.m4a
 ```
@@ -186,13 +186,16 @@ LLM-Verarbeitung des fertigen Transkripts.
 `--additional-lang` kann wiederholt werden. Beide Optionen akzeptieren die
 Kurzformen `uk`, `de`, `en`, `ru` oder vollständige BCP-47-Codes `uk-UA`,
 `de-DE`, `en-US`, `ru-RU`. Einzelne Begriffe werden mit wiederholtem
-`--custom-vocabulary`, UTF-8-Dateien mit einem Eintrag pro Zeile mit
-`--custom-vocabulary-file` übergeben.
+`--custom-vocabulary` übergeben, UTF-8-Dateien mit einem Eintrag pro Zeile mit
+`--custom-vocabulary-file`.
 
-Bei ElevenLabs aktiviert `--additional-lang` die automatische mehrsprachige
-Erkennung, da die Batch-API nur einen expliziten Sprachhinweis akzeptiert.
-`--lang` bestimmt weiterhin Cleanup-Sprache und Dateisuffix. Keyterms sind mit
-Timestamps und Diarization kompatibel; jeder Eintrag muss kürzer als 50 Zeichen
+Bei ElevenLabs aktiviert `--multilingual` oder jedes `--additional-lang` die
+automatische mehrsprachige Erkennung. `--lang` bestimmt weiterhin
+Cleanup-Sprache und Dateisuffix. `--diarization on` schreibt anonyme Labels wie
+`speaker_0` und `speaker_1` in timestamped TXT und events JSON. ElevenLabs-
+Keyterms werden mit wiederholtem `--custom-vocabulary` und/oder
+`--custom-vocabulary-file` übergeben; der Wrapper führt die Dateien zum
+Keyterms-Array für die API zusammen. Jeder Eintrag muss kürzer als 50 Zeichen
 sein und darf höchstens 5 Wörter enthalten.
 
 Zusätzliche Modi heißen `youtube-elevenlabs`, `youtube-elevenlabs-list`,

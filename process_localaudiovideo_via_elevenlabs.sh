@@ -77,15 +77,17 @@ languages and enable the same automatic mode. Use --multilingual when the
 additional languages are unknown. The primary language still controls cleanup
 and filenames; for example, --lang uk-UA produces the .uk.md suffix.
 
-Custom vocabulary (optional, repeatable):
-  --custom-vocabulary TERM       One exact term or short phrase
-  --custom-vocabulary-file FILE  UTF-8 file, one term/phrase per line;
-                                 blank lines and # comments are ignored
+Keyterms (optional, repeatable):
+  --custom-vocabulary TERM  One exact term or short phrase; repeat the option
+                            for every term you want to provide
+  --custom-vocabulary-file FILE
+                            UTF-8, one term/phrase per line; repeatable
 
-All vocabulary sources are merged and deduplicated. ElevenLabs accepts at most
-1000 keyterms. Each must be under 50 characters, contain at most 5 words, and
-exclude < > { } [ ] and backslash. Keyterms add a 20% provider surcharge and
-are compatible with timestamps, diarization, and smart mode.
+The wrapper reads every vocabulary file, merges it with individual terms,
+deduplicates the result, and sends one keyterms array to ElevenLabs. ElevenLabs
+accepts at most 1000 keyterms. Each must be under 50 characters, contain at
+most 5 words, and exclude < > { } [ ] and backslash. They add a 20% provider
+surcharge and are compatible with timestamps, diarization, and smart mode.
 
 ElevenLabs transcription options:
   --stt-config FILE       Override stt-api/config.yaml
@@ -98,6 +100,8 @@ ElevenLabs transcription options:
 
 Scribe v2 accepts keyterms, word timestamps, diarization, and smart mode in one
 request. Invalid option values and keyterm syntax are rejected before upload.
+With --diarization on, Scribe labels turns as speaker_0, speaker_1, and so on in
+the timestamped TXT and events JSON. These are anonymous labels, not names.
 
 Pipeline options:
   --outdir DIR           Markdown output directory (default: $OUTDIR)
@@ -118,9 +122,8 @@ Examples:
   ./${0##*/} --lang uk --multilingual ./unknown-languages.m4a
   ./${0##*/} --lang uk-UA --additional-lang de-DE ./bilingual.m4a
   ./${0##*/} --lang uk --additional-lang de --additional-lang en ./lesson.wav
-  ./${0##*/} --lang uk --additional-lang de \
-      --custom-vocabulary 'Sicherheitsgruppe' \
-      --custom-vocabulary-file ./aws-terms.txt ./lesson.mp4
+  ./${0##*/} --lang uk --multilingual --diarization on ./lesson.mp4
+  ./${0##*/} --lang uk --custom-vocabulary-file ./terms.txt ./lesson.mp4
   ./${0##*/} --lang ru-RU --preflight ./recording.m4a
 EOF
     lecture_cleanup_print_forwarded_help

@@ -79,14 +79,17 @@ Therefore use --multilingual when the additional languages are unknown.
 --lang remains mandatory because it controls cleanup and the filename suffix:
 --lang uk-UA writes .uk.txt/.uk.md.
 
-Custom vocabulary (optional, repeatable):
-  --custom-vocabulary TERM       One domain term or short phrase
-  --custom-vocabulary-file FILE  UTF-8, one term per line; # comments ignored
+Keyterms (optional, repeatable):
+  --custom-vocabulary TERM  One domain term or short phrase; repeat the option
+                            for every term you want to provide
+  --custom-vocabulary-file FILE
+                            UTF-8, one term per line; repeatable
 
-Vocabulary sources are merged and deduplicated. ElevenLabs permits at most 1000
-keyterms; each must be under 50 characters, contain at most 5 words, and must
-not contain < > { } [ ] or backslash. Keyterms add a 20% provider surcharge.
-Unlike Gemini, they are compatible with timestamps and diarization.
+The wrapper reads every vocabulary file, merges it with individual terms,
+deduplicates the result, and sends one keyterms array to ElevenLabs. ElevenLabs
+permits at most 1000 keyterms; each must be under 50 characters, contain at most
+5 words, and must not contain < > { } [ ] or backslash. Keyterms add a 20%
+provider surcharge and are compatible with timestamps and diarization.
 
 ElevenLabs transcription options:
   --stt-config FILE       Override stt-api/config.yaml
@@ -99,6 +102,8 @@ ElevenLabs transcription options:
 
 Scribe v2 accepts keyterms, word timestamps, diarization, and smart mode in the
 same request. Invalid keyterm syntax is rejected before YouTube download.
+With --diarization on, Scribe labels turns as speaker_0, speaker_1, and so on in
+the timestamped TXT and events JSON. These are anonymous labels, not names.
 
 Pipeline options:
   --outdir DIR           Markdown directory (default: $OUTDIR)
@@ -118,8 +123,10 @@ Examples:
   ./${0##*/} --lang uk-UA --additional-lang de-DE 'https://youtu.be/VIDEO_ID'
   ./${0##*/} --lang uk --additional-lang de --additional-lang en \
       'https://youtu.be/VIDEO_ID'
-  ./${0##*/} --lang uk --additional-lang de \
-      --custom-vocabulary-file ./german-terms.txt 'https://youtu.be/VIDEO_ID'
+  ./${0##*/} --lang uk --multilingual --diarization on \
+      'https://youtu.be/VIDEO_ID'
+  ./${0##*/} --lang uk --custom-vocabulary-file ./german-terms.txt \
+      'https://youtu.be/VIDEO_ID'
   ./${0##*/} --lang ru-RU --preflight 'https://youtu.be/VIDEO_ID'
 EOF
     lecture_cleanup_print_forwarded_help

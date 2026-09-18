@@ -57,15 +57,16 @@ restrictive list; they only document expected languages and enable the same
 automatic mode. Use --multilingual when the additional languages are unknown.
 --lang continues to control cleanup language and output filenames.
 
-Vocabulary (optional, repeatable):
-  --custom-vocabulary TERM
+Keyterms (optional, repeatable):
+  --custom-vocabulary TERM  One term or short phrase; repeat for every term
   --custom-vocabulary-file FILE
-                          UTF-8, one phrase per line; blanks/# comments ignored
+                            UTF-8, one term/phrase per line; repeatable
 
-Vocabulary sources are merged/deduplicated (maximum: 1000 entries). Each
-keyterm must be shorter than 50 characters, contain no more than 5 words, and
-exclude < > { } [ ] and backslash. Keyterms add a 20% provider surcharge and
-remain compatible with timestamps and diarization.
+The wrapper reads every vocabulary file, merges it with individual terms, and
+sends one deduplicated keyterms array to ElevenLabs (maximum: 1000). Each term
+must be shorter than 50 characters, contain no more than 5 words, and exclude
+< > { } [ ] and backslash. Keyterms add a 20% provider surcharge and remain
+compatible with timestamps and diarization.
 
 Forwarded ElevenLabs options:
   --stt-config FILE
@@ -77,6 +78,8 @@ Forwarded ElevenLabs options:
   --cache-dir DIR
 
 Invalid provider options and keyterms are rejected before playlist download.
+With --diarization on, Scribe labels turns as speaker_0, speaker_1, and so on in
+each timestamped TXT and events JSON. These are anonymous labels, not names.
 
 Pipeline options:
   --outdir DIR
@@ -94,8 +97,10 @@ Examples:
   ./${0##*/} --lang uk-UA --additional-lang de-DE --videos 1-5 'PLAYLIST_URL'
   ./${0##*/} --lang uk --additional-lang de --additional-lang en \
       --videos 2,4,7 'PLAYLIST_URL'
-  ./${0##*/} --lang uk --additional-lang de \
-      --custom-vocabulary-file ./terms.txt --videos 1-3 'PLAYLIST_URL'
+  ./${0##*/} --lang uk --multilingual --diarization on \
+      --videos 1-3 'PLAYLIST_URL'
+  ./${0##*/} --lang uk --custom-vocabulary-file ./terms.txt \
+      --videos 1-3 'PLAYLIST_URL'
 EOF
     lecture_cleanup_print_forwarded_help
 }
