@@ -1,0 +1,153 @@
+# Speech-to-text API defaults.
+#
+# Keep this tracked file unchanged. Put local non-secret overrides in
+# config.yaml. Configuration precedence is:
+#
+#   CLI options > config.yaml > config.default.yaml
+#
+# API keys NEVER belong in YAML. stt-api reads its own .env next to this file;
+# an already exported process environment variable has higher precedence.
+
+# Provider used when --provider is omitted. Workflow scripts always pass their
+# provider explicitly; this value mainly affects direct stt_api.sh calls.
+provider: gemini
+
+providers:
+  gemini:
+    # Official Gemini model slug for uploaded audio transcription.
+    model: gemini-3.5-transcribe
+
+    # Environment variable read from stt-api/.env. Do not put the key here.
+    api_key_env: GEMINI_API_KEY
+
+    request:
+      # Per-upload transcription request timeout in seconds. Retries use a new
+      # upload and never expose the API key or request payload in logs.
+      timeout_seconds: 180
+
+  elevenlabs:
+    # ElevenLabs batch Speech-to-Text model. scribe_v2 is optimized for long,
+    # multilingual recordings and supports timestamps, diarization, keyterms,
+    # and automatic language switching in one file.
+    model: scribe_v2
+
+    # Environment variable read from stt-api/.env. Do not put the key here.
+    api_key_env: ELEVENLABS_API_KEY
+
+    request:
+      # Timeout for one synchronous batch request. Long recordings can take
+      # several minutes; retries reopen the local file from the beginning.
+      timeout_seconds: 900
+
+    # false keeps laughter/music/etc. tags out of lecture cleanup input. The
+    # provider response still includes spoken words and punctuation.
+    tag_audio_events: false
+
+    chunking:
+      # ElevenLabs accepts standard single-channel files up to 10 hours and
+      # 5 GB. The conservative 9-hour split point avoids the duration edge.
+      # Ordinary lectures therefore use one request rather than Gemini-sized
+      # 25/55-minute chunks. Files above this value are split with ffmpeg.
+      max_seconds: 32400
+      overlap_seconds: 5
+
+transcription:
+  languages:
+    # Ordered workflow languages. The first code is the primary cleanup/output
+    # language. Workflow scripts normally build this list from required --lang
+    # plus repeatable --additional-lang options.
+    #
+    # Gemini receives the entire ordered list as language hints. ElevenLabs
+    # batch accepts only one language_code: with exactly one configured language
+    # its base ISO code is sent; with zero or multiple languages the hint is
+    # omitted so Scribe v2 uses automatic multilingual detection.
+    #
+    # Both shortcuts and full codes are accepted:
+    #   uk or uk-UA, de or de-DE, en or en-US, ru or ru-RU
+    # Other languages must use a structurally valid BCP-47 code.
+    codes: []
+
+  mode:
+    # verbatim preserves filler words, repetitions, and false starts.
+    # smart improves readability. For Gemini it cannot be combined with
+    # timestamps or diarization. For ElevenLabs it maps to no_verbatim=true and
+    # remains compatible with timestamps, diarization, and keyterms.
+    type: verbatim
+
+  timestamps:
+    # Word timestamps allow downstream generation of source timecodes and
+    # ^src-SECONDS identifiers. Gemini documents that timestamps can reduce
+    # recognition accuracy and are incompatible with custom vocabulary.
+    # ElevenLabs supports word timestamps together with keyterms/diarization.
+    enabled: true
+    granularity: word
+
+  diarization:
+    # Gemini speaker attribution supports up to eight speakers and is
+    # incompatible with custom vocabulary and smart mode. ElevenLabs supports
+    # up to 32 speakers and allows diarization with keyterms and no_verbatim.
+    enabled: false
+
+  vocabulary:
+    # Domain terms, acronyms, names, or short phrases. Both providers accept at
+    # most 1000 merged entries; a focused list of about 100 or fewer is easier
+    # to evaluate. ElevenLabs charges a 20% keyterm surcharge. Each ElevenLabs
+    # keyterm must be under 50 characters, contain no more than 5 words, and
+    # cannot contain < > { } [ ] or backslash. These rules are checked locally.
+    # CLI --custom-vocabulary entries are appended, then case-insensitive exact
+    # duplicates are removed while preserving the first spelling and order.
+    terms: []
+
+    # UTF-8 text files containing one term or phrase per line. Empty lines,
+    # # comments, and Markdown ```/~~~ fence lines are ignored. Relative paths
+    # are resolved from the directory containing the selected config file.
+    files: []
+
+media:
+  chunking:
+    # Gemini accepts up to 30 minutes when timestamps or diarization is active,
+    # and up to 60 minutes otherwise. Conservative defaults leave room below
+    # each provider limit and make retries/checkpoints smaller.
+    timed_chunk_seconds: 1500
+    untimed_chunk_seconds: 3300
+
+    # Adjacent chunks overlap to avoid losing speech at a split. Timestamped
+    # words are assigned to one ownership interval. Untimed text uses a small
+    # exact boundary-word deduplicator.
+    overlap_seconds: 5
+
+processing:
+  retry:
+    # Total provider attempts per chunk, including the first request.
+    attempts: 4
+    initial_delay_seconds: 2
+    backoff_multiplier: 2
+    max_delay_seconds: 30
+    jitter_seconds: 0.25
+
+  resume:
+    # Reuse a chunk only when both its audio bytes and all relevant effective
+    # settings match. --resume off (or workflow --overwrite) bypasses reuse.
+    enabled: true
+
+    # null stores checkpoints under OUTPUT_DIR/.stt-cache. Set an absolute path
+    # to share a cache. A CLI --cache-dir value has highest precedence.
+    checkpoint_directory: null
+
+output:
+  # Store normalized provider payloads for diagnostics. Secrets are never
+  # included. Disable only when minimizing retained artifacts is important.
+  save_raw_response: true
+
+  # Write a compact metadata JSON beside direct low-level outputs. Workflow
+  # scripts always request this file explicitly for downstream frontmatter.
+  write_metadata: true
+
+  # Write provider-neutral timestamp/speaker events beside the transcript.
+  # Untimed transcription writes an empty event list.
+  write_events: true
+
+logging:
+  # quiet | error | info | debug. Provider request bodies and API keys are not
+  # logged at any level.
+  level: info

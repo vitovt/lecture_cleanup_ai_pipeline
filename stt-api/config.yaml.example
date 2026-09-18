@@ -1,0 +1,6 @@
+# Only frequently changed local overrides belong here.
+provider: gemini
+
+providers:
+  gemini:
+    model: gemini-3.5-transcribe

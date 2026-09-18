@@ -146,6 +146,56 @@ result filename and cleanup stage need a concrete language code. Pass
 `--lang CODE` when that metadata is unavailable. Run each script with `--help`
 for its complete current option list.
 
+### Multilingual audio through Gemini and ElevenLabs STT
+
+The Gemini and ElevenLabs workflows handle intra-sentence and inter-sentence
+code-switching. Set up the separate audio-provider environment first:
+
+```bash
+./stt-api/setup_venv.sh
+# then add the keys you use to stt-api/.env:
+# GEMINI_API_KEY=...
+# ELEVENLABS_API_KEY=...
+```
+
+The transcription key lives only in `stt-api/.env`. The root `.env` and its
+`GOOGLE_API_KEY` continue to configure LLM processing of completed transcripts.
+
+```bash
+# Ukrainian primary, German and English additional
+./StartMe.sh youtube-gemini --lang uk \
+  --additional-lang de --additional-lang en "https://youtu.be/ID"
+
+# Local media with terminology hints; vocabulary requires timestamps off
+./StartMe.sh local-gemini --lang uk --additional-lang de \
+  --timestamps off --custom-vocabulary-file ./terms.txt ./lesson.m4a
+
+# ElevenLabs Scribe v2: automatic languages and teacher/student separation
+./StartMe.sh youtube-elevenlabs --lang uk --multilingual \
+  --diarization on --custom-vocabulary-file ./terms.txt "https://youtu.be/ID"
+
+./StartMe.sh local-elevenlabs --lang uk --additional-lang de ./lesson.m4a
+```
+
+`--lang` is mandatory and controls cleanup language and filename suffix.
+Repeat `--additional-lang` for code-switching languages. Both options accept
+`uk`, `de`, `en`, `ru` shortcuts or full `uk-UA`, `de-DE`, `en-US`, `ru-RU`
+BCP-47 codes. Repeat `--custom-vocabulary` for individual terms and
+`--custom-vocabulary-file` for UTF-8 one-entry-per-line files.
+
+For ElevenLabs, `--multilingual` or any `--additional-lang` selects automatic
+multilingual detection. `--lang` still controls cleanup and the filename
+suffix. `--diarization on` writes anonymous `speaker_0`, `speaker_1`, and
+similar labels to timestamped TXT and events JSON. Pass ElevenLabs keyterms
+with repeatable `--custom-vocabulary` and/or `--custom-vocabulary-file`; the
+wrapper merges files into the keyterms array sent to the API. Each term must be
+shorter than 50 characters and no longer than 5 words.
+
+Additional modes are `youtube-elevenlabs`, `youtube-elevenlabs-list`,
+`local-elevenlabs`, and `local-elevenlabs-list`. See
+[`stt-api/README.md`](stt-api/README.md) for complete Gemini/ElevenLabs
+configuration, limits, chunking/checkpoints, and compatibility rules.
+
 * **Single file:**
 
   ```bash

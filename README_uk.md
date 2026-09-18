@@ -136,6 +136,57 @@ YouTube, бо цей код потрібен для імені результа�
 метаданих немає, передайте `--lang CODE`. Повний актуальний список параметрів
 кожного скрипту доступний через `--help`.
 
+### Багатомовне аудіо через Gemini та ElevenLabs STT
+
+Gemini та ElevenLabs workflow призначені для записів із code-switching усередині
+речень або між реченнями. Спочатку окремо налаштуйте аудіопровайдера:
+
+```bash
+./stt-api/setup_venv.sh
+# потім додайте потрібні ключі в stt-api/.env:
+# GEMINI_API_KEY=...
+# ELEVENLABS_API_KEY=...
+```
+
+Ключ для транскрипції зберігається лише в `stt-api/.env`. Кореневий `.env` і
+`GOOGLE_API_KEY` надалі використовуються для LLM-обробки готового тексту.
+
+```bash
+# Українська основна, німецька й англійська додаткові
+./StartMe.sh youtube-gemini --lang uk \
+  --additional-lang de --additional-lang en "https://youtu.be/ID"
+
+# Локальний файл зі словником термінів; vocabulary потребує timestamps off
+./StartMe.sh local-gemini --lang uk --additional-lang de \
+  --timestamps off --custom-vocabulary-file ./terms.txt ./lesson.m4a
+
+# ElevenLabs Scribe v2: автоматичні мови та розділення викладача/учня
+./StartMe.sh youtube-elevenlabs --lang uk --multilingual \
+  --diarization on --custom-vocabulary-file ./terms.txt "https://youtu.be/ID"
+
+./StartMe.sh local-elevenlabs --lang uk --additional-lang de ./lesson.m4a
+```
+
+`--lang` обов’язковий і визначає cleanup-мову та суфікс файла.
+`--additional-lang` можна повторювати. Для обох опцій дозволені скорочення
+`uk`, `de`, `en`, `ru` або повні BCP-47 коди `uk-UA`, `de-DE`, `en-US`,
+`ru-RU`. Окремі терміни додаються повторюваним `--custom-vocabulary`, а
+UTF-8-файли з одним терміном або фразою на рядок — повторюваним
+`--custom-vocabulary-file`.
+
+Для ElevenLabs `--multilingual` або наявність `--additional-lang` вмикає
+automatic multilingual detection. `--lang` і далі визначає cleanup-мову та
+суфікс. `--diarization on` додає до timestamped TXT та events JSON анонімні
+мітки `speaker_0`, `speaker_1` тощо. Keyterms передаються повторюваним
+`--custom-vocabulary` або завантажуються з `--custom-vocabulary-file`: wrapper
+об’єднує їх у масив keyterms для API. Кожен має бути коротшим за 50 символів і
+містити не більше 5 слів.
+
+Доступні також режими `youtube-elevenlabs`, `youtube-elevenlabs-list`,
+`local-elevenlabs`, `local-elevenlabs-list`. Повний опис усіх Gemini/ElevenLabs
+режимів, конфігів, лімітів, chunking/checkpoints та несумісних опцій див. у
+[`stt-api/README.md`](stt-api/README.md).
+
 - Один файл:
 
   ```bash
