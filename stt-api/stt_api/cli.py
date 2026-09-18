@@ -262,6 +262,7 @@ def _preflight(input_path: Path, settings: dict[str, Any]) -> dict[str, Any]:
         "provider": settings["provider"],
         "model": settings["model"],
         "language_codes": settings["language_codes"],
+        "provider_language_code": settings["provider_language_code"],
         "timestamps": settings["timestamps"],
         "diarization": settings["diarization"],
         "vocabulary_entries": len(settings["vocabulary"]),

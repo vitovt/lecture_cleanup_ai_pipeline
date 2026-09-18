@@ -189,6 +189,24 @@ Gemini code-switching transcription and cleanup
     Preflight and process explicit local files or media in the current directory.
     Example: $PROGRAM local-gemini-list --lang uk --additional-lang de --all
 
+ElevenLabs code-switching transcription and cleanup
+  youtube-elevenlabs
+    Download one YouTube video's audio and transcribe it with Scribe v2.
+    --lang is required; add repeatable --additional-lang for code-switching.
+    Example: $PROGRAM youtube-elevenlabs --lang uk --additional-lang de "VIDEO_URL"
+
+  youtube-elevenlabs-list
+    Process selected playlist videos with the same Scribe language/keyterms.
+    Example: $PROGRAM youtube-elevenlabs-list --lang uk --additional-lang de --videos 1-3 "PLAYLIST_URL"
+
+  local-elevenlabs
+    Transcribe and clean one local audio/video file with Scribe v2.
+    Example: $PROGRAM local-elevenlabs --lang uk --additional-lang de ./lesson.m4a
+
+  local-elevenlabs-list
+    Preflight and process explicit local files or media in the current directory.
+    Example: $PROGRAM local-elevenlabs-list --lang uk --additional-lang de --all
+
 Multitrack transcription and cleanup
   multitrack
     Transcribe simultaneous audio tracks, merge speakers on one timeline, and clean once.
@@ -264,6 +282,10 @@ resolve_mode() {
         youtube-gemini-list) TARGET="$SCRIPT_DIR/auto_process_youtube_list_via_gemini.sh" ;;
         local-gemini) TARGET="$SCRIPT_DIR/process_localaudiovideo_via_gemini.sh" ;;
         local-gemini-list) TARGET="$SCRIPT_DIR/process_localaudiovideo_via_gemini_list.sh" ;;
+        youtube-elevenlabs) TARGET="$SCRIPT_DIR/auto_process_youtube_via_elevenlabs.sh" ;;
+        youtube-elevenlabs-list) TARGET="$SCRIPT_DIR/auto_process_youtube_list_via_elevenlabs.sh" ;;
+        local-elevenlabs) TARGET="$SCRIPT_DIR/process_localaudiovideo_via_elevenlabs.sh" ;;
+        local-elevenlabs-list) TARGET="$SCRIPT_DIR/process_localaudiovideo_via_elevenlabs_list.sh" ;;
         multitrack) TARGET="$SCRIPT_DIR/process_multitrack.sh" ;;
         groq-api) TARGET="$SCRIPT_DIR/groq-api/groq_api.sh" ;;
         diarize) TARGET="$SCRIPT_DIR/pyannote-diarization/pyannote_diarization.sh" ;;
