@@ -183,7 +183,11 @@ def _effective_settings(
         "max_seconds": max_seconds,
         "overlap": overlap,
         "provider_language_code": (
-            languages[0].split("-", 1)[0].lower() if len(languages) == 1 else ""
+            languages[0].split("-", 1)[0].lower()
+            if provider == "elevenlabs" and len(languages) == 1
+            else "auto"
+            if provider == "elevenlabs"
+            else ",".join(languages) or "auto"
         ),
     }
 
