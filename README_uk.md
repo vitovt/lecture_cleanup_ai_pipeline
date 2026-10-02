@@ -300,7 +300,8 @@ automatic multilingual detection. `--lang` і далі визначає cleanup-
 - `summary.short.output` / `summary.long.output`: незалежний режим `append` або `separate` для кожного підсумку.
 - `summary.short.file_suffix` / `summary.long.file_suffix`: непорожній безпечний суфікс окремого файла; типові значення `-summary` і `-longsummary`.
 - `summary.short.heading` / `summary.long.heading`: заголовки короткого й довгого підсумків.
-- `summary.long.lang`: `default` використовує мову лекції; також можна вказати дволітерний код ISO-639-1.
+- Short summary об’єднує матеріал у кілька глобальних тем: короткий вступ, тематичні абзаци з доступними таймкодами та наступні кроки, якщо вони є в джерелі. Мова й формат Short та Long незалежні навіть у спільному LLM-запиті.
+- `summary.short.lang` / `summary.long.lang`: `default` використовує мову лекції; також можна вказати дволітерний код ISO-639-1.
 - `summary.long.references.enabled`: додає під кожним `###`/`####` перевірене посилання на `^src-*` або `^txt-*`; потребує одночасно `include_src_block_ids: true` та `include_txt_block_ids_for_untimed: true`.
 - `summary.long.references.link_style`: `markdown` (типово) формує `[label](#^src-N)` і відображається як посилання у звичайних Markdown-viewer’ах; `wikilink` формує `[[#^src-N|label]]` для Obsidian. Окремий summary містить URL-encoded ім’я файла джерела, наприклад `[label](My%20Lecture.md#^src-N)`. В обох стилях точний перехід до блоків `^src-*`/`^txt-*` залишається Obsidian-специфічним.
 - `summary.long.references.display`: програмно формує видимий текст посилання після AI-валідації. `label` задає сталий текст, `heading` приймає `none`, `title` або `markdown`, `timestamp` керує показом доступного часу, а `separator` з’єднує компоненти. `markdown` зберігає реальний рівень source-заголовка як звичайний текст label.

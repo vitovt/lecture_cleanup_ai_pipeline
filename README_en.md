@@ -311,7 +311,7 @@ General
 * `summary.short.output` / `summary.long.output`: independent `append` or `separate` output for each summary
 * `summary.short.file_suffix` / `summary.long.file_suffix`: non-empty safe suffix for a separate file; defaults are `-summary` and `-longsummary`
 * `summary.short.heading` / `summary.long.heading`: headings for short and long summaries
-* `summary.long.lang`: `default` follows the lecture language, or use a two-letter ISO-639-1 override
+* `summary.short.lang` / `summary.long.lang`: `default` follows the lecture language, or use a two-letter ISO-639-1 override
 * `summary.long.references.enabled`: add a validated `^src-*` or `^txt-*` link below every `###`/`####`; requires both `include_src_block_ids: true` and `include_txt_block_ids_for_untimed: true`
 * `summary.long.references.link_style`: `markdown` (default) renders `[label](#^src-N)` and works as link syntax in standard Markdown viewers; `wikilink` renders `[[#^src-N|label]]` for Obsidian. A separate summary includes the URL-encoded source filename, for example `[label](My%20Lecture.md#^src-N)`. In both styles, exact `^src-*`/`^txt-*` block navigation remains Obsidian-specific.
 * `summary.long.references.display`: programmatically render the visible link text after AI validation. `label` supplies fixed text, `heading` accepts `none`, `title`, or `markdown`, `timestamp` controls the available time, and `separator` joins components. `markdown` preserves the real source-heading level as ordinary link-label text

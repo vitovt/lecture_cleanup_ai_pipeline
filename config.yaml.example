@@ -21,6 +21,7 @@ logging:
 # summary:
 #   short:
 #     enabled: false
+#     lang: default
 #     output: append
 #   long:
 #     enabled: false
