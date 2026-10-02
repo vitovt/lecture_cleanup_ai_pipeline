@@ -22,6 +22,7 @@ REMOVED_SUMMARY_KEYS = (
 class ShortSummarySettings:
     enabled: bool
     heading: str
+    lang: str
     output: str
     file_suffix: str
 
@@ -176,6 +177,15 @@ def resolve_summary_settings(
         "summary.long.file_suffix",
     )
 
+    requested_short_lang = _text_value(
+        short_cfg.get("lang", "default"), "summary.short.lang"
+    ).lower()
+    short_lang = lecture_lang if requested_short_lang == "default" else requested_short_lang
+    if not re.fullmatch(r"[a-z]{2}", short_lang):
+        raise ValueError(
+            "summary.short.lang must be 'default' or a two-letter ISO-639-1 code"
+        )
+
     configured_long_lang = _text_value(
         long_cfg.get("lang", "default"), "summary.long.lang"
     ).lower()
@@ -245,6 +255,7 @@ def resolve_summary_settings(
                 short_cfg.get("heading", "## Summary (не авторський)"),
                 "summary.short.heading",
             ),
+            lang=short_lang,
             output=short_output,
             file_suffix=short_suffix,
         ),

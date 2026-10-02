@@ -121,6 +121,7 @@ class SummarySettingsTests(unittest.TestCase):
                 short=ShortSummarySettings(
                     False,
                     "## Summary (не авторський)",
+                    "uk",
                     "append",
                     "-summary",
                 ),
@@ -202,6 +203,21 @@ class SummarySettingsTests(unittest.TestCase):
         self.assertEqual(settings.long.lang, "uk")
         self.assertTrue(settings.long.references.enabled)
         self.assertEqual(settings.long.references.link_style, "markdown")
+
+    def test_short_language_defaults_and_override_are_independent(self) -> None:
+        for short_cfg, expected in (({}, "de"), ({"lang": "default"}, "de"),
+                                    ({"lang": " UK "}, "uk")):
+            with self.subTest(short_cfg=short_cfg):
+                settings = _resolve_summary_settings(
+                    {"summary": {"short": short_cfg, "long": {"lang": "fr"}}}, "de"
+                )
+                self.assertEqual(settings.short.lang, expected)
+                self.assertEqual(settings.long.lang, "fr")
+
+    def test_invalid_short_language_is_rejected(self) -> None:
+        for lang in (None, "", "english", "en-US", 123):
+            with self.subTest(lang=lang), self.assertRaisesRegex(ValueError, "summary.short.lang"):
+                _resolve_summary_settings({"summary": {"short": {"lang": lang}}}, "en")
 
     def test_removed_flat_config_is_rejected(self) -> None:
         with self.assertRaisesRegex(ValueError, "Removed summary configuration"):
@@ -296,7 +312,7 @@ class SummarySettingsTests(unittest.TestCase):
 
 
 class SummaryPromptTests(unittest.TestCase):
-    def test_short_mode_keeps_existing_prompt_and_call_shape(self) -> None:
+    def test_short_mode_resolves_default_language_and_keeps_call_shape(self) -> None:
         adapter = RecordingAdapter("short result")
         result = call_llm_summary(
             adapter,
@@ -315,13 +331,41 @@ class SummaryPromptTests(unittest.TestCase):
         expected_user = (PROJECT / "prompts/summary_user.md").read_text(
             encoding="utf-8"
         )
-        self.assertEqual(messages[0]["content"], expected_system)
+        self.assertEqual(messages[0]["content"], expected_system.replace("{SUMMARY_LANGUAGE}", "default"))
         self.assertEqual(
             messages[1]["content"],
-            expected_user + "\n\n<<<\nSOURCE DOCUMENT\n>>>",
+            expected_user.replace("{SUMMARY_LANGUAGE}", "default") + "\n\n<<<\nSOURCE DOCUMENT\n>>>",
         )
         self.assertEqual(kwargs["temperature"], 0.25)
         self.assertEqual(kwargs["top_p"], 0.9)
+
+    def test_short_mode_injects_requested_language(self) -> None:
+        adapter = RecordingAdapter("short result")
+        call_llm_summary(adapter, "test-model", "SOURCE", summary_lang="uk")
+        messages, _ = adapter.calls[0]
+        for message in messages:
+            self.assertIn("`uk`", message["content"])
+            self.assertNotIn("{SUMMARY_LANGUAGE}", message["content"])
+
+    def test_combined_languages_and_long_prompt_are_independent(self) -> None:
+        for short_lang in ("default", "de"):
+            with self.subTest(short_lang=short_lang):
+                adapter = RecordingAdapter(
+                    f"{LONG_SUMMARY_START}\nLong\n{LONG_SUMMARY_END}\n"
+                    f"{SHORT_SUMMARY_START}\nShort\n{SHORT_SUMMARY_END}"
+                )
+                call_llm_combined_summaries(
+                    adapter, "test-model", "SOURCE", "uk", short_summary_lang=short_lang
+                )
+                system = adapter.calls[0][0][0]["content"]
+                long_part, short_part = system.split("[SHORT SUMMARY SYSTEM INSTRUCTIONS]")
+                expected_long = (PROJECT / "prompts/long_summary_system.md").read_text(
+                    encoding="utf-8"
+                ).replace("{SUMMARY_LANGUAGE}", "uk")
+                self.assertIn(expected_long, long_part)
+                self.assertIn(f"`{short_lang}`", short_part)
+                self.assertNotIn("{SUMMARY_LANGUAGE}", system)
+                self.assertNotIn("`uk`", short_part)
 
     def test_long_mode_injects_requested_language(self) -> None:
         adapter = RecordingAdapter("long result")
@@ -533,6 +577,7 @@ class SummaryOutputTests(unittest.TestCase):
         cfg["retry"]["attempts"] = 1
         cfg["summary"]["short"]["enabled"] = True
         cfg["summary"]["short"]["output"] = "separate"
+        cfg["summary"]["short"]["lang"] = "uk"
         cfg["summary"]["long"]["enabled"] = True
         cfg["summary"]["long"]["output"] = "separate"
         cfg["suppress_edit_comments"] = True
@@ -567,11 +612,40 @@ class SummaryOutputTests(unittest.TestCase):
             self.assertEqual(result, 0)
             self.assertEqual(len(adapter.calls), 2)
             self.assertIn("both summaries", adapter.calls[1][1]["label"])
+            system = adapter.calls[1][0][0]["content"]
+            long_part, short_part = system.split("[SHORT SUMMARY SYSTEM INSTRUCTIONS]")
+            self.assertIn("code `de`", long_part)
+            self.assertIn("`uk`", short_part)
             main_markdown = (outdir / "lecture.md").read_text(encoding="utf-8")
             self.assertNotIn("Long result", main_markdown)
             self.assertNotIn("Short result", main_markdown)
             self.assertIn("Long result", (outdir / "lecture-longsummary.md").read_text(encoding="utf-8"))
             self.assertIn("Short result", (outdir / "lecture-summary.md").read_text(encoding="utf-8"))
+
+    def test_pipeline_short_only_uses_short_language(self) -> None:
+        cfg = yaml.safe_load((PROJECT / "config.default.yaml").read_text(encoding="utf-8"))
+        cfg["llm"].update(provider="dummy", dummy={"model": "test-model"}, request_delay_seconds=0)
+        cfg["retry"]["attempts"] = 1
+        cfg["summary"]["short"].update(enabled=True, lang="uk")
+        cfg["summary"]["long"].update(enabled=False, lang="fr")
+        cfg["qc_report_mode"] = "off"
+        cfg["logging"]["level"] = "quiet"
+        adapter = RecordingAdapter("### A topic\n\nA sufficiently long paragraph. " * 4)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "lecture.txt"
+            source.write_text("A sufficiently long source sentence. " * 5, encoding="utf-8")
+            argv = ["run_pipeline.py", "--input", str(source), "--outdir", str(root / "out"),
+                    "--lang", "de"]
+            with patch("scripts.run_pipeline.load_effective_config", return_value=(cfg, True)), patch(
+                "scripts.run_pipeline.create_llm_adapter", return_value=adapter
+            ), patch("sys.argv", argv):
+                self.assertEqual(main(), 0)
+        self.assertEqual(len(adapter.calls), 2)
+        system = adapter.calls[1][0][0]["content"]
+        self.assertIn("`uk`", system)
+        self.assertNotIn("`fr`", system)
+        self.assertNotIn("[LONG SUMMARY SYSTEM INSTRUCTIONS]", system)
 
     def test_references_are_rendered_before_summary_generation(self) -> None:
         cfg = yaml.safe_load(

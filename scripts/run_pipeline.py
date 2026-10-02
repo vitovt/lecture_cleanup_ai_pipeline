@@ -310,13 +310,14 @@ def _load_summary_prompt(
     summary_user_path = base / "prompts" / f"{prefix}_user.md"
     summary_system_content = summary_system_path.read_text(encoding="utf-8")
     summary_user_content = summary_user_path.read_text(encoding="utf-8")
+    prompt_lang = summary_lang.strip().lower() or "default"
+    summary_system_content = summary_system_content.replace(
+        "{SUMMARY_LANGUAGE}", prompt_lang
+    )
+    summary_user_content = summary_user_content.replace(
+        "{SUMMARY_LANGUAGE}", prompt_lang
+    )
     if summary_type == "long":
-        summary_system_content = summary_system_content.replace(
-            "{SUMMARY_LANGUAGE}", summary_lang
-        )
-        summary_user_content = summary_user_content.replace(
-            "{SUMMARY_LANGUAGE}", summary_lang
-        )
         if source_link_prefix is not None:
             references_path = base / "prompts" / "long_summary_references.md"
             references_content = references_path.read_text(encoding="utf-8")
@@ -442,16 +443,17 @@ def call_llm_combined_summaries(
     trace: bool = False,
     label: str = None,
     source_link_prefix: Optional[str] = None,
+    short_summary_lang: str = "default",
 ) -> Dict[str, str]:
     long_system, long_user = _load_summary_prompt(
         "long",
         long_summary_lang,
         source_link_prefix,
     )
-    short_system, short_user = _load_summary_prompt("short", long_summary_lang)
+    short_system, short_user = _load_summary_prompt("short", short_summary_lang)
     system_content = f"""Complete two independent summarization tasks in one response.
 
-Analyze the source lecture directly and independently for each task. Do not derive the short summary from the long summary, or the long summary from the short summary. Apply each task's instructions with the same care as if it were a separate request. The long-summary instructions apply only to the long section, and the short-summary instructions apply only to the short section. In particular, a long-summary language override must not change the short summary's requirement to use the lecture's original language.
+Analyze the source lecture directly and independently for each task. Do not derive the short summary from the long summary, or the long summary from the short summary. Apply each task's instructions with the same care as if it were a separate request. The long-summary instructions apply only to the long section, and the short-summary instructions apply only to the short section. Each section must follow its own language and formatting requirements independently; neither section's language, heading style, or structure overrides the other section's instructions.
 
 [LONG SUMMARY SYSTEM INSTRUCTIONS]
 {long_system}
@@ -898,6 +900,7 @@ def main() -> int:
             f"{summary_settings.short.output}, "
             f"long={summary_settings.long.enabled}/"
             f"{summary_settings.long.output}, "
+            f"short_lang={summary_settings.short.lang}, "
             f"long_lang={summary_settings.long.lang}, "
             f"references={summary_settings.long.references.enabled}"
         )
@@ -1330,6 +1333,7 @@ def main() -> int:
                         model,
                         summary_source,
                         summary_settings.long.lang,
+                        short_summary_lang=summary_settings.short.lang,
                         temperature=temperature,
                         top_p=top_p,
                         debug=debug,
@@ -1344,7 +1348,7 @@ def main() -> int:
                         model,
                         summary_source,
                         summary_type=summary_type,
-                        summary_lang=summary_settings.long.lang,
+                        summary_lang=getattr(summary_settings, summary_type).lang,
                         temperature=temperature,
                         top_p=top_p,
                         debug=debug,
