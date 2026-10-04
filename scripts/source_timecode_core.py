@@ -240,6 +240,23 @@ def strip_trailing_block_ids(
         body = body[:match.start()].rstrip()
 
 
+def fenced_block_ranges(lines):
+    """Yield half-open ranges, keeping adjacent fenced blocks separate."""
+    start = None
+    token = None
+    for index, line in enumerate(lines):
+        body, _ = split_eol(line)
+        if start is None:
+            match = FENCE_OPEN_RE.match(body)
+            if match:
+                start, token = index, match.group("fence")
+        elif re.fullmatch(rf"[ \t]{{0,3}}{re.escape(token[0])}{{{len(token)},}}[ \t]*", body):
+            yield start, index + 1
+            start, token = None, None
+    if start is not None:
+        yield start, len(lines)
+
+
 def protected_line_mask(
     lines: list[str],
     *,
@@ -247,12 +264,14 @@ def protected_line_mask(
 ) -> list[bool]:
     """Mark fenced-code and, optionally, generated-summary lines as protected."""
     mask = [False] * len(lines)
-    fence_char: Optional[str] = None
-    fence_length = 0
+    for start, end in fenced_block_ranges(lines):
+        mask[start:end] = [True] * (end - start)
     inside_summary = False
 
     for index, line in enumerate(lines):
         body, _ = split_eol(line)
+        if mask[index]:
+            continue
         if protect_summaries and inside_summary:
             mask[index] = True
             if SUMMARY_END_RE.match(body):
@@ -262,21 +281,6 @@ def protected_line_mask(
             mask[index] = True
             inside_summary = True
             continue
-        if fence_char is None:
-            match = FENCE_OPEN_RE.match(body)
-            if match:
-                token = match.group("fence")
-                fence_char = token[0]
-                fence_length = len(token)
-                mask[index] = True
-            continue
-        mask[index] = True
-        if re.match(
-            rf"^[ \t]{{0,3}}{re.escape(fence_char)}{{{fence_length},}}[ \t]*$",
-            body,
-        ):
-            fence_char = None
-            fence_length = 0
     return mask
 
 

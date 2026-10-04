@@ -5,6 +5,7 @@ import unittest
 from scripts.source_timecode_core import (
     allocate_src,
     extract_youtube_video_id,
+    fenced_block_ranges,
     find_inline_markers,
     parse_below_marker,
     parse_youtube_url,
@@ -63,6 +64,19 @@ class SourceTimecodeCoreTests(unittest.TestCase):
             timestamp_url(parsed.base_url, 120),
             "https://youtu.be/abc?t=120s",
         )
+
+    def test_summary_marker_example_does_not_protect_later_source(self) -> None:
+        lines = (
+            "```md\n<!-- LECTURE_CLEANUP_SHORT_SUMMARY_START -->\n```\n"
+            "### Real source [00:01:00]\n"
+        ).splitlines(keepends=True)
+
+        self.assertEqual(protected_line_mask(lines), [True, True, True, False])
+
+    def test_fence_ranges_keep_adjacent_and_unclosed_blocks_separate(self) -> None:
+        lines = "```md\nfirst\n```\n~~~\nsecond\n~~~\n````\nthird\n".splitlines(keepends=True)
+
+        self.assertEqual(list(fenced_block_ranges(lines)), [(0, 3), (3, 6), (6, 8)])
 
     def test_normalizer_shorthand_uses_shared_video_id_parser(self) -> None:
         cases = {
