@@ -24,10 +24,6 @@ from scripts.logging_helper import (
     log_trace,
     log_trace_block,
 )
-from scripts.summary_references import (
-    render_long_summary_reference_display,
-    validate_long_summary_references,
-)
 from scripts.summary_settings import (
     SUMMARY_OUTPUTS,
     SummarySettings,
@@ -52,22 +48,15 @@ from scripts.utils import (
     rebalance_two_chunk_small_tail,
 )
 
-LONG_SUMMARY_START = "<!-- LECTURE_CLEANUP_LONG_SUMMARY_START -->"
-LONG_SUMMARY_END = "<!-- LECTURE_CLEANUP_LONG_SUMMARY_END -->"
-SHORT_SUMMARY_START = "<!-- LECTURE_CLEANUP_SHORT_SUMMARY_START -->"
-SHORT_SUMMARY_END = "<!-- LECTURE_CLEANUP_SHORT_SUMMARY_END -->"
-SUMMARY_BLOCK_NOTICE = (
-    "AI NOTICE: This block is an AI-generated summary of the source text, "
-    "not additional source material. Do not analyze it as source."
+from scripts.summary_generation import (
+    LONG_SUMMARY_START, LONG_SUMMARY_END, SHORT_SUMMARY_START, SHORT_SUMMARY_END,
+    SUMMARY_BLOCK_NOTICE, LONG_SUMMARY_BLOCK_START, LONG_SUMMARY_BLOCK_END,
+    SHORT_SUMMARY_BLOCK_START, SHORT_SUMMARY_BLOCK_END,
+    _extract_retry_after_seconds, _load_summary_prompt, _call_summary_request,
+    call_llm_summary, _parse_combined_summaries, call_llm_combined_summaries,
+    _append_summaries, _summary_block, _standalone_summary, _write_separate_summaries,
+    generate_summaries,
 )
-LONG_SUMMARY_BLOCK_START = (
-    f"<!-- LECTURE_CLEANUP_LONG_SUMMARY_START | {SUMMARY_BLOCK_NOTICE} -->"
-)
-LONG_SUMMARY_BLOCK_END = "<!-- LECTURE_CLEANUP_LONG_SUMMARY_END -->"
-SHORT_SUMMARY_BLOCK_START = (
-    f"<!-- LECTURE_CLEANUP_SHORT_SUMMARY_START | {SUMMARY_BLOCK_NOTICE} -->"
-)
-SHORT_SUMMARY_BLOCK_END = "<!-- LECTURE_CLEANUP_SHORT_SUMMARY_END -->"
 
 def load_text(path: str) -> str:
     with open(path, "r", encoding="utf-8", errors="ignore") as f:
@@ -170,25 +159,6 @@ def _parse_chunks_spec(spec: str, total: int) -> Optional[set[int]]:
                 out.add(i)
     return out
 
-def _extract_retry_after_seconds(msg: str) -> Optional[float]:
-    """Best-effort parse of provider-suggested retry-after seconds from error text.
-    Supports patterns like 'retry in 17.8s' and 'retry_delay { seconds: 17 }'.
-    """
-    if not msg:
-        return None
-    m = re.search(r"retry\s+in\s+([0-9]+(?:\.[0-9]+)?)s", msg, re.IGNORECASE)
-    if m:
-        try:
-            return float(m.group(1))
-        except Exception:
-            return None
-    m2 = re.search(r"retry_delay\s*\{\s*seconds:\s*([0-9]+)\s*\}", msg, re.IGNORECASE)
-    if m2:
-        try:
-            return float(m2.group(1))
-        except Exception:
-            return None
-    return None
 
 def _build_timecodes_policy_text(
     references_requested: bool,
@@ -297,261 +267,6 @@ def call_llm(
         log_trace(f"LLM response END{trace_label}")
     return out_text
 
-def _load_summary_prompt(
-    summary_type: str,
-    summary_lang: str,
-    source_link_prefix: Optional[str] = None,
-) -> Tuple[str, str]:
-    if summary_type not in ("short", "long"):
-        raise ValueError(f"Unsupported summary type: {summary_type}")
-    base = Path(__file__).parent.parent
-    prefix = "summary" if summary_type == "short" else "long_summary"
-    summary_system_path = base / "prompts" / f"{prefix}_system.md"
-    summary_user_path = base / "prompts" / f"{prefix}_user.md"
-    summary_system_content = summary_system_path.read_text(encoding="utf-8")
-    summary_user_content = summary_user_path.read_text(encoding="utf-8")
-    prompt_lang = summary_lang.strip().lower() or "default"
-    summary_system_content = summary_system_content.replace(
-        "{SUMMARY_LANGUAGE}", prompt_lang
-    )
-    summary_user_content = summary_user_content.replace(
-        "{SUMMARY_LANGUAGE}", prompt_lang
-    )
-    if summary_type == "long":
-        if source_link_prefix is not None:
-            references_path = base / "prompts" / "long_summary_references.md"
-            references_content = references_path.read_text(encoding="utf-8")
-            references_content = references_content.replace(
-                "{SOURCE_LINK_PREFIX}", source_link_prefix
-            )
-            summary_system_content = (
-                summary_system_content.rstrip()
-                + "\n\n"
-                + references_content.strip()
-                + "\n"
-            )
-    return summary_system_content, summary_user_content
-
-
-def _call_summary_request(
-    adapter: LLMAdapter,
-    model: str,
-    full_markdown: str,
-    system_content: str,
-    user_content: str,
-    temperature: float = 1.0,
-    top_p: float = None,
-    debug: bool = False,
-    trace: bool = False,
-    label: str = None,
-) -> str:
-    messages = [
-        {"role": "system", "content": system_content},
-        {"role": "user", "content": user_content + "\n\n<<<\n" + full_markdown + "\n>>>"},
-    ]
-    trace_label = f" [{label}]" if label else ""
-    if trace:
-        log_trace(f"Summary request BEGIN{trace_label}")
-        log_trace(f"Model: {model} | temperature: {temperature} | top_p: {top_p}")
-        log_trace_block("System prompt (summary)", system_content)
-        log_trace_block("User prompt (summary)", user_content)
-        log_trace_block("Document (full markdown)", full_markdown)
-        log_trace(f"Summary request END{trace_label}")
-    out_text = adapter.generate(
-        messages,
-        model=model,
-        temperature=temperature,
-        top_p=top_p,
-        debug=(debug or trace),
-        label=label,
-    )
-    if trace:
-        log_trace(f"Summary response BEGIN{trace_label}")
-        log_trace_block("Summary response", out_text)
-        log_trace(f"Summary response END{trace_label}")
-    return out_text
-
-
-def call_llm_summary(
-    adapter: LLMAdapter,
-    model: str,
-    full_markdown: str,
-    temperature: float = 1.0,
-    top_p: float = None,
-    debug: bool = False,
-    trace: bool = False,
-    label: str = None,
-    summary_type: str = "short",
-    summary_lang: str = "",
-    source_link_prefix: Optional[str] = None,
-) -> str:
-    system_content, user_content = _load_summary_prompt(
-        summary_type,
-        summary_lang,
-        source_link_prefix,
-    )
-    return _call_summary_request(
-        adapter,
-        model,
-        full_markdown,
-        system_content,
-        user_content,
-        temperature=temperature,
-        top_p=top_p,
-        debug=debug,
-        trace=trace,
-        label=label,
-    )
-
-
-def _parse_combined_summaries(response: str) -> Dict[str, str]:
-    markers = (
-        LONG_SUMMARY_START,
-        LONG_SUMMARY_END,
-        SHORT_SUMMARY_START,
-        SHORT_SUMMARY_END,
-    )
-    if any(response.count(marker) != 1 for marker in markers):
-        raise RuntimeError("Combined summary response has missing or duplicate section markers")
-    positions = [response.index(marker) for marker in markers]
-    if positions != sorted(positions):
-        raise RuntimeError("Combined summary response sections are out of order")
-    before = response[:positions[0]].strip()
-    between = response[positions[1] + len(LONG_SUMMARY_END):positions[2]].strip()
-    after = response[positions[-1] + len(SHORT_SUMMARY_END):].strip()
-    if before or between or after:
-        raise RuntimeError("Combined summary response contains text outside section markers")
-    long_summary = response[
-        positions[0] + len(LONG_SUMMARY_START):positions[1]
-    ].strip()
-    short_summary = response[
-        positions[2] + len(SHORT_SUMMARY_START):positions[3]
-    ].strip()
-    if not long_summary or not short_summary:
-        raise RuntimeError("Combined summary response contains an empty section")
-    return {"long": long_summary, "short": short_summary}
-
-
-def call_llm_combined_summaries(
-    adapter: LLMAdapter,
-    model: str,
-    full_markdown: str,
-    long_summary_lang: str,
-    temperature: float = 1.0,
-    top_p: float = None,
-    debug: bool = False,
-    trace: bool = False,
-    label: str = None,
-    source_link_prefix: Optional[str] = None,
-    short_summary_lang: str = "default",
-) -> Dict[str, str]:
-    long_system, long_user = _load_summary_prompt(
-        "long",
-        long_summary_lang,
-        source_link_prefix,
-    )
-    short_system, short_user = _load_summary_prompt("short", short_summary_lang)
-    system_content = f"""Complete two independent summarization tasks in one response.
-
-Analyze the source lecture directly and independently for each task. Do not derive the short summary from the long summary, or the long summary from the short summary. Apply each task's instructions with the same care as if it were a separate request. The long-summary instructions apply only to the long section, and the short-summary instructions apply only to the short section. Each section must follow its own language and formatting requirements independently; neither section's language, heading style, or structure overrides the other section's instructions.
-
-[LONG SUMMARY SYSTEM INSTRUCTIONS]
-{long_system}
-
-[SHORT SUMMARY SYSTEM INSTRUCTIONS]
-{short_system}
-"""
-    user_content = f"""Complete both tasks below from the single source document supplied after these instructions.
-
-[LONG SUMMARY USER INSTRUCTIONS]
-{long_user}
-
-[SHORT SUMMARY USER INSTRUCTIONS]
-{short_user}
-
-Return the long summary first and the short summary second. Output exactly these four marker lines and the Markdown between them. Do not use a surrounding code fence or write anything outside the markers.
-
-{LONG_SUMMARY_START}
-<long summary Markdown>
-{LONG_SUMMARY_END}
-{SHORT_SUMMARY_START}
-<short summary Markdown>
-{SHORT_SUMMARY_END}
-"""
-    response = _call_summary_request(
-        adapter,
-        model,
-        full_markdown,
-        system_content,
-        user_content,
-        temperature=temperature,
-        top_p=top_p,
-        debug=debug,
-        trace=trace,
-        label=label,
-    )
-    return _parse_combined_summaries(response)
-
-
-def _append_summaries(
-    full_markdown: str,
-    summaries: Dict[str, str],
-    settings: SummarySettings,
-) -> str:
-    sections = []
-    if summaries.get("long", "").strip() and settings.long.output == "append":
-        sections.append(
-            _summary_block("long", summaries["long"], settings.long.heading)
-        )
-    if summaries.get("short", "").strip() and settings.short.output == "append":
-        sections.append(
-            _summary_block("short", summaries["short"], settings.short.heading)
-        )
-    if not sections:
-        return full_markdown
-    return full_markdown.rstrip() + "\n\n" + "\n\n".join(sections) + "\n"
-
-
-def _summary_block(summary_type: str, summary: str, heading: str) -> str:
-    if summary_type == "long":
-        start, end = LONG_SUMMARY_BLOCK_START, LONG_SUMMARY_BLOCK_END
-    elif summary_type == "short":
-        start, end = SHORT_SUMMARY_BLOCK_START, SHORT_SUMMARY_BLOCK_END
-    else:
-        raise ValueError(f"Unsupported summary type: {summary_type}")
-    return f"{start}\n{heading}\n\n{summary.strip()}\n{end}"
-
-
-def _standalone_summary(summary_type: str, summary: str, heading: str) -> str:
-    return _summary_block(summary_type, summary, heading) + "\n"
-
-
-def _write_separate_summaries(
-    outdir: Path,
-    filename_stem: str,
-    summaries: Dict[str, str],
-    settings: SummarySettings,
-) -> List[Path]:
-    paths = []
-    if summaries.get("long", "").strip() and settings.long.output == "separate":
-        long_summary_path = outdir / (
-            f"{filename_stem}{settings.long.file_suffix}.md"
-        )
-        long_summary_path.write_text(
-            _standalone_summary("long", summaries["long"], settings.long.heading),
-            encoding="utf-8",
-        )
-        paths.append(long_summary_path)
-    if summaries.get("short", "").strip() and settings.short.output == "separate":
-        short_summary_path = outdir / (
-            f"{filename_stem}{settings.short.file_suffix}.md"
-        )
-        short_summary_path.write_text(
-            _standalone_summary("short", summaries["short"], settings.short.heading),
-            encoding="utf-8",
-        )
-        paths.append(short_summary_path)
-    return paths
 
 def main() -> int:
     ap = argparse.ArgumentParser(
@@ -1308,100 +1023,20 @@ def main() -> int:
             else f"{enabled_summary_types[0]} summary"
         )
         log_info(f"Generating {summary_label}…")
-        attempt_i = 1
-        while attempt_i <= attempts:
-            try:
-                # Optional delay before the first attempt on summary
-                if attempt_i == 1 and request_delay > 0:
-                    if debug:
-                        log_debug(f"Sleeping {request_delay}s before summary request")
-                    time.sleep(request_delay)
-                summary_source = strip_edit_comments(full_markdown)
-                source_note = (
-                    ""
-                    if summary_settings.long.output == "append"
-                    else in_path.stem
-                )
-                source_link_prefix = (
-                    (source_note + "#")
-                    if summary_settings.long.references.enabled
-                    else None
-                )
-                if len(enabled_summary_types) == 2:
-                    summaries = call_llm_combined_summaries(
-                        adapter,
-                        model,
-                        summary_source,
-                        summary_settings.long.lang,
-                        short_summary_lang=summary_settings.short.lang,
-                        temperature=temperature,
-                        top_p=top_p,
-                        debug=debug,
-                        trace=trace,
-                        label=f"both summaries (attempt {attempt_i}/{attempts})",
-                        source_link_prefix=source_link_prefix,
-                    )
-                else:
-                    summary_type = enabled_summary_types[0]
-                    summary = call_llm_summary(
-                        adapter,
-                        model,
-                        summary_source,
-                        summary_type=summary_type,
-                        summary_lang=getattr(summary_settings, summary_type).lang,
-                        temperature=temperature,
-                        top_p=top_p,
-                        debug=debug,
-                        trace=trace,
-                        label=f"{summary_type} summary (attempt {attempt_i}/{attempts})",
-                        source_link_prefix=(
-                            source_link_prefix if summary_type == "long" else None
-                        ),
-                    )
-                    if not (summary or "").strip():
-                        raise RuntimeError(f"Empty response text ({summary_type} summary)")
-                    summaries = {summary_type: summary.strip()}
-                if summary_settings.long.references.enabled and "long" in summaries:
-                    validate_long_summary_references(
-                        summaries["long"],
-                        summary_source,
-                        source_note=source_note,
-                    )
-                    summaries["long"] = render_long_summary_reference_display(
-                        summaries["long"],
-                        summary_source,
-                        summary_settings.long.references.display,
-                        link_style=summary_settings.long.references.link_style,
-                    )
-                break
-            except Exception as e:
-                provider_name = adapter.name()
-                is_last = (attempt_i >= attempts)
-                if debug:
-                    log_debug(traceback.format_exc().rstrip())
-                from aiadapters.base import LLMAuthError, LLMRateLimitError, LLMConnectionError, LLMUnknownError
-                if isinstance(e, (LLMAuthError, LLMUnknownError)):
-                    log_error(f"{provider_name} summary generation failed (attempt {attempt_i}/{attempts}): {e}")
-                    summaries = {}
-                    break
-                elif isinstance(e, (LLMRateLimitError, LLMConnectionError, RuntimeError)):
-                    if is_last:
-                        log_error(f"{provider_name} summary generation failed (attempt {attempt_i}/{attempts}): {e}")
-                        summaries = {}
-                        break
-                    suggested = _extract_retry_after_seconds(str(e)) if isinstance(e, (LLMRateLimitError,)) else None
-                    if suggested and suggested > 0:
-                        wait_for = suggested + (pause_between_attempts or 0.0)
-                    else:
-                        wait_for = pause_between_attempts
-                    log_warn(f"{provider_name} summary error (attempt {attempt_i}/{attempts}): {e}. Retrying after {wait_for or 0}s…")
-                    if wait_for and wait_for > 0:
-                        time.sleep(wait_for)
-                    attempt_i += 1
-                else:
-                    log_error(f"{provider_name} summary generation failed (attempt {attempt_i}/{attempts}): {e}")
-                    summaries = {}
-                    break
+        summary_source = strip_edit_comments(full_markdown)
+        source_note = "" if summary_settings.long.output == "append" else in_path.stem
+        try:
+            summaries = generate_summaries(
+                adapter, model, summary_source, summary_settings,
+                temperature=temperature, top_p=top_p,
+                attempts=attempts, pause_seconds=pause_between_attempts,
+                request_delay=request_delay, source_note=source_note,
+                debug=debug, trace=trace,
+            )
+        except Exception as exc:
+            if debug:
+                log_debug(traceback.format_exc().rstrip())
+            log_error(f"{adapter.name()} summary generation failed: {exc}")
         if summaries:
             full_markdown = _append_summaries(
                 full_markdown,
