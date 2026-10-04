@@ -23,6 +23,21 @@ operations where direct access is useful.
 Use `--color`, `--no-color`, or `--color=auto|always|never` before the mode.
 Detailed, current options come from `./StartMe.sh help MODE`.
 
+Use `add-summary` to add or regenerate short/long summaries of existing Markdown:
+
+```bash
+./StartMe.sh add-summary ./notes.md --type both --lang uk --dry-run
+./StartMe.sh add-summary ./notes.md --type both --lang uk
+./StartMe.sh help add-summary
+```
+
+This mode delegates to `subtitle-utils/add_summary.sh`, using the project virtual
+environment and keeping paths relative to the invocation directory. It supports
+internal/external output, skip/replace/add/error conflict policies, source
+inspection and configurable backups. Tool-specific settings belong to
+`summary_regeneration` in the config. See [TOOL_AddSummary.md](TOOL_AddSummary.md)
+for legacy summaries, references, replacement selectors and configuration.
+
 Use `source-timecodes` to inspect or transform Markdown heading timestamps,
 camera links, and source block IDs:
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import json
 import math
 import time
 from pathlib import Path
@@ -293,14 +294,23 @@ def _append_summaries(
     return full_markdown.rstrip() + "\n\n" + "\n\n".join(sections) + "\n"
 
 
-def _summary_block(summary_type: str, summary: str, heading: str) -> str:
+def _summary_block(
+    summary_type: str, summary: str, heading: str,
+    *, metadata: Optional[dict] = None,
+) -> str:
+    if "\n" in heading or "\r" in heading:
+        raise ValueError("Summary heading must fit on one Markdown line")
     if summary_type == "long":
         start, end = LONG_SUMMARY_BLOCK_START, LONG_SUMMARY_BLOCK_END
     elif summary_type == "short":
         start, end = SHORT_SUMMARY_BLOCK_START, SHORT_SUMMARY_BLOCK_END
     else:
         raise ValueError(f"Unsupported summary type: {summary_type}")
-    return f"{start}\n{heading}\n\n{summary.strip()}\n{end}"
+    extra = ""
+    if metadata is not None:
+        payload = json.dumps(metadata, ensure_ascii=False, sort_keys=True).replace("--", "\\u002d\\u002d")
+        extra = f"<!-- LECTURE_CLEANUP_SUMMARY_META {payload} -->\n"
+    return f"{start}\n{extra}{heading}\n\n{summary.strip()}\n{end}"
 
 
 def _standalone_summary(summary_type: str, summary: str, heading: str) -> str:
@@ -347,6 +357,7 @@ def generate_summaries(
     pause_seconds: float = 0.0,
     request_delay: float = 0.0,
     source_note: str = "",
+    reference_target: Optional[str] = None,
     debug: bool = False,
     trace: bool = False,
 ) -> Dict[str, str]:
@@ -399,6 +410,7 @@ def generate_summaries(
                 summaries["long"] = render_long_summary_reference_display(
                     summaries["long"], source, settings.long.references.display,
                     link_style=settings.long.references.link_style,
+                    note_target=reference_target,
                 )
             return summaries
         except (LLMAuthError, LLMUnknownError):

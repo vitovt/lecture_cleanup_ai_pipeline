@@ -223,6 +223,111 @@ summary:
         timestamp: true
         separator: " · "
 
+# Additional/regenerated summaries of existing Markdown: StartMe.sh add-summary.
+# This section has no effect on lecture_cleanup.sh or transcription workflows.
+# For add-summary only, short/long recursively override summary.short/long.
+# Missing keys, empty mappings, and null values inherit summary settings.
+# Explicit false is an override. CLI options take precedence over both sections.
+summary_regeneration:
+  # Optional short overrides (the same keys and validation as summary.short):
+  # enabled: whether short is selected without --type.
+  # heading: the outer Markdown heading, copied literally rather than translated.
+  # lang: ISO-639-1 code, or default. Here default REQUIRES an explicit --lang;
+  #       language/lang frontmatter and the global language key are not consulted.
+  # output: append updates the source; separate creates an external Markdown file.
+  # file_suffix: external filename suffix, with no path separators.
+  # Example local override: short: {enabled: true, lang: uk, output: separate}
+  short: {}
+
+  # Optional long overrides: enabled, heading, lang, output, file_suffix,
+  # plus references.enabled, references.link_style, and references.display
+  # (label, heading, timestamp, separator), with the meanings documented above.
+  # Existing source IDs are checked; pipeline ID-generation flags are irrelevant
+  # to this tool. References may require a source edit even with separate output.
+  long: {}
+
+  # Optional tool-specific LLM settings, recursively overriding global llm.
+  # Configure provider and its nested model/temperature/top_p/retry/etc. here to
+  # regenerate with a stronger model while retaining the cleanup pipeline model.
+  # Example local override: llm: {gemini: {model: gemini-2.5-pro}}
+  # --llm-provider and --model override the effective provider and model.
+  llm: {}
+  # Optional tool-specific global retry attempts and pause_seconds. The selected
+  # provider's llm.<provider>.retry remains more specific, as in the pipeline.
+  # --retry-attempts and --request-delay override effective request settings.
+  retry: {}
+
+  # Existing summaries are matched by type, language and output location.
+  # Old tagged summaries without language conservatively match any language.
+  # skip: retain matches and generate only missing types (no API call if all skip).
+  # replace: regenerate one match; multiple matches require --target ID or all.
+  # add: deliberately allow unlimited duplicates, including the same language.
+  # error: reject conflicts before any LLM call. CLI: --on-existing.
+  on_existing: skip
+
+  legacy:
+    # Exclude an unmarked summary tail from source by its first matching heading.
+    # Everything from that heading to EOF is excluded; no tail segmentation.
+    # Code examples and tagged summaries are ignored during heading detection.
+    # CLI: --legacy-summary-detection / --no-legacy-summary-detection.
+    enabled: true
+    # Literal whole words/phrases in an ATX (#) or Setext heading. A local list
+    # replaces this list. --legacy-summary-keyword may be repeated and also
+    # replaces the configured list. Empty [] disables word matching.
+    heading_words: [summary]
+    # false matches Summary, SUMMARY, etc.; true uses the spelling above.
+    # CLI: --legacy-case-sensitive / --legacy-ignore-case.
+    case_sensitive: false
+
+  source:
+    # Filtering affects only the LLM source; original comments are preserved.
+    # service: exclude diagnostic/edit comments, including unsure AND unsures,
+    # STARTING/END, merged_terms and provider/model processing metadata.
+    # all: exclude actual HTML comments; keep: preserve them.
+    # Meaningful code examples are retained. Diagnostic-only fences are excluded
+    # for service/all. YAML frontmatter is excluded and never supplies language.
+    # Tagged summaries of every type/language are always excluded first.
+    # CLI: --comments service|all|keep; inspect with --print-source.
+    comments: service
+
+  references:
+    # Used only when long references are enabled and source headings lack IDs.
+    # add: plan missing ^src-* / ^txt-* IDs with the shared heading renderer;
+    #      preserve existing IDs and timestamp formats, and save IDs to source
+    #      only after ALL requested summaries succeed (including external ones).
+    # omit: warn and disable long references for this invocation.
+    # error: fail before LLM calls. Duplicate IDs are always an error.
+    # Source without any headings must be structured or use omit/no references.
+    # CLI: --missing-ids add|omit|error; --no-long-summary-references disables
+    # references explicitly. Dry-run reports the planned source edits.
+    missing_ids: add
+
+  backups:
+    # Back up every existing source/output file that will change, not new files.
+    # Copies retain original bytes and permissions. No backup is made by
+    # --dry-run, --print-source, --list, --diff, skipped or failed generation.
+    # CLI: --backup / --no-backup. Write rollback also works when this is false.
+    enabled: true
+    # Filename template beside each original; no directory components allowed.
+    # {stem}: name without .md; {name}: full original filename;
+    # {datetime}: UTC YYYY-MM-DD_HH-MM-SS-microseconds. Must end in .md.
+    # Existing backup names cause an error rather than overwriting old copies.
+    # CLI: --backup-filename. Default: original name - datetime - bak.md.
+    filename: "{stem}-{datetime}-bak.md"
+
+  external:
+    # null writes beside the source. Otherwise use a directory path; $HOME/~
+    # expand, and relative paths refer to the invocation directory. --outdir
+    # overrides this value. Discovery checks only the source/output directories.
+    # First names use file_suffix; additional languages/duplicates use .en/.en.2
+    # before .md. Backlinks are relative to the actual external file location.
+    directory: null
+
+  # Optional positive maximum characters in the filtered source, including any
+  # planned IDs. null imposes no local limit; provider context limits still apply.
+  # Exceeding a limit is an error; source is never silently truncated.
+  max_source_chars: null
+
 # Paths to stopword lists (one per language)
 parasites:
   ru: data/parasites_ru.txt

@@ -65,6 +65,8 @@ def collect_source_blocks(markdown: str) -> dict[str, SourceBlock]:
 
         for identifier in identifiers:
             identifier_text = identifier.raw.removeprefix("^")
+            if identifier_text in blocks:
+                raise SummaryReferenceError(f"duplicate source block ^{identifier_text}")
             timestamp = None
             if identifier.kind == "src" and visible_seconds == identifier.number:
                 timestamp = format_hms(identifier.number)
@@ -215,6 +217,7 @@ def render_long_summary_reference_display(
     display: LongSummaryReferenceDisplaySettings,
     *,
     link_style: str,
+    note_target: Optional[str] = None,
 ) -> str:
     """Render validated references without changing their source blocks."""
     if link_style not in ("wikilink", "markdown"):
@@ -240,8 +243,10 @@ def render_long_summary_reference_display(
                     f"cannot render unknown source block ^{identifier}"
                 )
             alias = _reference_alias(source_block, display)
-            note = match.group("note")
+            note = note_target if note_target is not None else match.group("note")
             if link_style == "wikilink":
+                if any(char in note for char in "#|[]\r\n"):
+                    raise SummaryReferenceError("source path contains unsupported wikilink characters; use markdown link_style")
                 return f"[[{note}#^{identifier}|{alias}]]"
 
             if not note:
