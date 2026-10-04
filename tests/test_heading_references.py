@@ -113,6 +113,34 @@ class HeadingReferenceTests(unittest.TestCase):
 
         self.assertEqual(second, first)
 
+    def test_only_add_ids_reserves_existing_ids_and_keeps_formats(self) -> None:
+        text = (
+            "### New [00:01:00](#)\n"
+            "### Existing [00:01:00](#) ^src-60\n"
+            "### New untimed\n"
+            "### Existing untimed ^txt-1\n"
+        )
+        options = HeadingReferenceOptions(
+            include_src=True, include_txt_for_untimed=True, only_add_ids=True,
+        )
+
+        result = render_heading_references(text, options).markdown
+
+        self.assertEqual(result, (
+            "### New [00:01:00](#) ^src-60-2\n"
+            "### Existing [00:01:00](#) ^src-60\n"
+            "### New untimed ^txt-2\n"
+            "### Existing untimed ^txt-1\n"
+        ))
+        self.assertEqual(render_heading_references(result, options).markdown, result)
+
+    def test_only_add_ids_preserves_below_links_and_crlf(self) -> None:
+        text = "### Timed\r\n[🎥 00:01:00](https://youtu.be/abc?t=60s)\r\nBody\r\n"
+
+        result = self.render(text, include_src=True, only_add_ids=True)
+
+        self.assertEqual(result.markdown, text.replace("### Timed\r\n", "### Timed ^src-60\r\n"))
+
     def test_code_fences_and_summary_blocks_are_ignored(self) -> None:
         source = (
             "```md\n### Example [00:01:00]\n```\n"

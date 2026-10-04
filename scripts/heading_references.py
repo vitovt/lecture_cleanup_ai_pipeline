@@ -27,6 +27,8 @@ class HeadingReferenceOptions:
     include_below: bool = False
     include_src: bool = False
     include_txt_for_untimed: bool = False
+    # Add missing IDs without changing existing identifiers or I/B formats.
+    only_add_ids: bool = False
 
     def needs_timestamp_resolution(self) -> bool:
         return any(
@@ -67,6 +69,16 @@ def render_heading_references(
     newline = document_newline(lines)
     output: list[str] = []
     used_src: set[str] = set()
+    used_txt: set[str] = set()
+    if options.only_add_ids:
+        for line_index, line in enumerate(lines):
+            if protected[line_index]:
+                continue
+            match = HEADING_RE.match(line)
+            if match:
+                _, existing = strip_trailing_block_ids(match.group("body"))
+                for identifier in existing:
+                    (used_src if identifier.kind == "src" else used_txt).add(identifier.raw)
     txt_number = 0
     heading_count = 0
     timed_count = 0
@@ -116,6 +128,32 @@ def render_heading_references(
             seconds = existing_src_seconds
         target = _external_target(inline, below)
         rendered_body = base_body
+
+        if options.only_add_ids:
+            if identifiers:
+                src_count += sum(identifier.kind == "src" for identifier in identifiers)
+                txt_count += sum(identifier.kind == "txt" for identifier in identifiers)
+                output.append(line)
+            else:
+                new_id = None
+                if seconds is not None and options.include_src:
+                    new_id = allocate_src(seconds, used_src)
+                    src_count += 1
+                elif seconds is None and options.include_txt_for_untimed:
+                    txt_number += 1
+                    while f"^txt-{txt_number}" in used_txt:
+                        txt_number += 1
+                    new_id = f"^txt-{txt_number}"
+                    used_txt.add(new_id)
+                    txt_count += 1
+                if new_id:
+                    eol = heading_match.group("eol") or ""
+                    output.append(line[:-len(eol)] + f" {new_id}" + eol if eol else line + f" {new_id}")
+                else:
+                    output.append(line)
+            timed_count += seconds is not None
+            index += 1
+            continue
 
         if seconds is not None:
             timed_count += 1
