@@ -23,6 +23,17 @@ operations where direct access is useful.
 Use `--color`, `--no-color`, or `--color=auto|always|never` before the mode.
 Detailed, current options come from `./StartMe.sh help MODE`.
 
+Use `add-video-url` to turn local Markdown timestamps into YouTube links:
+
+```bash
+./StartMe.sh add-video-url -u https://youtu.be/JF1ooAGs0L4 ./notes.md --overwrite
+./StartMe.sh help add-video-url
+```
+
+This mode delegates to `subtitle-utils/add_video_url.py` and keeps paths relative
+to the invocation directory. Omit `--overwrite` to print Markdown to stdout,
+use `-o FILE.md` to write another file, or use `--diff` to preview changes.
+
 For `cleanup`, relative `--input`, `--outdir`, `--context-file`, and `--glossary`
 paths refer to the directory where you invoke StartMe. Both `--option value`
 and `--option=value` forms work, including repeated context files.

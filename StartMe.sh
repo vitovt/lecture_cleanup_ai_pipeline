@@ -239,6 +239,10 @@ Setup and maintenance
     Example: $PROGRAM update-main --check
 
 Utilities
+  add-video-url
+    Add a YouTube URL to local timestamps in Markdown headings and camera links.
+    Example: $PROGRAM add-video-url -u "https://youtu.be/VIDEO_ID" ./notes.md --overwrite
+
   download-subtitles
     Download auto-generated subtitles for one YouTube URL into the current directory.
     Example: $PROGRAM download-subtitles "https://youtu.be/VIDEO_ID"
@@ -294,6 +298,7 @@ resolve_mode() {
         setup-groq) TARGET="$SCRIPT_DIR/groq-api/setup_venv.sh" ;;
         setup-diarization) TARGET="$SCRIPT_DIR/pyannote-diarization/setup_venv.sh" ;;
         update-main) TARGET="$SCRIPT_DIR/update_venv_packages.sh" ;;
+        add-video-url) TARGET="$SCRIPT_DIR/subtitle-utils/add_video_url.py" ;;
         download-subtitles) TARGET="$SCRIPT_DIR/subtitle-utils/download_youtube_subtitles.sh"; HELP_KIND="download-subtitles" ;;
         extract-audio) TARGET="$SCRIPT_DIR/subtitle-utils/extract-audio.sh"; HELP_KIND="extract-audio" ;;
         docx-to-markdown) TARGET="$SCRIPT_DIR/subtitle-utils/docx2md.sh"; HELP_KIND="docx-to-markdown" ;;
