@@ -256,8 +256,9 @@ More help:
   $PROGRAM help youtube-speechcore
   $PROGRAM help setup-diarization
 
-Mode arguments are passed unchanged to the underlying script. Run from any
-directory; project scripts are resolved relative to StartMe.sh.
+Run from any directory; project scripts are resolved relative to StartMe.sh.
+cleanup resolves file paths from your working directory and supports
+CLEANUP_MDOUTDIR in the project's .env. Other modes pass arguments unchanged.
 EOF
 }
 
@@ -366,7 +367,83 @@ show_mode_help() {
         print_error "mode script is missing or not executable: $TARGET"
         return 2
     fi
-    "$TARGET" --help | colorize_help detail
+    if [[ "$mode" == "cleanup" ]]; then
+        {
+            "$TARGET" --help
+            cat <<'EOF'
+
+StartMe cleanup paths:
+  Relative --input, --outdir, --context-file and --glossary paths are resolved
+  from the directory where StartMe.sh is invoked. Both --option value and
+  --option=value forms are supported.
+
+Markdown output directory:
+  --outdir overrides CLEANUP_MDOUTDIR in the project's .env. Without either,
+  the default is the project's output directory. Relative CLEANUP_MDOUTDIR
+  paths are also resolved from the invocation directory.
+  Example .env setting: CLEANUP_MDOUTDIR="$HOME/Desktop/obsidian"
+  QC CSV output remains controlled by --qc-report.
+EOF
+        } | colorize_help detail
+    else
+        "$TARGET" --help | colorize_help detail
+    fi
+}
+
+cleanup_absolute_path() {
+    case "$1" in
+        /*) printf '%s' "$1" ;;
+        *) printf '%s/%s' "$PWD" "$1" ;;
+    esac
+}
+
+cleanup_output_default() (
+    # Keep .env assignments isolated from the dispatcher and other modes.
+    if [[ -f "$SCRIPT_DIR/.env" ]]; then
+        # shellcheck disable=SC1091
+        source "$SCRIPT_DIR/.env"
+    fi
+    printf '%s' "${CLEANUP_MDOUTDIR:-}"
+)
+
+prepare_cleanup_args() {
+    CLEANUP_ARGS=()
+    local has_outdir=0 option value outdir
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --input|--outdir|--context-file|--glossary)
+                option="$1"
+                if [[ $# -lt 2 || -z "$2" || "$2" == --* ]]; then
+                    print_error "$option requires a path."
+                    return 2
+                fi
+                CLEANUP_ARGS+=("$option" "$(cleanup_absolute_path "$2")")
+                [[ "$option" != "--outdir" ]] || has_outdir=1
+                shift 2
+                ;;
+            --input=*|--outdir=*|--context-file=*|--glossary=*)
+                option="${1%%=*}"
+                value="${1#*=}"
+                if [[ -z "$value" ]]; then
+                    print_error "$option requires a path."
+                    return 2
+                fi
+                CLEANUP_ARGS+=("$option=$(cleanup_absolute_path "$value")")
+                [[ "$option" != "--outdir" ]] || has_outdir=1
+                shift
+                ;;
+            *)
+                CLEANUP_ARGS+=("$1")
+                shift
+                ;;
+        esac
+    done
+    if [[ "$has_outdir" -eq 0 ]]; then
+        outdir="$(cleanup_output_default)"
+        if [[ -n "$outdir" ]]; then
+            CLEANUP_ARGS+=(--outdir "$(cleanup_absolute_path "$outdir")")
+        fi
+    fi
 }
 
 while [[ $# -gt 0 ]]; do
@@ -425,6 +502,17 @@ fi
 if [[ ! -x "$TARGET" ]]; then
     print_error "mode script is missing or not executable: $TARGET"
     exit 2
+fi
+
+if [[ "$MODE" == "cleanup" ]]; then
+    for argument in "$@"; do
+        if [[ "$argument" == "-h" || "$argument" == "--help" ]]; then
+            show_mode_help "$MODE"
+            exit 0
+        fi
+    done
+    prepare_cleanup_args "$@"
+    exec "$TARGET" "${CLEANUP_ARGS[@]}"
 fi
 
 exec "$TARGET" "$@"
