@@ -239,6 +239,10 @@ Setup and maintenance
     Example: $PROGRAM update-main --check
 
 Utilities
+  source-timecodes
+    Inspect and transform Markdown heading timestamps, camera links, and source IDs.
+    Example: $PROGRAM source-timecodes transform ./notes.md --add-src --overwrite
+
   add-video-url
     Add a YouTube URL to local timestamps in Markdown headings and camera links.
     Example: $PROGRAM add-video-url -u "https://youtu.be/VIDEO_ID" ./notes.md --overwrite
@@ -298,6 +302,7 @@ resolve_mode() {
         setup-groq) TARGET="$SCRIPT_DIR/groq-api/setup_venv.sh" ;;
         setup-diarization) TARGET="$SCRIPT_DIR/pyannote-diarization/setup_venv.sh" ;;
         update-main) TARGET="$SCRIPT_DIR/update_venv_packages.sh" ;;
+        source-timecodes) TARGET="$SCRIPT_DIR/subtitle-utils/source_timecodes.py" ;;
         add-video-url) TARGET="$SCRIPT_DIR/subtitle-utils/add_video_url.py" ;;
         download-subtitles) TARGET="$SCRIPT_DIR/subtitle-utils/download_youtube_subtitles.sh"; HELP_KIND="download-subtitles" ;;
         extract-audio) TARGET="$SCRIPT_DIR/subtitle-utils/extract-audio.sh"; HELP_KIND="extract-audio" ;;

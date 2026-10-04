@@ -23,6 +23,20 @@ operations where direct access is useful.
 Use `--color`, `--no-color`, or `--color=auto|always|never` before the mode.
 Detailed, current options come from `./StartMe.sh help MODE`.
 
+Use `source-timecodes` to inspect or transform Markdown heading timestamps,
+camera links, and source block IDs:
+
+```bash
+./StartMe.sh source-timecodes doctor ./notes.md
+./StartMe.sh source-timecodes analyze ./notes.md
+./StartMe.sh source-timecodes transform ./notes.md --add-src --overwrite
+./StartMe.sh help source-timecodes
+```
+
+This mode delegates to `subtitle-utils/source_timecodes.py`, forwarding its
+subcommands and options. Paths refer to the invocation directory. `transform`
+supports stdout, `--diff`, `-o FILE.md`, and `--overwrite` output modes.
+
 Use `add-video-url` to turn local Markdown timestamps into YouTube links:
 
 ```bash
