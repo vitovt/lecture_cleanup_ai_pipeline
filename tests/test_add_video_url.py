@@ -126,6 +126,57 @@ class AddVideoUrlTests(unittest.TestCase):
         self.assertIn("-### Heading [00:01:00](#t=60s)", result.stdout)
         self.assertIn("+### Heading [00:01:00](https://", result.stdout)
 
+    def test_overwrite_preserves_line_endings_bom_and_permissions(self) -> None:
+        source = "\ufeff### Heading [00:01:00](#t=60s)\r\n[🎥 00:02:00](#)\r\n"
+        expected = (
+            "\ufeff### Heading [00:01:00]"
+            "(https://www.youtube.com/watch?v=A5qE7Eg7zPk&t=60s)\r\n"
+            "[🎥 00:02:00]"
+            "(https://www.youtube.com/watch?v=A5qE7Eg7zPk&t=120s)\r\n"
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            path = self.write_markdown(directory, source)
+            path.chmod(0o640)
+
+            result = self.run_tool("-u", VIDEO_URL, path, "--overwrite")
+            after = path.read_bytes()
+            mode = path.stat().st_mode & 0o777
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout, "")
+        self.assertEqual(after, expected.encode("utf-8"))
+        self.assertEqual(mode, 0o640)
+        self.assertIn(f"converted 2 timestamp link(s) -> {path}", result.stderr)
+
+    def test_overwrite_leaves_input_unchanged_on_conversion_error(self) -> None:
+        source = "### Heading [00:01:00](#)\n[🎥 00:99:00](#)\n"
+        with tempfile.TemporaryDirectory() as directory:
+            path = self.write_markdown(directory, source)
+
+            result = self.run_tool("-u", VIDEO_URL, path, "--overwrite")
+            after = path.read_text(encoding="utf-8")
+
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertEqual(after, source)
+        self.assertEqual(result.stdout, "")
+        self.assertIn("error:", result.stderr)
+
+    def test_overwrite_is_mutually_exclusive_with_output_and_diff(self) -> None:
+        source = "### Heading [00:01:00](#)\n"
+        with tempfile.TemporaryDirectory() as directory:
+            path = self.write_markdown(directory, source)
+            output = Path(directory) / "output.md"
+            for option in (("-o", output), ("--diff",)):
+                with self.subTest(option=option):
+                    result = self.run_tool(
+                        "-u", VIDEO_URL, path, "--overwrite", *option,
+                    )
+
+                    self.assertEqual(result.returncode, 2)
+                    self.assertIn("not allowed with argument", result.stderr)
+                    self.assertEqual(path.read_text(encoding="utf-8"), source)
+                    self.assertFalse(output.exists())
+
     def test_diff_and_output_are_mutually_exclusive(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             path = self.write_markdown(directory, "### Heading [00:01:00]\n")

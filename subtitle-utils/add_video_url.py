@@ -144,7 +144,7 @@ def read_file(path):
 
 
 def atomic_write(path, text, source_path):
-    """Safely supports: -o FILENAME FILENAME."""
+    """Safely supports writing to the input file."""
     try:
         mode_source = path if path.exists() else source_path
         mode = stat.S_IMODE(mode_source.stat().st_mode)
@@ -192,9 +192,10 @@ def parser():
             "headings and standalone [🎥 HH:MM:SS](#) lines."
         ),
         epilog=(
-            "Without -o or --diff, Markdown is written to stdout. With -o, "
-            "OUTFILE is written atomically and may be the same file as "
-            "FILENAME. --diff prints a unified three-line-context preview."
+            "Without -o, --overwrite or --diff, Markdown is written to stdout. "
+            "With -o, OUTFILE is written atomically and may be the same file as "
+            "FILENAME. --overwrite writes atomically to FILENAME. "
+            "--diff prints a unified three-line-context preview."
         ),
     )
     p.add_argument(
@@ -205,6 +206,11 @@ def parser():
     destination.add_argument(
         "-o", "--output", metavar="OUTFILE.md",
         help="write result to this .md file instead of stdout",
+    )
+    destination.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="overwrite the input .md file atomically with the result",
     )
     destination.add_argument(
         "--diff",
@@ -227,6 +233,8 @@ def main(argv=None):
     args = p.parse_args(argv)
     src = Path(args.filename)
     dst = Path(args.output) if args.output else None
+    if args.overwrite:
+        dst = src
 
     try:
         check_input(src)
