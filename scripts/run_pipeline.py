@@ -55,7 +55,7 @@ from scripts.summary_generation import (
     _extract_retry_after_seconds, _load_summary_prompt, _call_summary_request,
     call_llm_summary, _parse_combined_summaries, call_llm_combined_summaries,
     _append_summaries, _summary_block, _standalone_summary, _write_separate_summaries,
-    generate_summaries,
+    generate_summaries, generation_options,
 )
 
 def load_text(path: str) -> str:
@@ -547,38 +547,21 @@ def main() -> int:
     except ValueError as exc:
         log_error(str(exc))
         return 2
-    # Resolve provider + effective model params with backward compatibility
-    def _effective_llm_params(cfg: Dict, provider_override: Optional[str]) -> Dict:
-        llm = cfg["llm"]
-        provider = (provider_override or llm["provider"]).strip().lower()
-        p_cfg = llm[provider]
-        return {
-            "model": p_cfg["model"],
-            "temperature": p_cfg.get("temperature"),
-            "top_p": p_cfg.get("top_p"),
-            "provider": provider,
-        }
-    _llm = _effective_llm_params(cfg, args.llm_provider)
+    try:
+        _llm = generation_options(
+            cfg, provider_override=args.llm_provider,
+            request_delay_override=args.request_delay,
+            retry_attempts_override=args.retry_attempts,
+        )
+    except (ValueError, KeyError, TypeError) as exc:
+        log_error(str(exc))
+        return 2
     model = _llm["model"]
     temperature = _llm.get("temperature")
     top_p = _llm.get("top_p")
-    # Basic validation to catch missing required model setting
-    if not model:
-        log_error("Missing model in config under llm.<provider>.model")
-        sys.exit(1)
-    # Delay between LLM requests (seconds). Config llm.request_delay_seconds; CLI overrides.
-    cfg_llm = cfg["llm"]
-    request_delay = float(cfg_llm.get("request_delay_seconds", 0.0) or 0.0)
-    if args.request_delay is not None:
-        request_delay = max(0.0, float(args.request_delay))
-    # Retry settings: prefer CLI, else per-provider llm.<provider>.retry.*, else global retry.*
-    cfg_retry_global = cfg.get("retry", {})
-    provider_name = _llm['provider']
-    cfg_retry_provider = cfg_llm.get(provider_name, {}).get("retry", {})
-    attempts = int(cfg_retry_provider.get("attempts", cfg_retry_global.get("attempts", 1)) or 1)
-    if args.retry_attempts is not None:
-        attempts = max(1, int(args.retry_attempts))
-    pause_between_attempts = float(cfg_retry_provider.get("pause_seconds", cfg_retry_global.get("pause_seconds", 0.0)) or 0.0)
+    request_delay = _llm["request_delay"]
+    attempts = _llm["attempts"]
+    pause_between_attempts = _llm["pause_seconds"]
     reference_options = HeadingReferenceOptions(
         include_inline=include_timecodes,
         include_below=include_timecodes_below,

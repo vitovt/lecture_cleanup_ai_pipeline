@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import math
 import time
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
@@ -32,6 +33,28 @@ SHORT_SUMMARY_BLOCK_START = (
     f"<!-- LECTURE_CLEANUP_SHORT_SUMMARY_START | {SUMMARY_BLOCK_NOTICE} -->"
 )
 SHORT_SUMMARY_BLOCK_END = "<!-- LECTURE_CLEANUP_SHORT_SUMMARY_END -->"
+
+
+def generation_options(cfg, *, provider_override=None, model_override=None,
+                       request_delay_override=None, retry_attempts_override=None):
+    """Resolve model parameters and retry precedence for both entry points."""
+    llm = cfg["llm"]
+    provider = (provider_override or llm["provider"]).strip().lower()
+    if provider not in llm or not isinstance(llm[provider], dict):
+        raise ValueError(f"No LLM configuration for provider {provider}")
+    configured = llm[provider]
+    model = model_override or configured.get("model")
+    if not isinstance(model, str) or not model.strip():
+        raise ValueError(f"Missing model in config under llm.{provider}.model")
+    retry = {**cfg.get("retry", {}), **configured.get("retry", {})}
+    attempts = int(retry_attempts_override if retry_attempts_override is not None else retry.get("attempts", 1))
+    pause = float(retry.get("pause_seconds", 0) or 0)
+    delay = float(request_delay_override if request_delay_override is not None else llm.get("request_delay_seconds", 0) or 0)
+    if attempts < 1 or not math.isfinite(pause) or pause < 0 or not math.isfinite(delay) or delay < 0:
+        raise ValueError("Retry attempts must be positive; delay and pause must be finite and non-negative")
+    return dict(provider=provider, model=model, temperature=configured.get("temperature"),
+                top_p=configured.get("top_p"), attempts=attempts,
+                pause_seconds=pause, request_delay=delay)
 
 
 def _extract_retry_after_seconds(msg: str) -> Optional[float]:
