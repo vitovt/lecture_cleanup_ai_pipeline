@@ -82,6 +82,8 @@ def prepare_audio(path: Path, *, max_seconds: float, overlap_seconds: float) -> 
             parts.append(
                 AudioPart(output, offset, part_duration, ownership_start, ownership_end)
             )
+            if offset + part_duration >= duration:
+                break
             offset += step
             index += 1
         return PreparedAudio(parts, duration, temp_dir)
