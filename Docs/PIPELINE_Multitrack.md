@@ -1,5 +1,8 @@
 # Pipeline: multitrack sources
 
+Stage 1 is feature-complete. Start with [MULTITRACK_QUICKSTART.md](MULTITRACK_QUICKSTART.md);
+see [MULTITRACK_STATUS.md](MULTITRACK_STATUS.md) for verification and limits.
+
 The complete agreed design, examples, and validation rules are recorded in
 [MULTITRACK_DESIGN.md](MULTITRACK_DESIGN.md).
 

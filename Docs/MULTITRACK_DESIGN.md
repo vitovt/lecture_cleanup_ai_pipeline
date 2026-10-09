@@ -2,6 +2,10 @@
 
 This document records the design agreed with the user on 2026-10-09.
 
+**Stage 1 is feature-complete.** See [MULTITRACK_STATUS.md](MULTITRACK_STATUS.md)
+for completed scope, validation evidence, and deferred work, and
+[MULTITRACK_QUICKSTART.md](MULTITRACK_QUICKSTART.md) for everyday use.
+
 ## Interface and scope
 
 `StartMe.sh multitrack` delegates to `process_multitrack.sh`. A source has a
