@@ -355,5 +355,6 @@ logging:
 # Multitrack workflows retain extracted audio/provider artifacts/source TXT.
 # Only multitrack workflows honor this switch; standalone transcription always
 # stops at merged TXT. CLI --cleanup / --stop-after-merge override it.
+# Soon it will be deprecated option for testing multiline pipeline more preciese.
 multitrack:
-  stop_after_merge: true
+  stop_after_merge: false
