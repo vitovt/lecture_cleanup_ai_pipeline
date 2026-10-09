@@ -395,7 +395,7 @@ StartMe cleanup paths:
 Markdown output directory:
   --outdir overrides CLEANUP_MDOUTDIR in the project's .env. Without either,
   the default is the project's output directory. Relative CLEANUP_MDOUTDIR
-  paths are also resolved from the invocation directory.
+  paths are resolved from the project directory.
   Example .env setting: CLEANUP_MDOUTDIR="$HOME/Desktop/obsidian"
   QC CSV output remains controlled by --qc-report.
 EOF
@@ -408,6 +408,7 @@ EOF
 cleanup_absolute_path() {
     case "$1" in
         /*) printf '%s' "$1" ;;
+        '~/'*) printf '%s/%s' "$HOME" "${1#\~/}" ;;
         *) printf '%s/%s' "$PWD" "$1" ;;
     esac
 }
@@ -418,7 +419,12 @@ cleanup_output_default() (
         # shellcheck disable=SC1091
         source "$SCRIPT_DIR/.env"
     fi
-    printf '%s' "${CLEANUP_MDOUTDIR:-}"
+    case "${CLEANUP_MDOUTDIR:-}" in
+        "") ;;
+        /*) printf '%s' "$CLEANUP_MDOUTDIR" ;;
+        '~/'*) printf '%s/%s' "$HOME" "${CLEANUP_MDOUTDIR#\~/}" ;;
+        *) printf '%s/%s' "$(dirname "$(readlink -f "$0")")" "$CLEANUP_MDOUTDIR" ;;
+    esac
 )
 
 prepare_cleanup_args() {

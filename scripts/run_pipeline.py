@@ -281,7 +281,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     ap.add_argument("--input", required=True, help="Path to .srt or .txt")
     ap.add_argument("--format", choices=["srt", "txt"], help="Force input format (otherwise inferred)")
-    ap.add_argument("--outdir", default="output", help="Output directory")
+    ap.add_argument("--outdir", help="Markdown directory: CLI > CLEANUP_MDOUTDIR > project/output")
+    ap.add_argument("--overwrite", action="store_true", help="Replace existing Markdown; otherwise fail before LLM calls")
     ap.add_argument(
         "--qc-report",
         dest="qc_report_mode",
@@ -618,6 +619,8 @@ def main() -> int:
 
     # Decide format
     in_path = Path(args.input)
+    from scripts.artifact_paths import destination, require_available
+    outdir, _ = destination('md', args.outdir)
     cfg_format = str(cfg.get("format", "")).strip().lower()
     if args.format:
         fmt = args.format
@@ -627,7 +630,7 @@ def main() -> int:
         ext = in_path.suffix.lower()
         fmt = "srt" if ext == ".srt" else "txt"
     if debug:
-        log_debug(f"Input: {in_path} | format={fmt} | outdir={args.outdir}")
+        log_debug(f"Input: {in_path} | format={fmt} | outdir={outdir}")
 
     if not in_path.exists():
         log_error(f"Input file not found: {in_path}")
@@ -779,7 +782,11 @@ def main() -> int:
             # Keep order; join with a blank line between contexts
             source_file_context = "\n\n".join(parts)
 
-    outdir = Path(args.outdir)
+    try:
+        require_available(outdir / f"{in_path.stem}.md", args.overwrite)
+    except ValueError as exc:
+        log_error(str(exc))
+        return 2
     _ensure_writable_dir(outdir, "Output directory")
 
     # Select adapter
@@ -1059,7 +1066,9 @@ def main() -> int:
     outfile_md = outdir / f"{in_path.stem}.md"
     write_markdown = (fail_count == 0)
     if write_markdown:
-        outfile_md.write_text(full_markdown, encoding="utf-8")
+        # Exclusive creation also prevents a second concurrent job replacing this run.
+        with outfile_md.open('w' if args.overwrite else 'x', encoding='utf-8') as handle:
+            handle.write(full_markdown)
     summary_paths: List[Path] = []
     if write_markdown and summaries:
         summary_paths = _write_separate_summaries(

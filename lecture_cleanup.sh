@@ -1,10 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Change to the script's directory so relative paths work
-cd "$(dirname "$0")"
-
-VENV_DIR=".venv"
+SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
+export PYTHONPATH="$SCRIPT_DIR${PYTHONPATH:+:$PYTHONPATH}"
+VENV_DIR="$SCRIPT_DIR/.venv"
 PYTHON="python3"
 
 # Check if virtual environment exists

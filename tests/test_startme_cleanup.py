@@ -62,7 +62,7 @@ class StartMeCleanupTests(unittest.TestCase):
         result = self.run_startme("cleanup", *args)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         captured = json.loads(result.stdout)
-        self.assertEqual(captured["cwd"], str(self.project))
+        self.assertEqual(captured["cwd"], str(self.caller))
         self.assertEqual(captured["args"][:2], ["-m", "scripts.run_pipeline"])
         return captured["args"][2:]
 
@@ -116,12 +116,12 @@ class StartMeCleanupTests(unittest.TestCase):
             "--outdir", str(Path(self.env["HOME"]) / "Desktop/obsidian"),
         ])
 
-    def test_relative_env_output_uses_caller_directory(self) -> None:
+    def test_relative_env_output_uses_project_directory(self) -> None:
         (self.project / ".env").write_text(
             'CLEANUP_MDOUTDIR="notes"\n', encoding="utf-8",
         )
         args = self.cleanup_args("--input", "lecture.txt", "--lang", "en")
-        self.assertEqual(args[-2:], ["--outdir", str(self.caller / "notes")])
+        self.assertEqual(args[-2:], ["--outdir", str(self.project / "notes")])
 
     def test_explicit_output_overrides_env_for_both_option_forms(self) -> None:
         (self.project / ".env").write_text(
@@ -182,7 +182,7 @@ class StartMeCleanupTests(unittest.TestCase):
             "cwd": str(self.caller), "args": expected,
         })
 
-    def test_direct_cleanup_retains_relative_paths_and_ignores_new_env(self) -> None:
+    def test_direct_cleanup_preserves_caller_directory_without_sourcing_env(self) -> None:
         (self.project / ".env").write_text('exit 99\n', encoding="utf-8")
         expected = ["--input", "lecture.txt", "--lang", "en"]
         result = subprocess.run(
@@ -191,7 +191,7 @@ class StartMeCleanupTests(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(json.loads(result.stdout), {
-            "cwd": str(self.project), "args": ["-m", "scripts.run_pipeline", *expected],
+            "cwd": str(self.caller), "args": ["-m", "scripts.run_pipeline", *expected],
         })
 
 

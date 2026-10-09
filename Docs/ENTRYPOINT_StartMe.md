@@ -75,12 +75,11 @@ CLEANUP_MDOUTDIR="$HOME/Desktop/obsidian"
 
 An explicit `--outdir` takes precedence. Without either setting, Markdown goes
 to the project's `output` directory. Relative `CLEANUP_MDOUTDIR` paths also
-refer to the invocation directory. QC CSV placement follows `--qc-report`;
+refer to the project directory. QC CSV placement follows `--qc-report`;
 `default_outdir` keeps reports in the project's `output` directory.
 
-These path and destination settings apply only to `StartMe.sh cleanup`.
-Direct `lecture_cleanup.sh` calls and other StartMe modes retain their existing
-behavior and output settings.
+The destination rules also apply to direct `lecture_cleanup.sh`. Existing
+Markdown is an error unless `--overwrite` is explicit.
 
 Low-level multitrack transcription and merging are intentionally not StartMe
 modes. They remain standalone modules documented in
