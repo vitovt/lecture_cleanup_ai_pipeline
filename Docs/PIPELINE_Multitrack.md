@@ -57,3 +57,31 @@ A ready-to-review preset for the OBS lesson is available at
 ./StartMe.sh multitrack --preset Docs/examples/multitrack-webinar.yaml --dry-run \
   ~/Videos/OBS/2026-10-08_18-01-41-NazarUrok.mkv
 ```
+
+## Process an excerpt
+
+```bash
+./StartMe.sh multitrack --preset Docs/examples/multitrack-webinar.yaml \
+  --start 00:00:10 --end 00:01:10 --dry-run \
+  ~/Videos/OBS/2026-10-08_18-01-41-NazarUrok.mkv
+```
+
+Remove `--dry-run` to transcribe. `--start` and `--end` are global-only CLI
+options, accepting seconds (`10`, `70.125`) or `HH:MM:SS[.mmm]`. End is exclusive.
+An omitted start means zero; an omitted end means the end of the sources.
+Without either option, the full-recording workflow is unchanged.
+
+Bounds refer to the common session timeline, including source offsets. Each
+source is cropped to its overlap with that interval. A source with no overlap
+is an error; an end beyond the entire selected session is also an error. Shorter
+sources may end before other sources. No padding or automatic alignment is added.
+Per-source TXT uses excerpt-local timestamps; the merged TXT automatically restores
+original/session timestamps. Do not add a manual offset just to compensate for
+`--start`; offsets are only for synchronization between sources.
+
+Preflight cost/chunk estimates use the clipped duration. Provider diarization is
+allowed when that excerpt fits in one request, even if the full recording would
+need splitting. The extracted audio, resolved plan, and provider artifacts remain
+available for review. Default output/workdir names include the interval in
+milliseconds, keeping different excerpts separate; explicit names/paths override
+this. A changed interval invalidates source reuse even in an explicit workdir.

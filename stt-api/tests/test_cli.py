@@ -4,10 +4,23 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from stt_api.cli import main
+from stt_api.cli import main, _preflight
 
 
 class CliValidationTests(unittest.TestCase):
+    def test_excerpt_preflight_uses_planned_duration_without_reading_full_media(self):
+        settings = {
+            "max_seconds": 1500, "overlap": 5, "provider": "gemini", "model": "test",
+            "language_codes": ["uk"], "provider_language_code": "uk", "timestamps": True,
+            "diarization": True, "vocabulary": [],
+        }
+        with patch("stt_api.cli.probe_duration", return_value=4415) as probe:
+            excerpt = _preflight(Path("recording.mkv"), settings, duration_seconds=60)
+            self.assertEqual(excerpt["planned_chunks"], 1)
+            self.assertEqual(excerpt["duration_seconds"], 60)
+            probe.assert_not_called()
+            self.assertEqual(_preflight(Path("recording.mkv"), settings)["planned_chunks"], 3)
+
     def test_speaker_count_requires_supported_diarization(self):
         for options in [
             ["--provider", "gemini", "--diarization", "provider", "--num-speakers", "2"],

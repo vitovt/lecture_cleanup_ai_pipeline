@@ -265,8 +265,11 @@ def _write_json(path: Path, value: Any) -> None:
     temporary.replace(path)
 
 
-def _preflight(input_path: Path, settings: dict[str, Any]) -> dict[str, Any]:
-    duration = probe_duration(input_path)
+def _preflight(
+    input_path: Path, settings: dict[str, Any], *, duration_seconds: float | None = None,
+) -> dict[str, Any]:
+    # Callers planning an excerpt already know its duration before extraction.
+    duration = probe_duration(input_path) if duration_seconds is None else duration_seconds
     step = settings["max_seconds"] - settings["overlap"]
     if duration <= settings["max_seconds"]:
         chunks = 1

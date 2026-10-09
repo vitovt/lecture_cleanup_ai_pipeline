@@ -9,6 +9,7 @@ from pathlib import Path
 import yaml
 
 from scripts.config_loader import load_effective_config
+from multitrack.excerpts import parse_time
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -34,7 +35,7 @@ SHARED = {
 SOURCE_ONLY = {'track', 'file', 'name', 'offset_ms'}
 LISTS = {'additional_lang', 'custom_vocabulary', 'custom_vocabulary_file', 'oversize_policy'}
 PATHS = {'file', 'provider_config', 'cache_dir'}
-GLOBALS = {'preset', 'workdir', 'outdir', 'output_name', 'cleanup_lang', 'log_level'}
+GLOBALS = {'preset', 'workdir', 'outdir', 'output_name', 'cleanup_lang', 'log_level', 'start', 'end'}
 FLAGS = {'dry_run', 'overwrite', 'cleanup', 'stop_after_merge', 'debug', 'trace'}
 
 HELP = '''Usage: ./StartMe.sh multitrack [GLOBAL OPTIONS] --source ID [SOURCE OPTIONS] ... [RECORDING]
@@ -50,6 +51,9 @@ Global workflow options:
   --workdir DIR             Artifacts (default: multitrack-work/<recording or session>)
   --outdir DIR              Cleanup Markdown (default: output/multitrack)
   --output-name NAME        Merged TXT basename (default: recording stem or session)
+  --start TIME              Session start: seconds or HH:MM:SS[.mmm] (default 0)
+  --end TIME                Session end, exclusive (default end of sources)
+                            Global only; merged TXT keeps original timestamps
   --dry-run                 Read-only preflight; show all effective defaults/settings
   --overwrite               Reprocess sources instead of reusing verified results
   --cleanup                 Run cleanup after merge
@@ -92,7 +96,7 @@ Examples (descriptive --name values are recommended):
   ./StartMe.sh multitrack --provider groq --lang uk \\
     --source host --file host.wav --name Vitalii \\
     --source audience --file audience.wav --name Students --diarization pyannote --num-speakers 3
-  ./StartMe.sh multitrack --preset webinar.yaml --dry-run recording.mkv
+  ./StartMe.sh multitrack --preset webinar.yaml --start 00:00:10 --end 00:01:10 --dry-run recording.mkv
   ./StartMe.sh multitrack --preset webinar.yaml --lang de \\
     --source teacher --file better.wav --name Teacher_Vitalii \\
     --source translator --file translator.wav --name Interpreter recording.mkv
@@ -282,14 +286,23 @@ def resolve(argv: list[str], *, standalone: bool = False) -> dict:
         raise ValueError('final recording is required for track sources' if needs_recording else 'final recording is unused: all sources select files')
     if workflow.get('cleanup') and workflow.get('stop_after_merge'):
         raise ValueError('--cleanup and --stop-after-merge are mutually exclusive')
+    start = parse_time(workflow.get('start', '0'))
+    end = parse_time(workflow['end']) if 'end' in workflow else None
+    if end is not None and end <= start:
+        raise ValueError('--end must be greater than --start')
+    excerpt = 'start' in workflow or 'end' in workflow
     name = workflow.get('output_name') or (Path(recording).stem if recording else 'session')
     if name in {'', '.', '..'} or Path(name).name != name:
         raise ValueError('--output-name must be a filename component')
+    if excerpt and not workflow.get('output_name'):
+        end_label = str(round(end * 1000)) if end is not None else 'end'
+        name += f'.excerpt-{round(start * 1000)}-{end_label}ms'
     level = 'trace' if workflow.get('trace') else 'debug' if workflow.get('debug') else workflow.get('log_level', 'info')
     if level not in {'quiet', 'error', 'info', 'debug', 'trace'}:
         raise ValueError('invalid log level')
     return {
         'recording': recording, 'sources': resolved,
+        'excerpt': excerpt, 'start': start, 'end': end,
         'workdir': str(Path(workflow.get('workdir', f'multitrack-work/{name}')).expanduser().resolve()),
         'outdir': str(Path(workflow.get('outdir', 'output/multitrack')).expanduser().resolve()),
         'output_name': name, 'dry_run': workflow.get('dry_run', False),

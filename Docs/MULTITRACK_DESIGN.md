@@ -121,3 +121,14 @@ source resolution, media inspection, provider adapters, TXT parsing/merging, and
 cleanup dispatch. Reuse provider validation/chunking/checkpoints wherever possible.
 Future stt-api providers should use the common adapter contract, declaring their
 capabilities in their provider module instead of adding separate merger logic.
+
+## Follow-up: excerpt support
+
+Global CLI `--start` and `--end` select an interval in the shared session timeline,
+with original timestamps restored automatically after separate transcription.
+Support numeric seconds and HH:MM:SS with optional millisecond precision. Respect
+manual offsets when calculating each source's local crop. Preflight must use the
+excerpt duration, not the full input duration, for provider splitting/cost checks.
+See [PIPELINE_Multitrack.md](PIPELINE_Multitrack.md#process-an-excerpt) for boundaries,
+artifact naming, and reproducible commands. Test differing offsets, exact cropped
+length, timestamp restoration, invalid ranges, and cache invalidation.

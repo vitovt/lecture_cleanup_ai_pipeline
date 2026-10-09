@@ -12,6 +12,7 @@ from pathlib import Path
 import yaml
 
 from multitrack.sources import ROOT
+from multitrack.excerpts import source_window
 from multitrack.merging import read_timestamped_txt, name_source_events, merge_txt_files
 from multitrack.formats import write_custom_txt
 
@@ -52,6 +53,7 @@ def preflight(plan: dict) -> dict:
                 raise ValueError(f'{token}: referenced file does not exist')
     recording = inspect_audio(Path(plan['recording'])) if plan['recording'] else None
     labels = set()
+    session_ends = []
     for source in plan['sources']:
         ident = source['id']
         if source['name'] in labels:
@@ -69,9 +71,24 @@ def preflight(plan: dict) -> dict:
             info = require_single_audio(Path(source['file']))
             stream = info['streams'][0]
         source['log_level'] = plan['log_level']
-        source['duration'] = info['duration']
+        source['original_duration'] = info['duration']
         source['stream_index'] = stream['index']
         source['stream_start'] = float(stream.get('start_time', 0) or 0)
+        stream_delay = 0.0
+        if 'track' in source:
+            origin = min(float(s.get('start_time', 0) or 0) for s in info['streams'])
+            stream_delay = source['stream_start'] - origin
+        timeline_offset_ms = source['offset_ms'] + stream_delay * 1000
+        available = info['duration'] - stream_delay
+        session_ends.append(available + timeline_offset_ms / 1000)
+        if plan['excerpt']:
+            try:
+                source.update(source_window(available, timeline_offset_ms, plan['start'], plan['end']))
+            except ValueError as exc:
+                raise ValueError(f'source {ident}: {exc}') from exc
+        else:
+            source.update(extract_start=0.0, duration=available, merge_offset_ms=timeline_offset_ms)
+        source['extract_seek'] = stream_delay + source['extract_start']
         if source['timestamps'] != 'on':
             raise ValueError(f'source {ident}: TXT merging requires timestamps on')
         provider = source['provider']
@@ -94,12 +111,8 @@ def preflight(plan: dict) -> dict:
             raise ValueError(f'source {ident}: provider diarization requires {source["provider_settings"]["planned_chunks"]} requests; stable speaker identities across chunks are unsupported')
         source['audio_output'] = str(Path(plan['workdir']) / 'sources' / ident / 'audio.flac')
         source['txt_output'] = str(Path(plan['workdir']) / 'sources' / ident / 'source.txt')
-    # Preserve relative start delays inside the shared recording; manual offsets remain additive.
-    if recording:
-        origin = min(float(s.get('start_time', 0) or 0) for s in recording['streams'])
-        for source in plan['sources']:
-            if 'track' in source:
-                source['offset_ms'] += (source['stream_start'] - origin) * 1000
+    if plan['end'] is not None and plan['end'] > max(session_ends) + 0.001:
+        raise ValueError('--end exceeds the available session duration')
     plan['merged_txt'] = str(Path(plan['workdir']) / 'combined' / (plan['output_name'] + '.txt'))
     originals = {Path(source['input']).resolve() for source in plan['sources']}
     outputs = [Path(plan['merged_txt'])]
@@ -160,8 +173,10 @@ def run(plan: dict) -> Path:
         if not cached:
             audio = Path(source['audio_output'])
             temporary = audio.with_name('audio.part.flac')
-            command = ['ffmpeg', '-hide_banner', '-loglevel', 'error', '-y', '-i', source['input'],
-                       '-map', f"0:{source['stream_index']}", '-vn', '-c:a', 'flac', str(temporary)]
+            command = ['ffmpeg', '-hide_banner', '-loglevel', 'error', '-y',
+                       '-ss', str(source['extract_seek']), '-i', source['input'],
+                       '-t', str(source['duration']), '-map', f"0:{source['stream_index']}",
+                       '-vn', '-c:a', 'flac', str(temporary)]
             result = subprocess.run(command, capture_output=True, text=True)
             if result.returncode:
                 raise ValueError(f'extraction failed: {result.stderr.strip()}')
@@ -180,7 +195,7 @@ def run(plan: dict) -> Path:
             if label in speaker_owners and speaker_owners[label] != source['id']:
                 raise ValueError(f'speaker label collision: {label}; choose distinct source names')
             speaker_owners[label] = source['id']
-        inputs.append((txt, source['offset_ms']))
+        inputs.append((txt, source['merge_offset_ms']))
     output = Path(plan['merged_txt'])
     output.parent.mkdir(parents=True, exist_ok=True)
     temporary = output.with_suffix('.part.txt')

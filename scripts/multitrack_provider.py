@@ -106,7 +106,9 @@ def execute(payload: dict) -> dict:
         load_env_file(directory / '.env')
         cli._validate_credentials(config, provider)
     if action == 'plan':
-        settings['planned_chunks'] = cli._preflight(Path(source['input']), settings)['planned_chunks']
+        settings['planned_chunks'] = cli._preflight(
+            Path(source['input']), settings, duration_seconds=source['duration'],
+        )['planned_chunks']
         return settings
     if settings['diarization'] and cli._preflight(Path(source['input']), settings)['planned_chunks'] != 1:
         raise ValueError('provider diarization requires splitting; stable speaker identities are unsupported')
