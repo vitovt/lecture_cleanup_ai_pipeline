@@ -13,7 +13,7 @@ Teacher_Vitalii, using ElevenLabs with Ukrainian/German language hints:
 ./StartMe.sh multitrack \
   --preset Docs/examples/multitrack-webinar.yaml \
   --start 00:00:10 --end 00:01:10 \
-  --workdir ./multitrack-work/lesson-preview --output-name lesson-preview \
+  --workdir ./input/_work/lesson-preview --output-name lesson-preview \
   --dry-run \
   ~/Videos/OBS/2026-10-08_18-01-41-NazarUrok.mkv
 ```
@@ -93,15 +93,18 @@ are errors, not silently ignored hints.
 Running the preview command above without `--dry-run` creates:
 
 ```text
-multitrack-work/lesson-preview/
+input/_work/lesson-preview/       # explicit --workdir used above
+  run.json
   resolved-plan.yaml
-  sources/student/audio.flac
-  sources/student/source.txt
-  sources/student/provider/...
-  sources/teacher/audio.flac
-  sources/teacher/source.txt
-  sources/teacher/provider/...
-  combined/lesson-preview.txt
+  media/student/audio.flac
+  transcripts/student/source.txt
+  transcripts/student/completed.json
+  provider/student/...
+  cache/student/...
+  media/teacher/audio.flac
+  transcripts/teacher/source.txt
+  provider/teacher/...
+input/transcripts/lesson-preview.txt  # unless TRANSCRIPT_OUTDIR is configured
 ```
 
 Source TXT timestamps are relative to extracted audio. The merged TXT restores
@@ -116,10 +119,12 @@ Use global `--overwrite` only when you want reprocessing; it also disables
 provider checkpoint reuse for that run. `--resume off` alone controls provider
 checkpoints, not the outer completed-source cache.
 
-Without explicit paths, artifacts go under `multitrack-work/<recording stem or
-session>/`; excerpt names include bounds in milliseconds. Use distinct workdirs
-for different recordings, especially separate-file sessions or files with the
-same basename. `resolved-plan.yaml` is an inspection artifact, not a preset.
+Without explicit paths, artifacts go under `input/_work/<name>-<identity hash>/`;
+excerpt names include bounds in milliseconds. Working identities distinguish
+recordings, including separate-file sessions. `resolved-plan.yaml` is an
+inspection artifact, not a preset. Final TXT/Markdown use shared destinations;
+see [ARTIFACTS.md](ARTIFACTS.md). Existing Markdown is an error unless
+`--overwrite` is explicit, even when stopping after merging.
 
 ## Cleanup and standalone tools
 
@@ -138,8 +143,8 @@ before cleanup, process the merged file separately:
 
 ```bash
 ./lecture_cleanup.sh \
-  --input ./multitrack-work/lesson-preview/combined/lesson-preview.txt \
-  --lang uk --outdir ./output/multitrack
+  --input ./input/transcripts/lesson-preview.txt \
+  --lang uk
 ```
 
 `python3 scripts/transcribe_tracks.py` accepts the multitrack options but always

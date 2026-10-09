@@ -5,6 +5,8 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
+import sys
+import wave
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -96,6 +98,80 @@ workflow_publish_transcript "$SRTOUTDIR/raw.txt" lesson || exit $?
             self.assertIn('Markdown already exists', result.stderr)
             self.assertEqual(len(list((root / 'input/_work').iterdir())), 2)
 
+
+    def test_local_wrappers_publish_only_final_transcripts_and_guard_other_providers(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for name in ('scripts', 'subtitle-utils', 'groq-api', 'stt-api', 'speechcoreai-api'):
+                (root / name).mkdir()
+            for helper in (ROOT / 'scripts').glob('*_shell_common.sh'):
+                shutil.copy2(helper, root / 'scripts' / helper.name)
+            for name in ('artifact_paths.py', 'artifact_paths.sh', 'config_loader.py'):
+                shutil.copy2(ROOT / 'scripts' / name, root / 'scripts' / name)
+            shutil.copy2(ROOT / 'config.default.yaml', root / 'config.default.yaml')
+            shutil.copy2(ROOT / 'subtitle-utils/audio_streams.py', root / 'subtitle-utils/audio_streams.py')
+            (root / 'subtitle-utils/sanitize_filename.sh').write_text('sanitize_filename() { printf "%s" "$1"; }\n')
+            for package in ('stt-api', 'groq-api'):
+                binary = root / package / '.venv/bin/python'
+                binary.parent.mkdir(parents=True)
+                binary.symlink_to(sys.executable)
+            for provider in ('elevenlabs', 'gemini'):
+                helper = root / 'scripts' / f'{provider}_shell_common.sh'
+                with helper.open('a') as handle:
+                    handle.write(f'\n{provider}_init() {{ :; }}\n')
+            stub = r'''import json, os, sys
+from pathlib import Path
+args = sys.argv[1:]
+def option(name, default=None):
+    return args[args.index(name)+1] if name in args else default
+if 'validate' in args:
+    print('VALID timestamps=on diarization=off')
+    raise SystemExit()
+with open(os.environ['PAID_CALLS'], 'a') as handle:
+    handle.write('call\n')
+output = Path(option('--output-dir'))
+output.mkdir(parents=True, exist_ok=True)
+name = option('--output-basename', Path(option('--input-file')).stem)
+transcript = output / (name + '.txt')
+transcript.write_text('[00:00:00,000] [speaker_0] A transcript.\n')
+metadata = option('--metadata-output')
+if metadata:
+    Path(metadata).write_text(json.dumps({'transcript_file': str(transcript), 'model': 'fake', 'detected_language': 'uk'}))
+'''
+            for name in ('groq-api/groq_api.sh', 'stt-api/stt_api.sh', 'speechcoreai-api/speechcoreai_cli.py'):
+                executable = root / name
+                executable.write_text(f'#!{sys.executable}\n' + stub)
+                executable.chmod(0o755)
+            (root / 'groq-api/groq_cli.py').touch()
+            cleanup = root / 'lecture_cleanup.sh'
+            cleanup.write_text(f'#!{sys.executable}\n' + r'''import sys
+from pathlib import Path
+args = sys.argv[1:]
+source = Path(args[args.index('--input')+1])
+out = Path(args[args.index('--outdir')+1])
+out.mkdir(parents=True, exist_ok=True)
+(out/(source.stem+'.md')).write_text('Cleaned text')
+''')
+            cleanup.chmod(0o755)
+            media = root / 'lesson.wav'
+            with wave.open(str(media), 'wb') as audio:
+                audio.setparams((1, 2, 8000, 0, 'NONE', 'not compressed'))
+                audio.writeframes(b'\0\0' * 800)
+            env = {**os.environ, 'PAID_CALLS': str(root / 'calls')}
+            for provider in ('groq', 'elevenlabs', 'gemini', 'speechcore'):
+                script = root / f'process_localaudiovideo_via_{provider}.sh'
+                shutil.copy2(ROOT / script.name, script)
+                command = [str(script), '--lang', 'uk', '--outdir', str(root/'notes'), '--srtoutdir', str(root/'texts'), str(media)]
+                result = subprocess.run(command, cwd=root, env=env, capture_output=True, text=True)
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertEqual([p.name for p in (root/'texts').iterdir()], ['lesson.txt'])
+                self.assertTrue((root/'notes/lesson.md').is_file())
+                count = (root/'calls').read_text()
+                again = subprocess.run(command, cwd=root, env=env, capture_output=True, text=True)
+                self.assertEqual(again.returncode, 2, again.stdout + again.stderr)
+                self.assertEqual((root/'calls').read_text(), count)
+                (root/'notes/lesson.md').unlink()
+            self.assertEqual(len(list((root/'input/_work').glob('*/run.json'))), 4)
 
     def test_cleanup_refuses_existing_markdown_before_llm_and_overwrite_is_explicit(self):
         cfg = yaml.safe_load((ROOT / 'config.default.yaml').read_text())

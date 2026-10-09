@@ -4,17 +4,12 @@ set -uo pipefail
 
 SCRIPT_PATH="$(readlink -f "$0")"
 SCRIPT_DIR="$(dirname "$SCRIPT_PATH")"
-SRTOUTDIR_DEFAULT="$SCRIPT_DIR/input/autolocal-groq"
-MDOUTDIR_DEFAULT="$SCRIPT_DIR/output/autolocal-groq"
 
 if [[ -f "$SCRIPT_DIR/.env" ]]; then
     # shellcheck disable=SC1091
     source "$SCRIPT_DIR/.env"
 fi
 
-SRTOUTDIR="${GROQ_LOCAL_SRTOUTDIR:-$SRTOUTDIR_DEFAULT}"
-MDOUTDIR="${GROQ_LOCAL_MDOUTDIR:-${AUTOLOCAL_MDOUTDIR:-$MDOUTDIR_DEFAULT}}"
-OUTDIR="$MDOUTDIR"
 INPUT_FILE=""
 LANG=""
 LOG_LEVEL_OVERRIDE=""
@@ -62,9 +57,9 @@ Language:
 
 Pipeline options:
   --outdir DIR           Markdown output directory (resolved default: $OUTDIR)
-                         Uses GROQ_LOCAL_MDOUTDIR, then AUTOLOCAL_MDOUTDIR
-                         from the root .env, then the Groq project default
-  --srtoutdir DIR        Audio/transcript directory (default: $SRTOUTDIR)
+                         Uses CLEANUP_MDOUTDIR
+                         from the root .env, then project/output
+  --srtoutdir DIR        Final TXT/SRT directory (default: $SRTOUTDIR)
   --context-file FILE    Extra lecture cleanup context; repeatable
   --overwrite            Replace outputs and ignore existing checkpoints
   --quiet                Print nothing, including errors
@@ -113,6 +108,7 @@ need_value() {
     fi
 }
 
+workflow_path_defaults || exit $?
 lecture_workflow_init_logging "$@"
 
 while [[ $# -gt 0 ]]; do
@@ -201,6 +197,7 @@ INPUT_EXT="${INPUT_EXT,,}"
 MEDIA_KIND="$(groq_detect_media_kind "$INPUT_PATH" "$INPUT_EXT")"
 BASE_RAW="${INPUT_BASENAME%.*}"
 BASE_SAFE="$(sanitize_filename "$BASE_RAW")"
+workflow_prepare_job "$INPUT_PATH" "$BASE_SAFE" || exit $?
 AUDIO_INPUT_PATH=""
 
 case "$MEDIA_KIND" in
@@ -214,7 +211,7 @@ case "$MEDIA_KIND" in
         groq_info "Media inspection complete: direct audio will be used without conversion"
         ;;
     video)
-        AUDIO_INPUT_PATH="$SRTOUTDIR/${BASE_SAFE}.flac"
+        AUDIO_INPUT_PATH="$WORKDIR/media/${BASE_SAFE}.flac"
         groq_info "Extracting video audio for Groq"
         groq_extract_video_audio "$INPUT_PATH" "$AUDIO_INPUT_PATH" "$OVERWRITE" || exit 3
         groq_info "Video-to-audio extraction complete: $AUDIO_INPUT_PATH"
@@ -246,16 +243,8 @@ if [[ "$PREFLIGHT" -eq 1 ]]; then
 fi
 
 LANG_LABEL="${LANG:-auto}"
-if [[ "$LANG_LABEL" != "auto" ]]; then
-    OUT_MD="$OUTDIR/${BASE_SAFE}.${LANG_LABEL}.md"
-    if [[ -f "$OUT_MD" && "$OVERWRITE" -ne 1 ]]; then
-        groq_warn "Output exists, skipping: $OUT_MD (use --overwrite)"
-        exit 0
-    fi
-fi
 
-METADATA_FILE="$(mktemp)"
-trap 'rm -f "$METADATA_FILE"' EXIT
+METADATA_FILE="$SRTOUTDIR/metadata.json"
 MODEL_USED="${GROQ_MODEL:-whisper-large-v3}"
 REUSE_TXT=""
 if [[ "$LANG_LABEL" != "auto" ]]; then
@@ -297,12 +286,12 @@ if [[ -n "$RAW_JSON_PATH" && -f "$RAW_JSON_PATH" ]]; then
     [[ "$RAW_JSON_PATH" == "$JSON_PATH" ]] || mv -f "$RAW_JSON_PATH" "$JSON_PATH"
 fi
 
-OUT_MD="$OUTDIR/${TXT_FILE%.txt}.md"
 LECTURE_LOG_FLAG=()
 LECTURE_LOG_FLAG+=(--log-level "$LOG_LEVEL")
 
 groq_info "Starting AI cleanup: $TXT_FILE"
 groq_info "Stage 3/4: cleaning transcript with the lecture pipeline"
+workflow_publish_transcript "$TXT_PATH" "$BASE_SAFE" || exit $?
 "$SCRIPT_DIR/lecture_cleanup.sh" \
     --input "$TXT_PATH" \
     --lang="$LANG_LABEL" \
@@ -310,7 +299,7 @@ groq_info "Stage 3/4: cleaning transcript with the lecture pipeline"
     --context-file "$SCRIPT_DIR/prompts/custom_context_general/lection-monolog-with-questions.txt" \
     "${CONTEXT_FLAGS[@]}" \
     "${LECTURE_LOG_FLAG[@]}" \
-    "${LECTURE_CLEANUP_FLAGS[@]}"
+    "${LECTURE_CLEANUP_FLAGS[@]}" || exit $?
 
 if [[ -f "$OUT_MD" ]]; then
     tmp_md="$(mktemp)"

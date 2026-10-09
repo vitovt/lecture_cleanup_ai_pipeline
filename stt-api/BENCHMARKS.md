@@ -377,3 +377,9 @@ For every future provider, record:
 
 Do not rank providers from cleaned final prose alone. Compare their raw
 responses first, then evaluate formatter behavior separately.
+
+Artifact-location note (2026-10-09): the historical paths above were migrated
+to `input/_work/legacy-autoyoutube-gemini-eaa01779f342/` and
+`input/_work/legacy-autoyoutube-elevenlabs-5513b4df7c86/`, grouped into
+`media/`, `transcripts/`, `provider/`, and `cache/`. The commands above record
+the original benchmark setup. See [artifact layout](../Docs/ARTIFACTS.md).

@@ -13,6 +13,7 @@ from pathlib import Path
 import yaml
 
 from multitrack.sources import ROOT
+from scripts.artifact_paths import require_available, write_record, configured_cache
 from multitrack.excerpts import source_window
 from multitrack.merging import read_timestamped_txt, name_source_events, merge_txt_files
 from multitrack.formats import write_custom_txt
@@ -45,6 +46,7 @@ def provider_call(source: dict, action: str, *, credentials: bool = False, outpu
 
 
 def preflight(plan: dict) -> dict:
+    require_available(Path(plan['outdir']) / (plan['output_name'] + '.md'), plan['overwrite'])
     for binary in ['ffprobe', 'ffmpeg']:
         if not shutil.which(binary):
             raise ValueError(f'{binary} is required')
@@ -114,14 +116,17 @@ def preflight(plan: dict) -> dict:
             for relative in ['pyannote-diarization/pyannote_diarization.sh', 'pyannote-diarization/.venv/bin/python']:
                 if not (ROOT / relative).is_file():
                     raise ValueError(f'local diarization dependency missing: {relative}')
+        custom_cache = source['cache_dir'] or configured_cache(provider, source['provider_config'])
+        source['custom_cache_dir'] = bool(custom_cache)
+        source['cache_dir'] = custom_cache or str(Path(plan['workdir']) / 'cache' / ident)
         source['provider_settings'] = provider_call(source, 'plan', credentials=not plan['dry_run'])
         if source['diarization'] == 'provider' and source['provider_settings']['planned_chunks'] != 1:
             raise ValueError(f'source {ident}: provider diarization requires {source["provider_settings"]["planned_chunks"]} requests; stable speaker identities across chunks are unsupported')
-        source['audio_output'] = str(Path(plan['workdir']) / 'sources' / ident / 'audio.flac')
-        source['txt_output'] = str(Path(plan['workdir']) / 'sources' / ident / 'source.txt')
+        source['audio_output'] = str(Path(plan['workdir']) / 'media' / ident / 'audio.flac')
+        source['txt_output'] = str(Path(plan['workdir']) / 'transcripts' / ident / 'source.txt')
     if plan['end'] is not None and plan['end'] > max(session_ends) + 0.001:
         raise ValueError('--end exceeds the available session duration')
-    plan['merged_txt'] = str(Path(plan['workdir']) / 'combined' / (plan['output_name'] + '.txt'))
+    plan['merged_txt'] = str(Path(plan['transcript_dir']) / (plan['output_name'] + '.txt'))
     originals = {Path(source['input']).resolve() for source in plan['sources']}
     outputs = [Path(plan['merged_txt'])]
     for source in plan['sources']:
@@ -158,13 +163,17 @@ def _fingerprint(source: dict) -> str:
 
 def run(plan: dict) -> Path:
     workdir = Path(plan['workdir'])
-    workdir.mkdir(parents=True, exist_ok=True)
+    require_available(Path(plan['outdir']) / (plan['output_name'] + '.md'), plan['overwrite'])
+    write_record(workdir, inputs=[s['input'] for s in plan['sources']], custom_workdir=plan.get('custom_workdir', False),
+                 outputs={'markdown': {'path': str(Path(plan['outdir']) / (plan['output_name'] + '.md')), 'protected': True, 'overridden': plan['custom_outdir']},
+                          'transcript': {'path': plan['merged_txt'], 'protected': True, 'overridden': plan['custom_transcript_dir']},
+                          'source_caches': [{'path': s['cache_dir'], 'protected': s['custom_cache_dir'], 'overridden': s['custom_cache_dir']} for s in plan['sources']]})
     (workdir / 'resolved-plan.yaml').write_text(yaml.safe_dump(plan, allow_unicode=True, sort_keys=False))
     inputs = []
     speaker_owners = {}
     for source in plan['sources']:
         _log(plan, f"Source {source['id']}: {source['provider']} / {source['diarization']}")
-        destination = Path(source['audio_output']).parent
+        destination = Path(source['txt_output']).parent
         destination.mkdir(parents=True, exist_ok=True)
         _log(plan, f"Source {source['id']}: hashing input and checking completed-source cache")
         started = time.monotonic()
@@ -183,6 +192,7 @@ def run(plan: dict) -> Path:
         _log(plan, f"Source {source['id']}: cache {'hit; reusing source TXT' if cached else 'miss or bypassed; processing audio'}")
         if not cached:
             audio = Path(source['audio_output'])
+            audio.parent.mkdir(parents=True, exist_ok=True)
             temporary = audio.with_name('audio.part.flac')
             command = ['ffmpeg', '-hide_banner', '-loglevel', 'error', '-y',
                        '-ss', str(source['extract_seek']), '-i', source['input'],
@@ -196,8 +206,8 @@ def run(plan: dict) -> Path:
                 raise ValueError(f'extraction failed: {result.stderr.strip()}')
             temporary.replace(audio)
             _log(plan, f"Extraction complete in {time.monotonic() - started:.2f}s; {audio.stat().st_size} bytes", debug=True)
-            provider_dir = destination / 'provider'
-            provider_dir.mkdir(exist_ok=True)
+            provider_dir = workdir / 'provider' / source['id']
+            provider_dir.mkdir(parents=True, exist_ok=True)
             effective = {**source, 'input': str(audio)}
             if plan['overwrite']:
                 effective['resume'] = 'off'
@@ -231,6 +241,8 @@ def run(plan: dict) -> Path:
         command = [str(ROOT / 'lecture_cleanup.sh'), '--input', str(output), '--lang', plan['cleanup_lang'],
                    '--outdir', plan['outdir'], '--log-level', plan['log_level'],
                    '--context-file', str(speaker_context), *plan['cleanup_args']]
+        if plan['overwrite']:
+            command.append('--overwrite')
         subprocess.run(command, check=True)
     else:
         _log(plan, f"Stopping after merge: {plan.get('stop_reason') or 'cleanup disabled'}. Source artifacts retained.")

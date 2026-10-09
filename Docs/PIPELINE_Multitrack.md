@@ -30,10 +30,12 @@ transcribes independently, renames speakers in timestamped TXT, applies offsets,
 and merges chronologically. Provider JSON is retained only as diagnostics.
 Sources are cached using audio bytes and effective settings, not basename alone.
 
-Default artifacts: `multitrack-work/<recording stem or session>/`, containing
-`resolved-plan.yaml`, `sources/ID/audio.flac`, `sources/ID/provider/`,
-`sources/ID/source.txt`, and `combined/<name>.txt`. Original inputs are never
-modified. `--workdir` and `--output-name` override these locations.
+Default artifacts: `input/_work/<name>-<identity hash>/`, with `media/ID/`,
+`transcripts/ID/`, `provider/ID/`, `cache/ID/`, and `resolved-plan.yaml`.
+Final TXT goes to `TRANSCRIPT_OUTDIR` (default `input/transcripts/`); Markdown
+goes to `CLEANUP_MDOUTDIR` (default `output/`). Original inputs are never modified.
+`--workdir`, `--srtoutdir`, `--outdir`, and `--output-name` override the relevant
+locations/names. See [ARTIFACTS.md](ARTIFACTS.md) for ownership and collision rules.
 
 `--dry-run` performs local inspection and option validation and prints every
 resolved source/default without extracting, uploading, or writing output files.

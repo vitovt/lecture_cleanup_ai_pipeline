@@ -47,7 +47,7 @@ Selection and language:
 
 Forwarded pipeline options:
   --outdir DIR           Markdown output directory
-  --srtoutdir DIR        Audio/transcript directory
+  --srtoutdir DIR        Final TXT/SRT directory
   --context-file FILE    Extra cleanup context; repeatable
   --overwrite            Replace outputs and ignore existing checkpoints
   --quiet                Print nothing, including errors

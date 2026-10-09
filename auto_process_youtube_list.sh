@@ -24,10 +24,10 @@ Expands a YouTube playlist and runs auto_process_youtube.sh for each video.
 
 Options:
   --outdir DIR   Override markdown output dir for all videos (default: auto_process_youtube.sh\`s default)
-  --srtoutdir DIR Override subtitles download dir for all videos (default: auto_process_youtube.sh\`s default)
+  --srtoutdir DIR Override final TXT/SRT dir for all videos (default: auto_process_youtube.sh\`s default)
   --videos SPEC  Process only selected items (1-based). Examples: 1-6 | 2,4,6 | 1-3,5,7,9-11,13
   --context-file FILE  Additional context file(s) passed to auto_process_youtube.sh (can be repeated)
-  --overwrite    Re-process even if destination .md already exists (default: skip existing)
+  --overwrite    Re-process even if destination .md already exists (default: error if Markdown exists)
   --debug        Show yt-dlp output and pass --debug to auto_process_youtube.sh
 EOF
     lecture_cleanup_print_forwarded_help

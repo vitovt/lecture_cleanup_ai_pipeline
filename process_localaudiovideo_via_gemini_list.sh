@@ -69,7 +69,7 @@ Invalid provider option combinations are rejected before file preflight.
 Batch and pipeline options:
   --all                  Scan current directory, not recursively
   --outdir DIR           Markdown output directory
-  --srtoutdir DIR        Audio/transcript directory
+  --srtoutdir DIR        Final TXT/SRT directory
   --context-file FILE    Extra cleanup context; repeatable
   --overwrite            Replace outputs and bypass checkpoints
   --quiet|--error|--info|--debug|--trace

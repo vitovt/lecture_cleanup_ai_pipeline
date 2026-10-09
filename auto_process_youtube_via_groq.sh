@@ -4,17 +4,12 @@ set -uo pipefail
 
 SCRIPT_PATH="$(readlink -f "$0")"
 SCRIPT_DIR="$(dirname "$SCRIPT_PATH")"
-SRTOUTDIR_DEFAULT="$SCRIPT_DIR/input/autoyoutube-groq"
-MDOUTDIR_DEFAULT="$SCRIPT_DIR/output/autoyoutube-groq"
 
 if [[ -f "$SCRIPT_DIR/.env" ]]; then
     # shellcheck disable=SC1091
     source "$SCRIPT_DIR/.env"
 fi
 
-SRTOUTDIR="${GROQ_YOUTUBE_SRTOUTDIR:-$SRTOUTDIR_DEFAULT}"
-MDOUTDIR="${GROQ_YOUTUBE_MDOUTDIR:-${AUTOYOUTUBE_MDOUTDIR:-$MDOUTDIR_DEFAULT}}"
-OUTDIR="$MDOUTDIR"
 
 URL=""
 LANG_OVERRIDE="auto"
@@ -88,9 +83,9 @@ Language:
 
 Pipeline options:
   --outdir DIR           Markdown output directory (resolved default: $OUTDIR)
-                         Uses GROQ_YOUTUBE_MDOUTDIR, then AUTOYOUTUBE_MDOUTDIR
-                         from the root .env, then the Groq project default
-  --srtoutdir DIR        Audio/transcript directory (default: $SRTOUTDIR)
+                         Uses CLEANUP_MDOUTDIR
+                         from the root .env, then project/output
+  --srtoutdir DIR        Final TXT/SRT directory (default: $SRTOUTDIR)
   --context-file FILE    Extra cleanup context; repeatable
   --overwrite            Redownload/reprocess and ignore existing checkpoints
   --quiet                Print nothing, including errors
@@ -131,6 +126,7 @@ EOF
 
 need_value() { [[ -n "${2:-}" ]] || { echo "Error: $1 requires a value." >&2; exit 2; }; }
 
+workflow_path_defaults || exit $?
 lecture_workflow_init_logging "$@"
 
 while [[ $# -gt 0 ]]; do
@@ -212,14 +208,15 @@ fi
 filename="$(printf '%s\n' "$YT_META" | tail -n 1)"
 base_raw="${filename%.*}"
 base="$(sanitize_filename "$base_raw")"
+workflow_prepare_job "$URL" "$base" || exit $?
 
 mkdir -p "$SRTOUTDIR" "$OUTDIR"
-MP3_PATH="$SRTOUTDIR/${base}.mp3"
+MP3_PATH="$WORKDIR/media/${base}.mp3"
 groq_info "Stage 2/5: downloading or reusing YouTube audio"
 if [[ ! -f "$MP3_PATH" || "$OVERWRITE" -eq 1 ]]; then
     DOWNLOAD_FLAGS=(--extract-audio --audio-format mp3 --no-progress --extractor-args 'youtube:player_client=default')
     [[ "$OVERWRITE" -eq 1 ]] && DOWNLOAD_FLAGS+=(--force-overwrites)
-    yt-dlp "${YT_DLP_FLAGS[@]}" "${DOWNLOAD_FLAGS[@]}" -o "$SRTOUTDIR/${base}.%(ext)s" "$URL" || exit 3
+    yt-dlp "${YT_DLP_FLAGS[@]}" "${DOWNLOAD_FLAGS[@]}" -o "$WORKDIR/media/${base}.%(ext)s" "$URL" || exit 3
 else
     groq_info "Reusing downloaded audio: $MP3_PATH"
 fi
@@ -243,16 +240,12 @@ LANG_LABEL="${LANG:-auto}"
 if [[ "$LANG_LABEL" != "auto" ]]; then
     TXT_FILE="${base}.${LANG_LABEL}.txt"
     TXT_PATH="$SRTOUTDIR/$TXT_FILE"
-    OUT_MD="$OUTDIR/${TXT_FILE%.txt}.md"
-    if [[ -f "$OUT_MD" && "$OVERWRITE" -ne 1 ]]; then
-        groq_warn "Output exists, skipping: $OUT_MD (use --overwrite)"
-        exit 0
-    fi
+
 fi
 
-METADATA_FILE="$(mktemp)"
+METADATA_FILE="$SRTOUTDIR/metadata.json"
 TMP_CTX=""
-trap 'rm -f "$METADATA_FILE" "${TMP_CTX:-}"' EXIT
+trap 'rm -f "${TMP_CTX:-}"' EXIT
 MODEL_USED="${GROQ_MODEL:-whisper-large-v3}"
 REUSE_TXT=""
 [[ "$LANG_LABEL" != "auto" ]] && REUSE_TXT="$SRTOUTDIR/${base}.${LANG_LABEL}.txt"
@@ -282,7 +275,6 @@ if [[ -n "$RAW_JSON_PATH" && -f "$RAW_JSON_PATH" ]]; then
     [[ "$RAW_JSON_PATH" == "$JSON_PATH" ]] || mv -f "$RAW_JSON_PATH" "$JSON_PATH"
 fi
 
-OUT_MD="$OUTDIR/${TXT_FILE%.txt}.md"
 TEMPLATE_CTX="$SCRIPT_DIR/prompts/custom_context_general/youtube-url-timecodes.txt"
 TMP_CTX="$(mktemp)"
 ESCAPED_URL="$(printf '%s' "$URL" | sed 's/[&|]/\\&/g')"
@@ -291,6 +283,7 @@ LECTURE_LOG_FLAG=()
 LECTURE_LOG_FLAG+=(--log-level "$LOG_LEVEL")
 
 groq_info "Stage 4/5: cleaning transcript with the lecture pipeline"
+workflow_publish_transcript "$TXT_PATH" "$base" || exit $?
 "$SCRIPT_DIR/lecture_cleanup.sh" \
     --input "$TXT_PATH" \
     --lang="$LANG_LABEL" \
@@ -299,7 +292,7 @@ groq_info "Stage 4/5: cleaning transcript with the lecture pipeline"
     --context-file "$SCRIPT_DIR/prompts/custom_context_general/lection-monolog-with-questions.txt" \
     "${CONTEXT_FLAGS[@]}" \
     "${LECTURE_LOG_FLAG[@]}" \
-    "${LECTURE_CLEANUP_FLAGS[@]}"
+    "${LECTURE_CLEANUP_FLAGS[@]}" || exit $?
 
 if [[ -f "$OUT_MD" ]]; then
     tmp_md="$(mktemp)"

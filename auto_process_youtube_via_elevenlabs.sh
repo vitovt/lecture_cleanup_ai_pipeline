@@ -4,16 +4,12 @@ set -uo pipefail
 
 SCRIPT_PATH="$(readlink -f "$0")"
 SCRIPT_DIR="$(dirname "$SCRIPT_PATH")"
-SRTOUTDIR_DEFAULT="$SCRIPT_DIR/input/autoyoutube-elevenlabs"
-MDOUTDIR_DEFAULT="$SCRIPT_DIR/output/autoyoutube-elevenlabs"
 
 if [[ -f "$SCRIPT_DIR/.env" ]]; then
     # shellcheck disable=SC1091
     source "$SCRIPT_DIR/.env"
 fi
 
-SRTOUTDIR="${ELEVENLABS_YOUTUBE_SRTOUTDIR:-$SRTOUTDIR_DEFAULT}"
-OUTDIR="${ELEVENLABS_YOUTUBE_MDOUTDIR:-${AUTOYOUTUBE_MDOUTDIR:-$MDOUTDIR_DEFAULT}}"
 URL=""
 LANG=""
 ADDITIONAL_LANGS=()
@@ -61,7 +57,7 @@ with multilingual code-switching, then runs lecture_cleanup.sh.
 
 Mandatory:
   <youtube_url>          YouTube watch, youtu.be, Shorts, live, or embed URL
-  --lang CODE           Primary language for cleanup and output filenames
+  --lang CODE           Primary language for cleanup
 
 Language format:
   --lang CODE              Required, with a two-letter base language. Accepts
@@ -76,8 +72,8 @@ hint is omitted and Scribe v2 automatically detects any number of languages.
 ElevenLabs does not receive --additional-lang values as a restrictive list;
 they only document expected languages and enable the same automatic mode.
 Therefore use --multilingual when the additional languages are unknown.
---lang remains mandatory because it controls cleanup and the filename suffix:
---lang uk-UA writes .uk.txt/.uk.md.
+--lang remains mandatory because it controls the cleanup language:
+--lang uk-UA selects Ukrainian cleanup; final names use the input basename.
 
 Keyterms (optional, repeatable):
   --custom-vocabulary TERM  One domain term or short phrase; repeat the option
@@ -107,7 +103,7 @@ the timestamped TXT and events JSON. These are anonymous labels, not names.
 
 Pipeline options:
   --outdir DIR           Markdown directory (default: $OUTDIR)
-  --srtoutdir DIR        Download/transcript directory (default: $SRTOUTDIR)
+  --srtoutdir DIR        Final TXT/SRT directory (default: $SRTOUTDIR)
   --context-file FILE    Extra cleanup context; repeatable
   --overwrite            Redownload/reprocess and bypass checkpoints
   --quiet|--error|--info|--debug|--trace
@@ -134,6 +130,7 @@ EOF
 
 need_value() { [[ -n "${2:-}" ]] || { echo "Error: $1 requires a value." >&2; exit 2; }; }
 
+workflow_path_defaults || exit $?
 lecture_workflow_init_logging "$@"
 
 while [[ $# -gt 0 ]]; do
@@ -213,14 +210,15 @@ fi
 filename="$(printf '%s\n' "$YT_META" | tail -n 1)"
 base_raw="${filename%.*}"
 base="$(sanitize_filename "$base_raw")"
+workflow_prepare_job "$URL" "$base" || exit $?
 mkdir -p "$SRTOUTDIR" "$OUTDIR"
 
-MP3_PATH="$SRTOUTDIR/${base}.mp3"
+MP3_PATH="$WORKDIR/media/${base}.mp3"
 elevenlabs_info "Stage 2/5: downloading or reusing YouTube audio"
 if [[ ! -f "$MP3_PATH" || "$OVERWRITE" -eq 1 ]]; then
     DOWNLOAD_FLAGS=(--extract-audio --audio-format mp3 --no-progress --extractor-args 'youtube:player_client=default')
     [[ "$OVERWRITE" -eq 1 ]] && DOWNLOAD_FLAGS+=(--force-overwrites)
-    yt-dlp "${YT_DLP_FLAGS[@]}" "${DOWNLOAD_FLAGS[@]}" -o "$SRTOUTDIR/${base}.%(ext)s" "$URL" || exit 3
+    yt-dlp "${YT_DLP_FLAGS[@]}" "${DOWNLOAD_FLAGS[@]}" -o "$WORKDIR/media/${base}.%(ext)s" "$URL" || exit 3
 fi
 [[ -f "$MP3_PATH" ]] || { echo "Error: downloaded MP3 not found: $MP3_PATH" >&2; exit 3; }
 
@@ -236,11 +234,7 @@ fi
 
 TXT_FILE="${base}.${LANG_LABEL}.txt"
 TXT_PATH="$SRTOUTDIR/$TXT_FILE"
-OUT_MD="$OUTDIR/${TXT_FILE%.txt}.md"
-if [[ -f "$OUT_MD" && "$OVERWRITE" -ne 1 ]]; then
-    elevenlabs_warn "Output exists, skipping: $OUT_MD (use --overwrite)"
-    exit 0
-fi
+
 
 METADATA_FILE="$SRTOUTDIR/${base}.${LANG_LABEL}.metadata.json"
 TMP_CTX=""
@@ -264,6 +258,7 @@ if [[ "$ELEVENLABS_EFFECTIVE_TIMESTAMPS" == "on" ]]; then
 fi
 
 elevenlabs_info "Stage 4/5: cleaning transcript with the lecture pipeline"
+workflow_publish_transcript "$TXT_PATH" "$base" || exit $?
 "$SCRIPT_DIR/lecture_cleanup.sh" \
     --input "$TXT_PATH" \
     --lang="$LANG_LABEL" \
@@ -271,7 +266,7 @@ elevenlabs_info "Stage 4/5: cleaning transcript with the lecture pipeline"
     "${CLEANUP_CONTEXTS[@]}" \
     "${CONTEXT_FLAGS[@]}" \
     --log-level "$LOG_LEVEL" \
-    "${LECTURE_CLEANUP_FLAGS[@]}"
+    "${LECTURE_CLEANUP_FLAGS[@]}" || exit $?
 
 if [[ -f "$OUT_MD" ]]; then
     tmp_md="$(mktemp)"

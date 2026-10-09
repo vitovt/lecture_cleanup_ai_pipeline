@@ -115,8 +115,8 @@ The core pipeline is provider-agnostic and talks to a unified adapter interface.
 ./auto_process_youtube.sh [--outdir DIR] [--context-file FILE] [--debug] "https://youtu.be/ID"
 ```
 
-- Downloads auto-generated subtitles with `yt-dlp` into `input/autoyoutube`, converts to TXT, injects the video URL into context, and calls `lecture_cleanup.sh`.
-- Markdown output goes to `output/autoyoutube` by default; override with `--outdir DIR`. The resulting `.md` file gets front matter with `title`, `filename`, and `url`.
+- Downloads auto-generated subtitles with `yt-dlp` into `input/_work/<job-id>/provider`, converts to TXT, injects the video URL into context, and calls `lecture_cleanup.sh`.
+- Markdown output goes to `output/` by default; override with `--outdir DIR`. The resulting `.md` file gets front matter with `title`, `filename`, and `url`.
 - `--context-file FILE` passes additional context file(s) to `lecture_cleanup.sh` (can be repeated).
 - `--debug` shows `yt-dlp` output and forwards `--debug` to `lecture_cleanup.sh`.
 - Requires the video to have auto-generated subtitles enabled.
@@ -397,3 +397,5 @@ Typical workflows:
 ## License
 
 This project is provided under the **MIT [LICENSE](LICENSE)** and distributed **WITHOUT ANY WARRANTY OF ANY KIND**.
+
+Shared output destinations and artifact ownership: [Docs/ARTIFACTS.md](Docs/ARTIFACTS.md).

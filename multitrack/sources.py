@@ -9,6 +9,7 @@ from pathlib import Path
 import yaml
 
 from scripts.config_loader import load_effective_config
+from scripts.artifact_paths import destination, job_directory, absolute
 from multitrack.excerpts import parse_time
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -35,7 +36,7 @@ SHARED = {
 SOURCE_ONLY = {'track', 'file', 'name', 'offset_ms'}
 LISTS = {'additional_lang', 'custom_vocabulary', 'custom_vocabulary_file', 'oversize_policy'}
 PATHS = {'file', 'provider_config', 'cache_dir'}
-GLOBALS = {'preset', 'workdir', 'outdir', 'output_name', 'cleanup_lang', 'log_level', 'start', 'end'}
+GLOBALS = {'preset', 'workdir', 'outdir', 'output_name', 'cleanup_lang', 'log_level', 'start', 'end', 'srtoutdir'}
 FLAGS = {'dry_run', 'overwrite', 'cleanup', 'stop_after_merge', 'debug', 'trace'}
 
 HELP = '''Usage: ./StartMe.sh multitrack [GLOBAL OPTIONS] --source ID [SOURCE OPTIONS] ... [RECORDING]
@@ -48,8 +49,9 @@ RECORDING must be last and is required only if a resolved source uses --track.
 
 Global workflow options:
   --preset FILE             YAML defaults/sources; CLI overrides by source ID
-  --workdir DIR             Artifacts (default: multitrack-work/<recording or session>)
-  --outdir DIR              Cleanup Markdown (default: output/multitrack)
+  --workdir DIR             Working artifacts (default: project/input/_work/<job-id>)
+  --outdir DIR              Markdown: CLI > CLEANUP_MDOUTDIR > project/output
+  --srtoutdir DIR           Final TXT: CLI > TRANSCRIPT_OUTDIR > input/transcripts
   --output-name NAME        Merged TXT basename (default: recording stem or session)
   --start TIME              Session start: seconds or HH:MM:SS[.mmm] (default 0)
   --end TIME                Session end, exclusive (default end of sources)
@@ -300,11 +302,17 @@ def resolve(argv: list[str], *, standalone: bool = False) -> dict:
     level = 'trace' if workflow.get('trace') else 'debug' if workflow.get('debug') else workflow.get('log_level', config.get('logging', {}).get('level', 'info'))
     if level not in {'quiet', 'error', 'info', 'debug', 'trace'}:
         raise ValueError('invalid log level')
+    md_dir, md_custom = destination('md', workflow.get('outdir'))
+    txt_dir, txt_custom = destination('transcript', workflow.get('srtoutdir'))
+    identity = recording or '\n'.join(s['file'] for s in resolved)
     return {
         'recording': recording, 'sources': resolved,
         'excerpt': excerpt, 'start': start, 'end': end,
-        'workdir': str(Path(workflow.get('workdir', f'multitrack-work/{name}')).expanduser().resolve()),
-        'outdir': str(Path(workflow.get('outdir', 'output/multitrack')).expanduser().resolve()),
+        'workdir': str(absolute(workflow['workdir'], Path.cwd()) if workflow.get('workdir') else job_directory(name, identity)),
+        'custom_workdir': bool(workflow.get('workdir')),
+        'transcript_dir': str(txt_dir), 'custom_transcript_dir': txt_custom,
+        'custom_outdir': md_custom,
+        'outdir': str(md_dir),
         'output_name': name, 'dry_run': workflow.get('dry_run', False),
         'overwrite': workflow.get('overwrite', False), 'log_level': level,
         'cleanup': not standalone and not workflow.get('stop_after_merge', False) and (workflow.get('cleanup', False) or not configured.get('stop_after_merge', True)),

@@ -4,8 +4,6 @@ set -uo pipefail
 
 SCRIPT_PATH="$(readlink -f "$0")"
 SCRIPT_DIR="$(dirname "$SCRIPT_PATH")"
-SRTOUTDIR_DEFAULT="$SCRIPT_DIR/input/autolocal-elevenlabs"
-MDOUTDIR_DEFAULT="$SCRIPT_DIR/output/autolocal-elevenlabs"
 
 if [[ -f "$SCRIPT_DIR/.env" ]]; then
     # Root .env configures workflow paths only. ELEVENLABS_API_KEY is loaded solely
@@ -14,8 +12,6 @@ if [[ -f "$SCRIPT_DIR/.env" ]]; then
     source "$SCRIPT_DIR/.env"
 fi
 
-SRTOUTDIR="${ELEVENLABS_LOCAL_SRTOUTDIR:-$SRTOUTDIR_DEFAULT}"
-OUTDIR="${ELEVENLABS_LOCAL_MDOUTDIR:-${AUTOLOCAL_MDOUTDIR:-$MDOUTDIR_DEFAULT}}"
 INPUT_FILE=""
 LANG=""
 ADDITIONAL_LANGS=()
@@ -58,7 +54,7 @@ multilingual code-switching, then runs lecture_cleanup.sh.
 
 Mandatory:
   <local_media_file>       Existing local audio or video file
-  --lang CODE              Primary language; required for cleanup and filenames
+  --lang CODE              Primary language; required for cleanup
 
 Language format:
   --lang CODE              Primary spoken/cleanup language (two-letter base).
@@ -75,7 +71,7 @@ automatically detects any number of languages. ElevenLabs does not receive
 --additional-lang values as a restrictive list; they only document expected
 languages and enable the same automatic mode. Use --multilingual when the
 additional languages are unknown. The primary language still controls cleanup
-and filenames; for example, --lang uk-UA produces the .uk.md suffix.
+language; final filenames use the input basename.
 
 Keyterms (optional, repeatable):
   --custom-vocabulary TERM  One exact term or short phrase; repeat the option
@@ -105,7 +101,7 @@ the timestamped TXT and events JSON. These are anonymous labels, not names.
 
 Pipeline options:
   --outdir DIR           Markdown output directory (default: $OUTDIR)
-  --srtoutdir DIR        Audio/transcript directory (default: $SRTOUTDIR)
+  --srtoutdir DIR        Final TXT/SRT directory (default: $SRTOUTDIR)
   --context-file FILE    Extra lecture cleanup context; repeatable
   --overwrite            Replace outputs and bypass matching checkpoints
   --quiet|--error|--info|--debug|--trace
@@ -133,6 +129,7 @@ need_value() {
     [[ -n "${2:-}" ]] || { echo "Error: $1 requires a value." >&2; exit 2; }
 }
 
+workflow_path_defaults || exit $?
 lecture_workflow_init_logging "$@"
 
 while [[ $# -gt 0 ]]; do
@@ -206,6 +203,7 @@ INPUT_EXT="${INPUT_EXT,,}"
 MEDIA_KIND="$(elevenlabs_detect_media_kind "$INPUT_PATH" "$INPUT_EXT")"
 BASE_RAW="${INPUT_BASENAME%.*}"
 BASE_SAFE="$(sanitize_filename "$BASE_RAW")"
+workflow_prepare_job "$INPUT_PATH" "$BASE_SAFE" || exit $?
 
 elevenlabs_info "Stage 1/4: preparing local media"
 case "$MEDIA_KIND" in
@@ -213,7 +211,7 @@ case "$MEDIA_KIND" in
         AUDIO_INPUT_PATH="$INPUT_PATH"
         ;;
     video)
-        AUDIO_INPUT_PATH="$SRTOUTDIR/${BASE_SAFE}.flac"
+        AUDIO_INPUT_PATH="$WORKDIR/media/${BASE_SAFE}.flac"
         elevenlabs_extract_video_audio "$INPUT_PATH" "$AUDIO_INPUT_PATH" "$OVERWRITE" || exit 3
         ;;
     *)
@@ -234,11 +232,7 @@ fi
 
 TXT_FILE="${BASE_SAFE}.${LANG_LABEL}.txt"
 TXT_PATH="$SRTOUTDIR/$TXT_FILE"
-OUT_MD="$OUTDIR/${TXT_FILE%.txt}.md"
-if [[ -f "$OUT_MD" && "$OVERWRITE" -ne 1 ]]; then
-    elevenlabs_warn "Output exists, skipping: $OUT_MD (use --overwrite)"
-    exit 0
-fi
+
 
 METADATA_FILE="$SRTOUTDIR/${BASE_SAFE}.${LANG_LABEL}.metadata.json"
 elevenlabs_info "Stage 2/4: transcribing with ElevenLabs"
@@ -252,6 +246,7 @@ MODEL_USED="$(elevenlabs_json_field "$METADATA_FILE" model)"
 
 LECTURE_LOG_FLAG=(--log-level "$LOG_LEVEL")
 elevenlabs_info "Stage 3/4: cleaning transcript with the lecture pipeline"
+workflow_publish_transcript "$TXT_PATH" "$BASE_SAFE" || exit $?
 "$SCRIPT_DIR/lecture_cleanup.sh" \
     --input "$TXT_PATH" \
     --lang="$LANG_LABEL" \
@@ -259,7 +254,7 @@ elevenlabs_info "Stage 3/4: cleaning transcript with the lecture pipeline"
     --context-file "$SCRIPT_DIR/prompts/custom_context_general/lection-monolog-with-questions.txt" \
     "${CONTEXT_FLAGS[@]}" \
     "${LECTURE_LOG_FLAG[@]}" \
-    "${LECTURE_CLEANUP_FLAGS[@]}"
+    "${LECTURE_CLEANUP_FLAGS[@]}" || exit $?
 
 if [[ -f "$OUT_MD" ]]; then
     tmp_md="$(mktemp)"

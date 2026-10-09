@@ -55,8 +55,8 @@ first transcript was not replaced.
 
 Local run records (ignored artifacts, not files shipped by Git):
 
-- `multitrack-work/nazar-elevenlabs-0010-0110/TEST_NOTES.md`
-- `multitrack-work/nazar-excerpt-mixed-diarization/TEST_NOTES.md`
+- `input/_work/NazarUrok-0010-0110-84b0c3c62902/TEST_NOTES.md`
+- `input/_work/NazarUrok-0010-0110-mixed-fba97450a210/TEST_NOTES.md`
 
 Four failure cases in the pre-existing, untracked
 `tests/test_youtube_subtitles.py` were reproduced against the original code.

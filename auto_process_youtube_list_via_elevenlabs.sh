@@ -55,7 +55,7 @@ With --multilingual or any --additional-lang, Scribe v2 automatically detects
 any number of languages. ElevenLabs does not use --additional-lang values as a
 restrictive list; they only document expected languages and enable the same
 automatic mode. Use --multilingual when the additional languages are unknown.
---lang continues to control cleanup language and output filenames.
+--lang continues to control cleanup language.
 
 Keyterms (optional, repeatable):
   --custom-vocabulary TERM  One term or short phrase; repeat for every term

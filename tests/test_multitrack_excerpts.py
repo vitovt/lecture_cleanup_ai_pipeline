@@ -50,7 +50,7 @@ class ExcerptTests(unittest.TestCase):
             media = root/'audio.wav'
             subprocess.run(['ffmpeg','-v','error','-f','lavfi','-i',
                             'sine=frequency=440:duration=2','-c:a','pcm_s16le',str(media)],check=True)
-            base = ['--dry-run','--workdir',str(root/'work'),'--provider','elevenlabs','--lang','uk']
+            base = ['--stop-after-merge','--dry-run','--workdir',str(root/'work'),'--outdir',str(root/'output'),'--srtoutdir',str(root/'transcripts'),'--provider','elevenlabs','--lang','uk']
             sources = ['--source','fixed','--file',str(media),'--name','Teacher',
                        '--source','detected','--file',str(media),'--name','Student',
                        '--offset-ms','250','--diarization','provider','--num-speakers','1']
@@ -74,7 +74,7 @@ class ExcerptTests(unittest.TestCase):
                 with redirect_stderr(logs):
                     events=read_timestamped_txt(run(plan))
                 for message in ['hashing input', 'extracting 0.750s', 'provider preparation',
-                                'Merging 2 source', 'multitrack.stop_after_merge=true']:
+                                'Merging 2 source', '--stop-after-merge']:
                     self.assertIn(message, logs.getvalue())
                 self.assertNotIn('[DEBUG]', logs.getvalue())
                 self.assertEqual([e.start for e in events],[.51,.51])

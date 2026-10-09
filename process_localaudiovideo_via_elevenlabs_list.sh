@@ -83,7 +83,7 @@ each timestamped TXT and events JSON. These are anonymous labels, not names.
 Batch and pipeline options:
   --all                  Scan current directory, not recursively
   --outdir DIR           Markdown output directory
-  --srtoutdir DIR        Audio/transcript directory
+  --srtoutdir DIR        Final TXT/SRT directory
   --context-file FILE    Extra cleanup context; repeatable
   --overwrite            Replace outputs and bypass checkpoints
   --quiet|--error|--info|--debug|--trace

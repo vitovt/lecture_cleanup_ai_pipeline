@@ -28,7 +28,7 @@ Options:
   --videos SPEC          Process selected 1-based items: 1-6 | 2,4,6 | 1-3,5
   --lang CODE|auto       Recognition language for every video (default: auto)
   --outdir DIR           Markdown output directory used by the child script
-  --srtoutdir DIR        Audio/transcript directory used by the child script
+  --srtoutdir DIR        Final TXT/SRT directory used by the child script
   --context-file FILE    Extra cleanup context; repeatable
   --overwrite            Redownload/reprocess existing outputs
   --debug                Show yt-dlp and child-script diagnostics

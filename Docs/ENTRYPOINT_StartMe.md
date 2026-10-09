@@ -78,8 +78,9 @@ to the project's `output` directory. Relative `CLEANUP_MDOUTDIR` paths also
 refer to the project directory. QC CSV placement follows `--qc-report`;
 `default_outdir` keeps reports in the project's `output` directory.
 
-The destination rules also apply to direct `lecture_cleanup.sh`. Existing
-Markdown is an error unless `--overwrite` is explicit.
+The destination rules also apply to direct `lecture_cleanup.sh` and all root
+workflow wrappers. Existing Markdown is an error unless `--overwrite` is explicit.
+See [ARTIFACTS.md](ARTIFACTS.md) for transcript destinations and working files.
 
 Low-level multitrack transcription and merging are intentionally not StartMe
 modes. They remain standalone modules documented in

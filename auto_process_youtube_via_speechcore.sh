@@ -5,8 +5,6 @@ SCRIPT_DIR="$(dirname "$SCRIPT_PATH")"
 
 # shellcheck disable=SC1091
 source "$SCRIPT_DIR/scripts/lecture_cleanup_shell_common.sh"
-SRTOUTDIR_DEFAULT="$SCRIPT_DIR/input/autoyoutube"
-MDOUTDIR_DEFAULT="$SCRIPT_DIR/output/autoyoutube"
 
 if [[ -f "$SCRIPT_DIR/.env" ]]; then
     # shellcheck disable=SC1091
@@ -22,9 +20,6 @@ elif [[ -f "$SCRIPT_DIR/speechcoreai-api/.env" ]]; then
     set +a
 fi
 
-SRTOUTDIR="${AUTOYOUTUBE_SRTOUTDIR:-$SRTOUTDIR_DEFAULT}"
-MDOUTDIR="${AUTOYOUTUBE_MDOUTDIR:-$MDOUTDIR_DEFAULT}"
-OUTDIR="$MDOUTDIR"
 DEBUG=0
 OVERWRITE=0
 LANG_OVERRIDE="auto"
@@ -107,9 +102,9 @@ Language:
 
 Pipeline options:
   --outdir DIR           Markdown output directory (default: $MDOUTDIR)
-                         Can also be set with AUTOYOUTUBE_MDOUTDIR in .env
-  --srtoutdir DIR        Audio/transcript directory (default: $SRTOUTDIR)
-                         Can also be set with AUTOYOUTUBE_SRTOUTDIR in .env
+                         Can also be set with CLEANUP_MDOUTDIR in .env
+  --srtoutdir DIR        Final TXT/SRT directory (default: $SRTOUTDIR)
+                         Can also be set with TRANSCRIPT_OUTDIR in .env
   --context-file FILE    Extra cleanup context; repeatable
   --overwrite            Redownload/reprocess existing outputs
   --debug                Show yt-dlp and cleanup diagnostics
@@ -128,6 +123,7 @@ CONTEXT_FLAGS=()
 CONTEXT_FILES=()
 
 # Parse arguments
+workflow_path_defaults || exit $?
 lecture_workflow_init_logging "$@"
 
 while [[ $# -gt 0 ]]; do
@@ -254,7 +250,7 @@ else
     fi
     if [[ -z "$AUTO_LANG" ]]; then
         echo "[WARN] No auto-generated subtitles found."
-        echo "[WARN] Automatic mode needs YouTube language metadata for cleanup filenames."
+        echo "[WARN] Automatic mode needs YouTube language metadata for cleanup language."
         echo "[WARN] Pass --lang CODE to continue without that metadata."
         exit 2
     fi
@@ -286,6 +282,7 @@ else
 fi
 base_raw="${filename%.*}"
 base="$(sanitize_filename "$base_raw")"
+workflow_prepare_job "$URL" "$base" || exit $?
 MP3_FILE="${base}.mp3"
 RAW_TXT_FILE="${base}.txt"
 
@@ -295,16 +292,11 @@ else
     TXT_FILE="${base}.txt"
 fi
 
-OUT_MD="$OUTDIR/${TXT_FILE%.txt}.md"
 
-if [[ -f "$OUT_MD" && "$OVERWRITE" -ne 1 ]]; then
-    echo "[WARN] Output exists, skipping: $OUT_MD (use --overwrite to reprocess)"
-    exit 0
-fi
 
 mkdir -p "$SRTOUTDIR" "$OUTDIR"
 
-MP3_PATH="$SRTOUTDIR/$MP3_FILE"
+MP3_PATH="$WORKDIR/media/$MP3_FILE"
 if [[ ! -f "$MP3_PATH" || "$OVERWRITE" -eq 1 ]]; then
     YT_DLP_AUDIO_FLAGS=(
         --extract-audio
@@ -315,7 +307,7 @@ if [[ ! -f "$MP3_PATH" || "$OVERWRITE" -eq 1 ]]; then
     if [[ "$OVERWRITE" -eq 1 ]]; then
         YT_DLP_AUDIO_FLAGS+=(--force-overwrites)
     fi
-    AUDIO_TEMPLATE="$SRTOUTDIR/${base}.%(ext)s"
+    AUDIO_TEMPLATE="$WORKDIR/media/${base}.%(ext)s"
     yt-dlp "${YT_DLP_SILENT_FLAGS[@]}" "${YT_DLP_AUDIO_FLAGS[@]}" -o "$AUDIO_TEMPLATE" "$URL"
 else
     echo "[INFO] Reusing existing audio: $MP3_FILE"
@@ -377,7 +369,8 @@ ESCAPED_URL=$(printf '%s\n' "$URL" | sed 's/[&/\]/\\&/g')
 # Replace the hardcoded URL in the template with the real one
 sed "s|https://youtu.be/dQw4w9WgXcQ|$ESCAPED_URL|g" "$TEMPLATE_CTX" > "$TMP_CTX"
 
-"$SCRIPT_DIR/lecture_cleanup.sh" --input "$TXT_PATH" --lang="$LANG" --outdir "$OUTDIR" --context-file "$TMP_CTX" --context-file "$SCRIPT_DIR/prompts/custom_context_general/lection-monolog-with-questions.txt" "${CONTEXT_FLAGS[@]}" "${LECTURE_DEBUG_FLAG[@]}" "${LECTURE_CLEANUP_FLAGS[@]}"
+workflow_publish_transcript "$TXT_PATH" "$base" || exit $?
+"$SCRIPT_DIR/lecture_cleanup.sh" --input "$TXT_PATH" --lang="$LANG" --outdir "$OUTDIR" --context-file "$TMP_CTX" --context-file "$SCRIPT_DIR/prompts/custom_context_general/lection-monolog-with-questions.txt" "${CONTEXT_FLAGS[@]}" "${LECTURE_DEBUG_FLAG[@]}" "${LECTURE_CLEANUP_FLAGS[@]}" || exit $?
 
 if [[ -f "$OUT_MD" ]]; then
     tmp_md="$(mktemp)"

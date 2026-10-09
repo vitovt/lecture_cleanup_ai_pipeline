@@ -105,8 +105,8 @@
 ./auto_process_youtube.sh [--outdir DIR] [--context-file FILE] [--debug] "https://youtu.be/ID"
 ```
 
-- Скачує автогенеровані субтитри через `yt-dlp` у `input/autoyoutube`, конвертує в TXT, підставляє URL у контекст і викликає `lecture_cleanup.sh`.
-- Markdown зберігається в `output/autoyoutube` (можна змінити через `--outdir DIR`); на початку файлу додається front matter з `title`, `filename`, `url`.
+- Скачує автогенеровані субтитри через `yt-dlp` у `input/_work/<job-id>/provider`, конвертує в TXT, підставляє URL у контекст і викликає `lecture_cleanup.sh`.
+- Markdown зберігається в `output/` (можна змінити через `--outdir DIR`); на початку файлу додається front matter з `title`, `filename`, `url`.
 - `--context-file FILE` передає додаткові контекстні файли у `lecture_cleanup.sh` (можна вказувати кілька разів).
 - `--debug` показує лог `yt-dlp` і прокидує `--debug` у `lecture_cleanup.sh`.
 - Потрібно, щоб у відео були автогенеровані субтитри.
@@ -379,3 +379,5 @@ python scripts/config_doctor.py effective
 
 ## Ліцензія
 This project is provided under the **MIT [LICENSE](LICENSE)** and is free WITHOUT WARRANTY OF ANY KIND.
+
+Shared output destinations and artifact ownership: [Docs/ARTIFACTS.md](Docs/ARTIFACTS.md).

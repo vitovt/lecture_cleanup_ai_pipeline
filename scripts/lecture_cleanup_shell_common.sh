@@ -4,6 +4,8 @@
 # options such as --input, --lang, --outdir, and --context-file stay in each
 # script because their values also control transcription/download stages.
 
+source "$(dirname "${BASH_SOURCE[0]}")/artifact_paths.sh"
+
 LECTURE_CLEANUP_FLAGS=()
 LECTURE_CLEANUP_OPTION_SHIFT=0
 
@@ -37,7 +39,7 @@ lecture_cleanup_parse_option() {
         --include-txt-block-ids-for-untimed|--no-include-txt-block-ids-for-untimed|\
         --process-timecodes-by-ai|--no-process-timecodes-by-ai|\
         --short-summary|--no-short-summary|--long-summary|--no-long-summary|\
-        --long-summary-references|--no-long-summary-references|--trace)
+        --long-summary-references|--no-long-summary-references|--trace|--overwrite)
             lecture_cleanup_add_flag_option "$1"
             LECTURE_CLEANUP_OPTION_SHIFT=1
             ;;
@@ -51,6 +53,7 @@ lecture_cleanup_print_forwarded_help() {
     cat <<'EOF'
 
 Forwarded lecture cleanup options:
+  --overwrite                   Replace existing Markdown explicitly
   --qc-report MODE              QC report: outdir|default_outdir|off
   --glossary FILE               Glossary terms, one per line
   --txt-chunk-chars N           Override TXT chunk size
@@ -113,6 +116,10 @@ lecture_workflow_init_logging() {
                 --log-level=*) level="${arg#*=}" ;;
             esac
         fi
+        case "$arg" in
+            --outdir|--outdir=*) OUTDIR_CUSTOM=1 ;;
+            --srtoutdir|--srtoutdir=*) SRTOUTDIR_CUSTOM=1 ;;
+        esac
         previous="$arg"
     done
     if [[ -z "$level" ]]; then

@@ -4,16 +4,12 @@ set -uo pipefail
 
 SCRIPT_PATH="$(readlink -f "$0")"
 SCRIPT_DIR="$(dirname "$SCRIPT_PATH")"
-SRTOUTDIR_DEFAULT="$SCRIPT_DIR/input/autoyoutube-gemini"
-MDOUTDIR_DEFAULT="$SCRIPT_DIR/output/autoyoutube-gemini"
 
 if [[ -f "$SCRIPT_DIR/.env" ]]; then
     # shellcheck disable=SC1091
     source "$SCRIPT_DIR/.env"
 fi
 
-SRTOUTDIR="${GEMINI_YOUTUBE_SRTOUTDIR:-$SRTOUTDIR_DEFAULT}"
-OUTDIR="${GEMINI_YOUTUBE_MDOUTDIR:-${AUTOYOUTUBE_MDOUTDIR:-$MDOUTDIR_DEFAULT}}"
 URL=""
 LANG=""
 ADDITIONAL_LANGS=()
@@ -60,7 +56,7 @@ with multilingual code-switching, then runs lecture_cleanup.sh.
 
 Mandatory:
   <youtube_url>          YouTube watch, youtu.be, Shorts, live, or embed URL
-  --lang CODE           Primary language for cleanup and output filenames
+  --lang CODE           Primary language for cleanup
 
 Language format:
   --lang CODE              Required, with a two-letter base language. Accepts
@@ -68,7 +64,7 @@ Language format:
   --additional-lang CODE   Additional spoken language; repeatable
 
 The primary language is the first Gemini hint and controls cleanup/output. For
-example, --lang uk-UA writes .uk.txt/.uk.md. Additional languages only improve
+example, --lang uk-UA selects Ukrainian cleanup. Additional languages only improve
 recognition of code-switching and do not change the output language.
 
 Custom vocabulary (optional, repeatable):
@@ -94,7 +90,7 @@ Invalid combinations are rejected before YouTube download:
 
 Pipeline options:
   --outdir DIR           Markdown directory (default: $OUTDIR)
-  --srtoutdir DIR        Download/transcript directory (default: $SRTOUTDIR)
+  --srtoutdir DIR        Final TXT/SRT directory (default: $SRTOUTDIR)
   --context-file FILE    Extra cleanup context; repeatable
   --overwrite            Redownload/reprocess and bypass checkpoints
   --quiet|--error|--info|--debug|--trace
@@ -118,6 +114,7 @@ EOF
 
 need_value() { [[ -n "${2:-}" ]] || { echo "Error: $1 requires a value." >&2; exit 2; }; }
 
+workflow_path_defaults || exit $?
 lecture_workflow_init_logging "$@"
 
 while [[ $# -gt 0 ]]; do
@@ -196,14 +193,15 @@ fi
 filename="$(printf '%s\n' "$YT_META" | tail -n 1)"
 base_raw="${filename%.*}"
 base="$(sanitize_filename "$base_raw")"
+workflow_prepare_job "$URL" "$base" || exit $?
 mkdir -p "$SRTOUTDIR" "$OUTDIR"
 
-MP3_PATH="$SRTOUTDIR/${base}.mp3"
+MP3_PATH="$WORKDIR/media/${base}.mp3"
 gemini_info "Stage 2/5: downloading or reusing YouTube audio"
 if [[ ! -f "$MP3_PATH" || "$OVERWRITE" -eq 1 ]]; then
     DOWNLOAD_FLAGS=(--extract-audio --audio-format mp3 --no-progress --extractor-args 'youtube:player_client=default')
     [[ "$OVERWRITE" -eq 1 ]] && DOWNLOAD_FLAGS+=(--force-overwrites)
-    yt-dlp "${YT_DLP_FLAGS[@]}" "${DOWNLOAD_FLAGS[@]}" -o "$SRTOUTDIR/${base}.%(ext)s" "$URL" || exit 3
+    yt-dlp "${YT_DLP_FLAGS[@]}" "${DOWNLOAD_FLAGS[@]}" -o "$WORKDIR/media/${base}.%(ext)s" "$URL" || exit 3
 fi
 [[ -f "$MP3_PATH" ]] || { echo "Error: downloaded MP3 not found: $MP3_PATH" >&2; exit 3; }
 
@@ -219,11 +217,7 @@ fi
 
 TXT_FILE="${base}.${LANG_LABEL}.txt"
 TXT_PATH="$SRTOUTDIR/$TXT_FILE"
-OUT_MD="$OUTDIR/${TXT_FILE%.txt}.md"
-if [[ -f "$OUT_MD" && "$OVERWRITE" -ne 1 ]]; then
-    gemini_warn "Output exists, skipping: $OUT_MD (use --overwrite)"
-    exit 0
-fi
+
 
 METADATA_FILE="$SRTOUTDIR/${base}.${LANG_LABEL}.metadata.json"
 TMP_CTX=""
@@ -247,6 +241,7 @@ if [[ "$GEMINI_EFFECTIVE_TIMESTAMPS" == "on" ]]; then
 fi
 
 gemini_info "Stage 4/5: cleaning transcript with the lecture pipeline"
+workflow_publish_transcript "$TXT_PATH" "$base" || exit $?
 "$SCRIPT_DIR/lecture_cleanup.sh" \
     --input "$TXT_PATH" \
     --lang="$LANG_LABEL" \
@@ -254,7 +249,7 @@ gemini_info "Stage 4/5: cleaning transcript with the lecture pipeline"
     "${CLEANUP_CONTEXTS[@]}" \
     "${CONTEXT_FLAGS[@]}" \
     --log-level "$LOG_LEVEL" \
-    "${LECTURE_CLEANUP_FLAGS[@]}"
+    "${LECTURE_CLEANUP_FLAGS[@]}" || exit $?
 
 if [[ -f "$OUT_MD" ]]; then
     tmp_md="$(mktemp)"

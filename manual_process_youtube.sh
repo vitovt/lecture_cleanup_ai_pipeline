@@ -7,15 +7,12 @@ SCRIPT_DIR="$(dirname "$SCRIPT_PATH")"
 # shellcheck disable=SC1091
 source "$SCRIPT_DIR/scripts/lecture_cleanup_shell_common.sh"
 
-MDOUTDIR_DEFAULT="$SCRIPT_DIR/output/autoyoutube"
 
 if [[ -f "$SCRIPT_DIR/.env" ]]; then
   # shellcheck disable=SC1091
   source "$SCRIPT_DIR/.env"
 fi
 
-MDOUTDIR="${AUTOYOUTUBE_MDOUTDIR:-$MDOUTDIR_DEFAULT}"
-OUTDIR="$MDOUTDIR"
 DEBUG=0
 OVERWRITE=0
 EXTRA_CONTEXT_FLAGS=()
@@ -102,10 +99,10 @@ Optional:
                    - normalize URL
                    - derive video filename via yt-dlp (skip download)
                    - enable YouTube timecode context URL replacement
-  --outdir DIR     Markdown output dir (default or in .env: AUTOYOUTUBE_MDOUTDIR)
+  --outdir DIR     Markdown output dir (default or in .env: CLEANUP_MDOUTDIR)
     default: $OUTDIR
   --context-file FILE  Additional context file(s) passed to lecture_cleanup.sh (can be repeated)
-  --overwrite      Re-process even if destination .md already exists (default: skip existing)
+  --overwrite      Re-process even if destination .md already exists (default: error if Markdown exists)
   --debug          Show yt-dlp output (when --url is used) and pass --debug to lecture_cleanup.sh
 
 Examples:
@@ -116,6 +113,7 @@ EOF
 }
 
 # Parse arguments
+workflow_path_defaults || exit $?
 lecture_workflow_init_logging "$@"
 
 while [[ $# -gt 0 ]]; do
@@ -242,26 +240,23 @@ if [[ -n "$URL" ]]; then
         YOUTUBE_UPLOAD_DATE="$YOUTUBE_UPLOAD_DATE_RAW"
       fi
       BASE_FOR_TITLE="$(sanitize_filename "${filename%.*}")"
-      # Match old behavior: include language suffix in the output stem when URL-based naming is used
-      OUT_STEM="${BASE_FOR_TITLE}.${LANG}"
+      # Use the same title as the automatic YouTube workflows
+      OUT_STEM="$BASE_FOR_TITLE"
     else
       echo "[WARN] yt-dlp failed to derive filename; falling back to input filename for naming." >&2
       BASE_FOR_TITLE="$INPUT_STEM_SAFE"
-      OUT_STEM="${BASE_FOR_TITLE}.${LANG}"
+      OUT_STEM="$BASE_FOR_TITLE"
     fi
   else
     echo "[WARN] yt-dlp not found; falling back to input filename for naming." >&2
     BASE_FOR_TITLE="$INPUT_STEM_SAFE"
-    OUT_STEM="${BASE_FOR_TITLE}.${LANG}"
+    OUT_STEM="$BASE_FOR_TITLE"
   fi
 fi
 
-OUT_MD="$OUTDIR/$OUT_STEM.md"
+INPUT_FILE="$(readlink -f "$INPUT_FILE")"
+workflow_prepare_job "$INPUT_FILE" "$OUT_STEM" || exit $?
 
-if [[ -f "$OUT_MD" && "$OVERWRITE" -ne 1 ]]; then
-  echo "[WARN] Output exists, skipping: $OUT_MD (use --overwrite to reprocess)"
-  exit 0
-fi
 
 echo "[INFO] Input: $INPUT_FILE"
 echo "[INFO] Lang:  $LANG"
@@ -289,6 +284,9 @@ if [[ ${#EXTRA_CONTEXT_FLAGS[@]} -gt 0 ]]; then
   CONTEXT_ARGS+=("${EXTRA_CONTEXT_FLAGS[@]}")
 fi
 
+workflow_publish_transcript "$INPUT_FILE" "$OUT_STEM" "${INPUT_FILE##*.}" || exit $?
+INPUT_FILE="$TRANSCRIPT_DIR/$OUT_STEM.${INPUT_FILE##*.}"
+INPUT_STEM_RAW="$OUT_STEM"
 echo "[INFO] Starting AI processing"
 "$SCRIPT_DIR/lecture_cleanup.sh" \
   --input "$INPUT_FILE" \
@@ -296,7 +294,7 @@ echo "[INFO] Starting AI processing"
   --outdir "$OUTDIR" \
   "${CONTEXT_ARGS[@]}" \
   "${LECTURE_DEBUG_FLAG[@]}" \
-  "${LECTURE_CLEANUP_FLAGS[@]}"
+  "${LECTURE_CLEANUP_FLAGS[@]}" || exit $?
 
 # lecture_cleanup.sh most likely writes: OUTDIR/<input_stem>.md
 # If we expect a different OUT_MD (URL-based naming), rename accordingly.

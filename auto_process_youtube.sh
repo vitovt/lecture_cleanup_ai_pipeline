@@ -5,17 +5,12 @@ SCRIPT_DIR="$(dirname "$SCRIPT_PATH")"
 
 # shellcheck disable=SC1091
 source "$SCRIPT_DIR/scripts/lecture_cleanup_shell_common.sh"
-SRTOUTDIR_DEFAULT="$SCRIPT_DIR/input/autoyoutube"
-MDOUTDIR_DEFAULT="$SCRIPT_DIR/output/autoyoutube"
 
 if [[ -f "$SCRIPT_DIR/.env" ]]; then
     # shellcheck disable=SC1091
     source "$SCRIPT_DIR/.env"
 fi
 
-SRTOUTDIR="${AUTOYOUTUBE_SRTOUTDIR:-$SRTOUTDIR_DEFAULT}"
-MDOUTDIR="${AUTOYOUTUBE_MDOUTDIR:-$MDOUTDIR_DEFAULT}"
-OUTDIR="$MDOUTDIR"
 DEBUG=0
 OVERWRITE=0
 YOUTUBE_UPLOAD_DATE=""
@@ -89,11 +84,11 @@ print_help() {
 Usage: $0 [--outdir DIR] [--srtoutdir DIR] [--context-file FILE] [--overwrite] [--debug] <youtube_url>
 
 Options:
-  --outdir DIR     Override the markdown output dir (default or in .env: AUTOYOUTUBE_MDOUTDIR)
+  --outdir DIR     Override the markdown output dir (default or in .env: CLEANUP_MDOUTDIR)
     default: $MDOUTDIR;
-  --srtoutdir DIR  Override the subtitles download dir (default or in .env:  AUTOYOUTUBE_SRTOUTDIR)
+  --srtoutdir DIR  Override the final TXT/SRT dir (default or in .env:  TRANSCRIPT_OUTDIR)
     default: $SRTOUTDIR; 
-  --overwrite      Re-process even if destination .md already exists (default: skip existing)
+  --overwrite      Re-process even if destination .md already exists (default: error if Markdown exists)
   --debug          Show yt-dlp output and pass --debug to lecture_cleanup.sh
   --context-file FILE  Additional context file(s) passed to lecture_cleanup.sh (can be repeated)
 
@@ -109,6 +104,7 @@ CONTEXT_FLAGS=()
 CONTEXT_FILES=()
 
 # Parse arguments
+workflow_path_defaults || exit $?
 lecture_workflow_init_logging "$@"
 
 while [[ $# -gt 0 ]]; do
@@ -233,18 +229,15 @@ echo "[INFO] Detected auto-sub language: $AUTO_LANG lang: $LANG"
 filename=$(yt-dlp "${YT_DLP_SILENT_FLAGS[@]}" --print filename --skip-download --extractor-args "youtube:player_client=default" "$URL")
 base_raw="${filename%.*}"
 base="$(sanitize_filename "$base_raw")"
+workflow_prepare_job "$URL" "$base" || exit $?
 SRT_FILE="${base}.${AUTO_LANG}.srt"
 TXT_FILE="${base}.${AUTO_LANG}.txt"
-OUT_MD="$OUTDIR/${TXT_FILE%.txt}.md"
+
 OUT_MD_EXISTED_BEFORE=0
 if [[ -f "$OUT_MD" ]]; then
     OUT_MD_EXISTED_BEFORE=1
 fi
 
-if [[ -f "$OUT_MD" && "$OVERWRITE" -ne 1 ]]; then
-    echo "[WARN] Output exists, skipping: $OUT_MD (use --overwrite to reprocess)"
-    exit 0
-fi
 
 mkdir -p "$SRTOUTDIR" "$OUTDIR"
 
@@ -259,6 +252,8 @@ echo 'Converting srt to txt:'
 "$SCRIPT_DIR/subtitle-utils/srt_to_custom.py" "$SRTOUTDIR/$SRT_FILE" > "$SRTOUTDIR/$TXT_FILE"
 echo "[INFO] Subtitles saved as plain text: $TXT_FILE"
 
+workflow_publish_transcript "$SRTOUTDIR/$SRT_FILE" "$base" srt || exit $?
+workflow_publish_transcript "$SRTOUTDIR/$TXT_FILE" "$base" || exit $?
 echo "Starting AI processing"
 
 
@@ -272,7 +267,7 @@ ESCAPED_URL=$(printf '%s\n' "$URL" | sed 's/[&/\]/\\&/g')
 # Replace the hardcoded URL in the template with the real one
 sed "s|https://youtu.be/dQw4w9WgXcQ|$ESCAPED_URL|g" "$TEMPLATE_CTX" > "$TMP_CTX"
 
-"$SCRIPT_DIR/lecture_cleanup.sh" --input "$SRTOUTDIR/$TXT_FILE" --lang="$LANG" --outdir "$OUTDIR" --context-file "$TMP_CTX" --context-file "$SCRIPT_DIR/prompts/custom_context_general/lection-monolog-with-questions.txt" "${CONTEXT_FLAGS[@]}" "${LECTURE_DEBUG_FLAG[@]}" "${LECTURE_CLEANUP_FLAGS[@]}"
+"$SCRIPT_DIR/lecture_cleanup.sh" --input "$TXT_PATH" --lang="$LANG" --outdir "$OUTDIR" --context-file "$TMP_CTX" --context-file "$SCRIPT_DIR/prompts/custom_context_general/lection-monolog-with-questions.txt" "${CONTEXT_FLAGS[@]}" "${LECTURE_DEBUG_FLAG[@]}" "${LECTURE_CLEANUP_FLAGS[@]}"
 cleanup_status=$?
 
 if [[ "$cleanup_status" -ne 0 ]]; then

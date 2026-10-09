@@ -5,8 +5,6 @@ SCRIPT_DIR="$(dirname "$SCRIPT_PATH")"
 
 # shellcheck disable=SC1091
 source "$SCRIPT_DIR/scripts/lecture_cleanup_shell_common.sh"
-SRTOUTDIR_DEFAULT="$SCRIPT_DIR/input/autolocal"
-MDOUTDIR_DEFAULT="$SCRIPT_DIR/output/autolocal"
 
 if [[ -f "$SCRIPT_DIR/.env" ]]; then
     # shellcheck disable=SC1091
@@ -22,9 +20,6 @@ elif [[ -f "$SCRIPT_DIR/speechcoreai-api/.env" ]]; then
     set +a
 fi
 
-SRTOUTDIR="${AUTOLOCAL_SRTOUTDIR:-$SRTOUTDIR_DEFAULT}"
-MDOUTDIR="${AUTOLOCAL_MDOUTDIR:-$MDOUTDIR_DEFAULT}"
-OUTDIR="$MDOUTDIR"
 DEBUG=0
 OVERWRITE=0
 LANG=""
@@ -52,12 +47,12 @@ Mandatory:
   --lang LANG      Language code for SpeechcoreAI and lecture_cleanup.sh
 
 Options:
-  --outdir DIR     Override markdown output dir (default or in .env: AUTOLOCAL_MDOUTDIR)
+  --outdir DIR     Override markdown output dir (default or in .env: CLEANUP_MDOUTDIR)
     default: $MDOUTDIR;
-  --srtoutdir DIR  Override transcript/audio dir (default or in .env: AUTOLOCAL_SRTOUTDIR)
+  --srtoutdir DIR  Override final TXT/SRT dir (default or in .env: TRANSCRIPT_OUTDIR)
     default: $SRTOUTDIR;
   --context-file FILE  Additional context file(s) passed to lecture_cleanup.sh (can be repeated)
-  --overwrite      Re-process even if destination .md already exists (default: skip existing)
+  --overwrite      Re-process even if destination .md already exists (default: error if Markdown exists)
   --debug          Show ffmpeg output and pass --debug to lecture_cleanup.sh
   -h, --help       Show this help
 
@@ -118,6 +113,7 @@ detect_media_kind() {
 }
 
 # Parse arguments
+workflow_path_defaults || exit $?
 lecture_workflow_init_logging "$@"
 
 while [[ $# -gt 0 ]]; do
@@ -236,13 +232,10 @@ MEDIA_KIND="$(detect_media_kind "$INPUT_PATH" "$INPUT_EXT")"
 
 BASE_RAW="${INPUT_BASENAME%.*}"
 BASE_SAFE="$(sanitize_filename "$BASE_RAW")"
+workflow_prepare_job "$INPUT_PATH" "$BASE_SAFE" || exit $?
 TXT_FILE="${BASE_SAFE}.${LANG}.txt"
-OUT_MD="$OUTDIR/${TXT_FILE%.txt}.md"
 
-if [[ -f "$OUT_MD" && "$OVERWRITE" -ne 1 ]]; then
-    echo "[WARN] Output exists, skipping: $OUT_MD (use --overwrite to reprocess)"
-    exit 0
-fi
+
 
 AUDIO_INPUT_PATH=""
 RAW_TXT_FILE=""
@@ -262,7 +255,7 @@ else
     fi
 
     MP3_FILE="${BASE_SAFE}.mp3"
-    MP3_PATH="$SRTOUTDIR/$MP3_FILE"
+    MP3_PATH="$WORKDIR/media/$MP3_FILE"
     RAW_TXT_FILE="${BASE_SAFE}.txt"
 
     if [[ ! -f "$MP3_PATH" || "$OVERWRITE" -eq 1 ]]; then
@@ -346,6 +339,7 @@ if [[ "$DEBUG" -eq 1 ]]; then
     LECTURE_DEBUG_FLAG+=(--debug)
 fi
 
+workflow_publish_transcript "$TXT_PATH" "$BASE_SAFE" || exit $?
 "$SCRIPT_DIR/lecture_cleanup.sh" \
     --input "$TXT_PATH" \
     --lang="$LANG" \
@@ -353,7 +347,7 @@ fi
     --context-file "$SCRIPT_DIR/prompts/custom_context_general/lection-monolog-with-questions.txt" \
     "${CONTEXT_FLAGS[@]}" \
     "${LECTURE_DEBUG_FLAG[@]}" \
-    "${LECTURE_CLEANUP_FLAGS[@]}"
+    "${LECTURE_CLEANUP_FLAGS[@]}" || exit $?
 
 if [[ -f "$OUT_MD" ]]; then
     tmp_md="$(mktemp)"

@@ -13,6 +13,11 @@ from multitrack.merging import read_timestamped_txt, name_source_events, merge_t
 
 
 class ResolutionTests(unittest.TestCase):
+    def setUp(self):
+        config = patch("multitrack.sources.load_effective_config", return_value=({"multitrack": {"stop_after_merge": True}}, False))
+        config.start()
+        self.addCleanup(config.stop)
+
     def test_stop_reason_follows_effective_cleanup_policy(self):
         source = ['--source', 'a', '--file', 'a.wav']
         self.assertIn('multitrack.stop_after_merge=true', resolve(source)['stop_reason'])
@@ -105,7 +110,7 @@ class MediaIntegrationTests(unittest.TestCase):
             subprocess.run(['ffmpeg','-v','error','-f','lavfi','-i','sine=frequency=440:duration=0.2',
                             '-f','lavfi','-i','sine=frequency=880:duration=0.2','-map','0:a','-map','1:a',
                             '-c:a','flac',str(media)],check=True)
-            args=['--dry-run','--workdir',str(root/'work'),'--provider','elevenlabs','--lang','uk',
+            args=['--stop-after-merge','--dry-run','--workdir',str(root/'work'),'--outdir',str(root/'output'),'--srtoutdir',str(root/'transcripts'),'--provider','elevenlabs','--lang','uk',
                   '--source','a','--track','1','--source','b','--track','2',str(media)]
             calls=[]
             def provider(source,action,**kwargs):
@@ -119,6 +124,9 @@ class MediaIntegrationTests(unittest.TestCase):
                 self.assertFalse((root/'work').exists())
                 output=run(plan)
                 self.assertEqual([e.speaker for e in read_timestamped_txt(output)],['Source_a','Source_b'])
+                # Cleaning extracted media must not discard completed source reuse.
+                for source in plan['sources']:
+                    Path(source['audio_output']).unlink()
                 run(plan)
                 self.assertEqual(calls,['a','b'])
                 plan['sources'][0]['name']='Renamed'
