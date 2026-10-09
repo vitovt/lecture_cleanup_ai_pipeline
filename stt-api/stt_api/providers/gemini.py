@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import random
+import logging
 import time
 from pathlib import Path
 from typing import Any, Callable
@@ -68,6 +69,7 @@ class GeminiProvider:
         for attempt in range(self.attempts):
             uploaded = None
             try:
+                logging.getLogger("stt-api").info("Uploading audio to Gemini (attempt %d/%d)", attempt + 1, self.attempts)
                 uploaded = self.client.files.upload(file=str(path))
                 interaction = self.client.interactions.create(
                     model=model,
@@ -109,6 +111,7 @@ class GeminiProvider:
                     break
                 delay = min(self.max_delay, self.initial_delay * self.multiplier**attempt)
                 delay += random.uniform(0, max(0.0, self.jitter))
+                logging.getLogger("stt-api").warning("gemini: attempt %d/%d failed (status=%s); retrying in %.1fs", attempt + 1, self.attempts, status, delay)
                 self.sleeper(delay)
             finally:
                 if uploaded is not None:

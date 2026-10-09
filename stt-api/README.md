@@ -218,3 +218,12 @@ Gemini rejects this unsupported option. Multitrack runs reject native diarizatio
 when the source requires multiple API chunks, since identities cannot be assumed
 to remain stable across independent requests. Groq/Pyannote uses its separate
 adapter. See `../Docs/MULTITRACK_DESIGN.md` for source overrides and presets.
+
+## Logging
+
+Use `--log-level quiet|error|info|debug|trace`, `--debug`, or `--trace`.
+INFO reports audio preparation, checkpoints, requests and retry waits; DEBUG adds
+timings/counts and runtime stack traces. Full response payloads are TRACE-only.
+With `--metadata-output`, metadata is saved without an extra console JSON dump.
+Without it, stdout JSON remains the standalone result. Explicit validation and
+preflight output are machine-readable results, independent of diagnostic levels.

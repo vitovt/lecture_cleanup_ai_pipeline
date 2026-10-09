@@ -11,7 +11,8 @@ elevenlabs_log_rank() {
         quiet) printf '0' ;;
         error) printf '1' ;;
         info) printf '2' ;;
-        debug|trace) printf '3' ;;
+        debug) printf '3' ;;
+        trace) printf '4' ;;
         *) return 1 ;;
     esac
 }
@@ -109,7 +110,7 @@ elevenlabs_build_stt_flags() {
 elevenlabs_validate_options() {
     elevenlabs_build_stt_flags
     local validation
-    validation="$($STT_RUNNER validate "${ELEVENLABS_STT_FLAGS[@]}")" || return $?
+    validation="$($STT_RUNNER validate --log-level "${LOG_LEVEL:-info}" "${ELEVENLABS_STT_FLAGS[@]}")" || return $?
     ELEVENLABS_EFFECTIVE_TIMESTAMPS="$(printf '%s\n' "$validation" | sed -n 's/.* timestamps=\([^ ]*\).*/\1/p')"
     ELEVENLABS_EFFECTIVE_DIARIZATION="$(printf '%s\n' "$validation" | sed -n 's/.* diarization=\([^ ]*\).*/\1/p')"
     [[ "$ELEVENLABS_EFFECTIVE_TIMESTAMPS" =~ ^(on|off)$ ]] || {
@@ -123,7 +124,7 @@ elevenlabs_validate_options() {
 elevenlabs_preflight() {
     local input_file="$1"
     local output_file="$2"
-    "$STT_RUNNER" transcribe \
+    "$STT_RUNNER" transcribe --log-level "${LOG_LEVEL:-info}" \
         --input-file "$input_file" \
         --preflight \
         --preflight-output "$output_file" \
@@ -135,14 +136,11 @@ elevenlabs_transcribe() {
     local output_dir="$2"
     local metadata_file="$3"
     local output_basename="$4"
-    local log_level="$LOG_LEVEL"
-    [[ "$log_level" == "trace" ]] && log_level=debug
-    "$STT_RUNNER" transcribe \
+    "$STT_RUNNER" transcribe --log-level "${LOG_LEVEL:-info}" \
         --input-file "$input_file" \
         --output-dir "$output_dir" \
         --output-basename "$output_basename" \
         --metadata-output "$metadata_file" \
-        --log-level "$log_level" \
         "${ELEVENLABS_STT_FLAGS[@]}"
 }
 
@@ -202,9 +200,12 @@ elevenlabs_extract_video_audio() {
     fi
     local replace=(-n) loglevel=error
     [[ "$overwrite" -eq 1 ]] && replace=(-y)
-    (( $(elevenlabs_log_rank "$LOG_LEVEL") >= 3 )) && loglevel=info
+    (( $(elevenlabs_log_rank "$LOG_LEVEL") >= 4 )) && loglevel=info
+    elevenlabs_info "Extracting audio: $input_file"
+    local started=$SECONDS
     ffmpeg -hide_banner -loglevel "$loglevel" "${replace[@]}" -i "$input_file" \
-        -vn -ar 16000 -ac 1 -c:a flac "$output_file"
+        -vn -ar 16000 -ac 1 -c:a flac "$output_file" || return $?
+    elevenlabs_debug "Extraction ready in $((SECONDS - started))s: $output_file ($(wc -c < "$output_file") bytes)"
 }
 
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then

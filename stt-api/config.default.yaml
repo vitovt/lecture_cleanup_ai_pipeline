@@ -150,6 +150,6 @@ output:
   write_events: true
 
 logging:
-  # quiet | error | info | debug. Provider request bodies and API keys are not
-  # logged at any level.
+  # quiet | error | info | debug | trace. Debug excludes transcript payloads;
+  # trace includes request settings and responses, never credentials/audio bytes.
   level: info

@@ -6,11 +6,22 @@ from unittest.mock import patch, Mock
 
 from stt_api.cli import main, _preflight, build_parser, transcribe
 from stt_api.media import PreparedAudio, AudioPart
-from contextlib import redirect_stdout
+from contextlib import redirect_stdout, redirect_stderr
 from io import StringIO
 
 
 class CliValidationTests(unittest.TestCase):
+    def test_runtime_error_verbosity(self):
+        for level in ['quiet', 'error', 'info', 'debug', 'trace']:
+            error = StringIO()
+            with patch.dict(os.environ, {'ELEVENLABS_API_KEY': ''}), redirect_stderr(error):
+                status = main(['validate', '--provider', 'elevenlabs', '--log-level', level])
+            self.assertEqual(status, 2)
+            self.assertEqual('ELEVENLABS_API_KEY' in error.getvalue(), level != 'quiet')
+            self.assertEqual('Traceback' in error.getvalue(), level in {'debug', 'trace'})
+        from stt_api.cli import configure_logging
+        configure_logging('info')
+
     def test_progress_and_payload_log_levels(self):
         with tempfile.TemporaryDirectory() as directory:
             audio = Path(directory) / 'audio.flac'

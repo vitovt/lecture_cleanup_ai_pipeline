@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import random
+import logging
 import time
 from pathlib import Path
 from typing import Any, Callable
@@ -143,6 +144,7 @@ class ElevenLabsProvider:
                     break
                 delay = min(self.max_delay, self.initial_delay * self.multiplier**attempt)
                 delay += random.uniform(0, max(0.0, self.jitter))
+                logging.getLogger("stt-api").warning("elevenlabs: attempt %d/%d failed (status=%s); retrying in %.1fs", attempt + 1, self.attempts, status, delay)
                 self.sleeper(delay)
         raise RetryExhaustedError(
             f"ElevenLabs request failed after {self.attempts} attempts: {last_error}"

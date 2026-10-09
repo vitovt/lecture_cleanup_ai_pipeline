@@ -6,6 +6,7 @@ import logging
 import os
 import sys
 import time
+import traceback
 from pathlib import Path
 from typing import Any
 
@@ -21,6 +22,18 @@ from .vocabulary import merge_vocabulary, validate_elevenlabs_keyterms
 
 PROJECT_DIR = Path(__file__).resolve().parent.parent
 LOG = logging.getLogger("stt-api")
+
+
+def configure_logging(level: str) -> None:
+    levels = {'quiet': 100, 'error': logging.ERROR, 'info': logging.INFO,
+              'debug': logging.DEBUG, 'trace': 5}
+    if level not in levels:
+        raise ConfigError('logging.level must be quiet, error, info, debug, or trace')
+    logging.addLevelName(5, 'TRACE')
+    logging.basicConfig(level=levels[level], format='[%(levelname)s] %(message)s')
+    logging.getLogger().setLevel(levels[level])
+    for name in ('httpx', 'httpcore', 'google_genai'):
+        logging.getLogger(name).setLevel(100 if level == 'quiet' else logging.ERROR)
 
 
 def _add_provider_options(parser: argparse.ArgumentParser) -> None:
@@ -75,9 +88,11 @@ def build_parser() -> argparse.ArgumentParser:
     transcribe.add_argument("--events-output")
     transcribe.add_argument("--preflight", action="store_true")
     transcribe.add_argument("--preflight-output")
-    transcribe.add_argument(
-        "--log-level", choices=("quiet", "error", "info", "debug"), help="Console logging."
-    )
+    for command in (validate, transcribe):
+        verbosity = command.add_mutually_exclusive_group()
+        verbosity.add_argument('--log-level', choices=('quiet', 'error', 'info', 'debug', 'trace'), help='Console logging; trace includes transcript payloads.')
+        verbosity.add_argument('--debug', dest='log_level', action='store_const', const='debug')
+        verbosity.add_argument('--trace', dest='log_level', action='store_const', const='trace')
     return parser
 
 
@@ -412,19 +427,27 @@ def transcribe(config: dict[str, Any], args: argparse.Namespace, settings: dict[
     )
     if args.metadata_output or bool(get_path(config, "output.write_metadata", True)):
         _write_json(metadata_path, metadata)
-    print(json.dumps(metadata, ensure_ascii=False))
+    if args.metadata_output:
+        LOG.info("Transcript ready: %s", transcript_path)
+        LOG.log(5, "Metadata: %s", metadata)
+    else:
+        # Standalone stdout JSON is a machine-readable result, not a diagnostic.
+        print(json.dumps(metadata, ensure_ascii=False))
     return 0
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+    level = args.log_level or 'info'
     try:
         load_env_file(PROJECT_DIR / ".env")
         override = Path(args.config).expanduser().resolve() if args.config else None
         config = load_config(PROJECT_DIR, override)
         _apply_overrides(config, args)
         config_base = override.parent if override else PROJECT_DIR
+        level = str(get_path(config, 'logging.level', 'info')).lower()
+        configure_logging(level)
         settings = _effective_settings(config, args, config_base)
         if args.command == "validate":
             _validate_credentials(config, settings["provider"])
@@ -442,16 +465,18 @@ def main(argv: list[str] | None = None) -> int:
                 )
             )
             return 0
-        level = str(get_path(config, "logging.level", "info")).upper()
-        logging.basicConfig(
-            level=getattr(logging, level, logging.INFO), format="[%(levelname)s] %(message)s"
-        )
         return transcribe(config, args, settings)
     except SttError as exc:
-        print(f"ERROR code={exc.__class__.__name__} message={json.dumps(str(exc))}", file=sys.stderr)
+        if level != 'quiet':
+            print(f"[ERROR] {exc.__class__.__name__}: {exc}", file=sys.stderr)
+        if level in {'debug', 'trace'}:
+            traceback.print_exc()
         return exc.exit_code
     except (OSError, ValueError) as exc:
-        print(f"ERROR code=runtime_error message={json.dumps(str(exc))}", file=sys.stderr)
+        if level != 'quiet':
+            print(f"[ERROR] {exc}", file=sys.stderr)
+        if level in {'debug', 'trace'}:
+            traceback.print_exc()
         return 3
 
 

@@ -236,11 +236,14 @@ groq_extract_video_audio() {
     local replace=(-n)
     [[ "$overwrite" -eq 1 ]] && replace=(-y)
     local loglevel=error
-    if (( $(groq_log_rank "${LOG_LEVEL:-info}") >= 3 )); then
+    if (( $(groq_log_rank "${LOG_LEVEL:-info}") >= 4 )); then
         loglevel=info
     fi
+    groq_info "Extracting audio: $input_file"
+    local started=$SECONDS
     ffmpeg -hide_banner -loglevel "$loglevel" "${replace[@]}" -i "$input_file" \
-        -vn -ar 16000 -ac 1 -c:a flac "$output_file"
+        -vn -ar 16000 -ac 1 -c:a flac "$output_file" || return $?
+    groq_debug "Extraction ready in $((SECONDS - started))s: $output_file ($(wc -c < "$output_file") bytes)"
 }
 
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
