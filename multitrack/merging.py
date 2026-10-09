@@ -3,61 +3,44 @@ from __future__ import annotations
 from dataclasses import replace
 from pathlib import Path
 
-from multitrack.formats import (
-    EventDocument,
-    EventFormatError,
-    append_suffix,
-    merge_documents,
-    read_event_document,
-    write_combined_events,
-    write_custom_txt,
-    write_srt,
-)
-from multitrack.manifest import ManifestError, SessionManifest
+from multitrack.formats import TranscriptSource, merge_documents, write_custom_txt
+
+def read_timestamped_txt(path: Path) -> list:
+    """Read the existing cleanup interchange format; never guess missing times."""
+    import re
+    from multitrack.formats import TranscriptEvent
+    pattern = re.compile(r'^\[(\d+):([0-5]\d):([0-5]\d)[,.](\d{3})\]\s*(?:\[([^\]\r\n]+)\]\s*)?(.*)$')
+    events = []
+    for number, line in enumerate(path.read_text(encoding='utf-8-sig').splitlines(), 1):
+        if not line.strip():
+            continue
+        match = pattern.fullmatch(line.strip())
+        if not match or not match[6].strip():
+            raise ValueError(f'{path}:{number}: expected [HH:MM:SS,mmm] [speaker] text')
+        hours, minutes, seconds, millis = map(int, match.group(1, 2, 3, 4))
+        start = hours * 3600 + minutes * 60 + seconds + millis / 1000
+        events.append(TranscriptEvent(start, match[6].strip(), match[5]))
+    return events
 
 
-def documents_from_manifest(manifest: SessionManifest) -> list[EventDocument]:
-    missing = [track.index for track in manifest.tracks if track.events_file is None]
-    if missing:
-        raise ManifestError(
-            "resolved manifest is missing events_file for track(s): "
-            + ", ".join(str(index) for index in missing)
-        )
-    documents = []
-    for track in manifest.tracks:
-        assert track.events_file is not None
-        document = read_event_document(track.events_file)
-        documents.append(
-            replace(
-                document,
-                source_file=str(track.file),
-                provider=track.provider,
-                requested_language=track.language,
-                offset_ms=track.offset_ms,
-                track_index=track.index,
-            )
-        )
-    return documents
+def name_source_events(events: list, name: str, diarization: str, expected: str = 'auto') -> list:
+    import sys
+    if diarization == 'off':
+        return [replace(event, speaker=name) for event in events]
+    if any(not event.speaker for event in events):
+        raise ValueError(f'{name}: requested diarization returned speech without speaker labels')
+    labels = list(dict.fromkeys(event.speaker for event in events))
+    if expected != 'auto' and len(labels) != int(expected):
+        print(f'WARNING: {name}: expected {expected} speakers, detected {len(labels)}', file=sys.stderr)
+    mapping = {label: name if len(labels) == 1 else f'{name}_{i+1:02d}' for i,label in enumerate(labels)}
+    return [replace(event, speaker=mapping[event.speaker]) for event in events]
 
 
-def merge_to_outputs(
-    documents: list[EventDocument],
-    output_base: Path,
-    formats: list[str],
-) -> dict[str, Path]:
+def merge_txt_files(sources: list[tuple[Path, float]], output: Path) -> Path:
+    documents = [TranscriptSource(offset, index,
+                               tuple(read_timestamped_txt(path)))
+                 for index, (path, offset) in enumerate(sources)]
     events = merge_documents(documents)
     if not events:
-        raise EventFormatError("the input event documents contain no transcript events")
-    base = output_base.expanduser().resolve()
-    outputs: dict[str, Path] = {}
-    if "events" in formats:
-        outputs["events"] = write_combined_events(
-            append_suffix(base, ".events.json"),
-            events,
-            [document.source_file for document in documents],
-        )
-    if "txt" in formats:
-        outputs["txt"] = write_custom_txt(append_suffix(base, ".txt"), events)
-    if "srt" in formats:
-        outputs["srt"] = write_srt(append_suffix(base, ".srt"), events)
-    return outputs
+        raise ValueError('sources contain no timed speech')
+    return write_custom_txt(output, events)

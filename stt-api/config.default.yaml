@@ -83,6 +83,8 @@ transcription:
     granularity: word
 
   diarization:
+    # Expected native speaker count; ElevenLabs only, requires enabled: true.
+    num_speakers: null
     # Gemini speaker attribution supports up to eight speakers and is
     # incompatible with custom vocabulary and smart mode. ElevenLabs supports
     # up to 32 speakers and allows diarization with keyterms and no_verbatim.

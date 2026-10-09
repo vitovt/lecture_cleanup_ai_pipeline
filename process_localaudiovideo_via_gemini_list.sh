@@ -60,7 +60,7 @@ Forwarded Gemini options:
   --model MODEL
   --mode verbatim|smart
   --timestamps on|off
-  --diarization on|off
+  --diarization provider|off
   --resume on|off
   --cache-dir DIR
 

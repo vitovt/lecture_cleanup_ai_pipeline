@@ -84,7 +84,7 @@ Gemini transcription options:
   --model MODEL           Model override (default: gemini-3.5-transcribe)
   --mode verbatim|smart   Verbatim preserves speech; smart cleans disfluencies
   --timestamps on|off     Word timestamps (default from stt-api config: on)
-  --diarization on|off    Gemini speaker labels (default: off)
+  --diarization provider|off    Gemini speaker labels (default: off)
   --resume on|off         Reuse matching chunk checkpoints (default: on)
   --cache-dir DIR         Checkpoint directory override
 
@@ -173,6 +173,8 @@ gemini_apply_early_log_level
 [[ -n "$LANG" ]] || { echo "Error: --lang is required." >&2; print_help; exit 2; }
 [[ "${LANG,,}" != "auto" ]] || { echo "Error: --lang auto is not allowed in workflows; choose the cleanup language." >&2; exit 2; }
 [[ -f "$INPUT_FILE" ]] || { echo "Error: file not found: $INPUT_FILE" >&2; exit 3; }
+python3 "$SCRIPT_DIR/subtitle-utils/audio_streams.py" --single "$INPUT_FILE" || exit $?
+
 [[ -z "$PREFLIGHT_OUTPUT" || "$PREFLIGHT" -eq 1 ]] || { echo "Error: --preflight-output requires --preflight." >&2; exit 2; }
 for file in "${CONTEXT_FILES[@]}" "${CUSTOM_VOCABULARY_FILES[@]}"; do
     [[ -f "$file" ]] || { echo "Error: referenced file not found: $file" >&2; exit 2; }

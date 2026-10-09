@@ -62,7 +62,7 @@ Forwarded Groq options:
   --model MODEL          Groq Whisper model
   --temperature VALUE    Temperature, 0..1
   --prompt TEXT          Whisper prompt/context
-  --diarization on|off   Local pyannote speaker labels
+  --diarization pyannote|off   Local pyannote speaker labels
   --num-speakers auto|N  Automatic or exact speaker count
   --oversize-policy MODE error|compress|chunk|interactive; repeat for fallbacks
   --save-json on|off     Keep verbose_json artifacts

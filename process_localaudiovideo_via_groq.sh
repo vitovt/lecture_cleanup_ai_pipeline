@@ -80,7 +80,7 @@ Groq options:
   --model MODEL          Override Groq Whisper model
   --temperature VALUE    Transcription temperature, 0..1
   --prompt TEXT          Optional Whisper context prompt
-  --diarization on|off   Enable/disable local pyannote speakers
+  --diarization pyannote|off   Enable/disable local pyannote speakers
   --num-speakers auto|N  Automatic or exact speaker count
   --oversize-policy MODE error|compress|chunk|interactive; repeat for fallbacks
   --save-json on|off     Retain raw verbose_json response
@@ -173,6 +173,8 @@ if [[ ! -f "$INPUT_FILE" ]]; then
     echo "Error: file not found: $INPUT_FILE" >&2
     exit 3
 fi
+python3 "$SCRIPT_DIR/subtitle-utils/audio_streams.py" --single "$INPUT_FILE" || exit $?
+
 if [[ -n "$PREFLIGHT_OUTPUT" && "$PREFLIGHT" -ne 1 ]]; then
     echo "Error: --preflight-output requires --preflight." >&2
     exit 2
@@ -184,7 +186,7 @@ done
 groq_init_python || exit 2
 groq_resolve_log_level || exit 2
 groq_apply_log_level
-groq_build_cli_flags
+groq_build_cli_flags || exit 2
 groq_debug "Effective logging level: $LOG_LEVEL"
 mkdir -p "$SRTOUTDIR" "$OUTDIR"
 groq_info "Stage 1/4: inspecting local media"

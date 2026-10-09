@@ -38,28 +38,15 @@ handoff. See [PIPELINE_LocalMedia.md](PIPELINE_LocalMedia.md),
 ## Multitrack session
 
 ```text
-session YAML / --file list
-    -> one ASR adapter call per track
-    -> one event JSON per track
-    -> resolved manifest
-    -> manual offset application and chronological merge
-    -> combined event JSON + TXT + SRT
-    -> one cleanup call
-    -> Markdown/QC/summaries
+CLI sources / YAML preset + optional multistream recording
+    -> validate every source/provider combination
+    -> extract selected streams or single-stream files
+    -> independent transcription per source
+    -> named timestamped TXT per source
+    -> offsets and chronological TXT merge
+    -> optional cleanup/Markdown (initially disabled by default)
 ```
 
-The event JSON boundary lets transcription and merging evolve independently.
-The resolved manifest lets synchronization change without repeating ASR. The
-combined custom TXT boundary lets the existing cleanup pipeline remain
-unchanged. See [PIPELINE_Multitrack.md](PIPELINE_Multitrack.md).
-
-## Failure boundaries
-
-- Manifest and CLI validation occur before paid transcription.
-- A failed track stops the multitrack pipeline before merging and cleanup.
-- Invalid event documents stop the merger before replacing combined outputs.
-- Failed cleanup chunks prevent partial Markdown from being written.
-- Provider diagnostics and stable event files remain available for independent
-  retries and inspection.
-
-Every serialized handoff is specified in [FORMATS.md](FORMATS.md).
+Preserve extracted audio, provider diagnostics, and per-source TXT for inspection.
+See [PIPELINE_Multitrack.md](PIPELINE_Multitrack.md). Local single-file workflows
+reject multiple audio streams; use explicit multitrack source selection instead.

@@ -73,12 +73,12 @@ Forwarded ElevenLabs options:
   --model MODEL
   --mode verbatim|smart
   --timestamps on|off
-  --diarization on|off
+  --diarization provider|off
   --resume on|off
   --cache-dir DIR
 
 Invalid provider options and keyterms are rejected before playlist download.
-With --diarization on, Scribe labels turns as speaker_0, speaker_1, and so on in
+With --diarization provider, Scribe labels turns as speaker_0, speaker_1, and so on in
 each timestamped TXT and events JSON. These are anonymous labels, not names.
 
 Pipeline options:
@@ -97,7 +97,7 @@ Examples:
   ./${0##*/} --lang uk-UA --additional-lang de-DE --videos 1-5 'PLAYLIST_URL'
   ./${0##*/} --lang uk --additional-lang de --additional-lang en \
       --videos 2,4,7 'PLAYLIST_URL'
-  ./${0##*/} --lang uk --multilingual --diarization on \
+  ./${0##*/} --lang uk --multilingual --diarization provider \
       --videos 1-3 'PLAYLIST_URL'
   ./${0##*/} --lang uk --custom-vocabulary-file ./terms.txt \
       --videos 1-3 'PLAYLIST_URL'

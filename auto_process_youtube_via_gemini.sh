@@ -84,7 +84,7 @@ Gemini transcription options:
   --model MODEL           Default: gemini-3.5-transcribe
   --mode verbatim|smart   smart is incompatible with timestamps/diarization
   --timestamps on|off     Word timestamps; default from config is on
-  --diarization on|off    Gemini speaker labels; default off
+  --diarization provider|off    Gemini speaker labels; default off
   --resume on|off         Reuse matching chunk checkpoints; default on
   --cache-dir DIR         Checkpoint directory
 

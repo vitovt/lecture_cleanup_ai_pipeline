@@ -112,7 +112,13 @@ groq_build_cli_flags() {
     [[ -n "${GROQ_CONFIG:-}" ]] && GROQ_CLI_FLAGS+=(--config "$GROQ_CONFIG")
     [[ -n "${GROQ_MODEL:-}" ]] && GROQ_CLI_FLAGS+=(--model "$GROQ_MODEL")
     [[ -n "${GROQ_TEMPERATURE:-}" ]] && GROQ_CLI_FLAGS+=(--temperature "$GROQ_TEMPERATURE")
-    [[ -n "${GROQ_DIARIZATION:-}" ]] && GROQ_CLI_FLAGS+=(--diarization "$GROQ_DIARIZATION")
+    if [[ -n "${GROQ_DIARIZATION:-}" ]]; then
+        case "$GROQ_DIARIZATION" in
+            off) GROQ_CLI_FLAGS+=(--diarization off) ;;
+            pyannote) GROQ_CLI_FLAGS+=(--diarization on) ;;
+            *) echo "Error: Groq --diarization must be off or pyannote." >&2; return 2 ;;
+        esac
+    fi
     [[ -n "${GROQ_NUM_SPEAKERS:-}" ]] && GROQ_CLI_FLAGS+=(--num-speakers "$GROQ_NUM_SPEAKERS")
     local policy
     for policy in "${GROQ_OVERSIZE_POLICIES[@]-}"; do

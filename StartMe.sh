@@ -210,7 +210,7 @@ ElevenLabs code-switching transcription and cleanup
 Multitrack transcription and cleanup
   multitrack
     Transcribe simultaneous audio tracks, merge speakers on one timeline, and clean once.
-    Example: $PROGRAM multitrack --manifest ./webinar.yaml
+    Example: $PROGRAM multitrack --preset ./webinar.yaml ./recording.mkv
 
 Provider-level tools
   groq-api

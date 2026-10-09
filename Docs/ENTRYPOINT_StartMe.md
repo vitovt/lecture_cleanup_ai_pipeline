@@ -17,7 +17,7 @@ operations where direct access is useful.
 ```bash
 ./StartMe.sh cleanup --input lecture.txt --lang uk
 ./StartMe.sh local-groq --lang auto ./meeting.m4a
-./StartMe.sh multitrack --manifest ./webinar.yaml
+./StartMe.sh multitrack --preset ./webinar.yaml ./recording.mkv
 ```
 
 Use `--color`, `--no-color`, or `--color=auto|always|never` before the mode.

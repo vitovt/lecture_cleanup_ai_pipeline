@@ -79,6 +79,7 @@ class ElevenLabsProvider:
         mode: str,
         timestamps: bool,
         diarization: bool,
+        num_speakers: int | None = None,
     ) -> dict[str, Any]:
         request: dict[str, Any] = {
             "model_id": model,
@@ -91,6 +92,8 @@ class ElevenLabsProvider:
         # languages intentionally enable its automatic multilingual detection.
         if len(language_codes) == 1:
             request["language_code"] = language_codes[0].split("-", 1)[0].lower()
+        if num_speakers is not None:
+            request["num_speakers"] = num_speakers
         if vocabulary:
             request["keyterms"] = vocabulary
 

@@ -106,7 +106,7 @@ Groq options:
   --model MODEL          Groq Whisper model
   --temperature VALUE    Temperature, 0..1
   --prompt TEXT          Whisper context prompt
-  --diarization on|off   Local pyannote speaker labels
+  --diarization pyannote|off   Local pyannote speaker labels
   --num-speakers auto|N  Automatic or exact speaker count
   --oversize-policy MODE error|compress|chunk|interactive; repeat for fallbacks
   --save-json on|off     Keep verbose_json response
@@ -188,7 +188,7 @@ command -v yt-dlp >/dev/null 2>&1 || { echo "Error: yt-dlp is required." >&2; ex
 groq_init_python || exit 2
 groq_resolve_log_level || exit 2
 groq_apply_log_level
-groq_build_cli_flags
+groq_build_cli_flags || exit 2
 groq_debug "Effective logging level: $LOG_LEVEL"
 groq_info "Stage 1/5: normalizing URL and reading YouTube metadata"
 

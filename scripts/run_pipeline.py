@@ -268,7 +268,7 @@ def call_llm(
     return out_text
 
 
-def main() -> int:
+def build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(
         description=(
             "Turn long lecture transcripts into clean Markdown with CONTEXT-overlap,\n"
@@ -461,6 +461,11 @@ def main() -> int:
         help="Disable LLM-side timecode handling; rely on post-processing instead",
     )
     tc_group.set_defaults(process_timecodes_by_ai=None)
+    return ap
+
+
+def main() -> int:
+    ap = build_parser()
     args = ap.parse_args()
     if args.log_level:
         set_log_level(args.log_level)

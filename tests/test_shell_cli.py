@@ -180,6 +180,10 @@ class ShellHelpTests(unittest.TestCase):
     def test_workflows_forward_collected_cleanup_options(self) -> None:
         for relative_path in PUBLIC_SHELL_SCRIPTS:
             with self.subTest(script=relative_path):
+                if relative_path == "process_multitrack.sh":
+                    # Source-scoped parsing forwards cleanup flags through Python;
+                    # functional coverage lives in test_multitrack_sources.
+                    continue
                 content = (PROJECT / relative_path).read_text(encoding="utf-8")
                 self.assertIn('"${LECTURE_CLEANUP_FLAGS[@]}"', content)
 

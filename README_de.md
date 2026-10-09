@@ -177,7 +177,7 @@ LLM-Verarbeitung des fertigen Transkripts.
 
 # ElevenLabs Scribe v2: automatische Sprachen und Sprechertrennung
 ./StartMe.sh youtube-elevenlabs --lang uk --multilingual \
-  --diarization on --custom-vocabulary-file ./terms.txt "https://youtu.be/ID"
+  --diarization provider --custom-vocabulary-file ./terms.txt "https://youtu.be/ID"
 
 ./StartMe.sh local-elevenlabs --lang uk --additional-lang de ./lesson.m4a
 ```
@@ -191,7 +191,7 @@ Kurzformen `uk`, `de`, `en`, `ru` oder vollständige BCP-47-Codes `uk-UA`,
 
 Bei ElevenLabs aktiviert `--multilingual` oder jedes `--additional-lang` die
 automatische mehrsprachige Erkennung. `--lang` bestimmt weiterhin
-Cleanup-Sprache und Dateisuffix. `--diarization on` schreibt anonyme Labels wie
+Cleanup-Sprache und Dateisuffix. `--diarization provider` schreibt anonyme Labels wie
 `speaker_0` und `speaker_1` in timestamped TXT und events JSON. ElevenLabs-
 Keyterms werden mit wiederholtem `--custom-vocabulary` und/oder
 `--custom-vocabulary-file` übergeben; der Wrapper führt die Dateien zum

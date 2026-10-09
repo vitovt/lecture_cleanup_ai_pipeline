@@ -72,12 +72,12 @@ Forwarded ElevenLabs options:
   --model MODEL
   --mode verbatim|smart
   --timestamps on|off
-  --diarization on|off
+  --diarization provider|off
   --resume on|off
   --cache-dir DIR
 
 Invalid provider options and keyterm syntax are rejected before file preflight.
-With --diarization on, Scribe labels turns as speaker_0, speaker_1, and so on in
+With --diarization provider, Scribe labels turns as speaker_0, speaker_1, and so on in
 each timestamped TXT and events JSON. These are anonymous labels, not names.
 
 Batch and pipeline options:
@@ -96,7 +96,7 @@ Examples:
   ./${0##*/} --lang uk --multilingual --all
   ./${0##*/} --lang uk-UA --additional-lang de-DE --all
   ./${0##*/} --lang uk --additional-lang de --additional-lang en --all
-  ./${0##*/} --lang uk --multilingual --diarization on --all
+  ./${0##*/} --lang uk --multilingual --diarization provider --all
   ./${0##*/} --lang uk --custom-vocabulary-file ./terms.txt --all
 EOF
     lecture_cleanup_print_forwarded_help

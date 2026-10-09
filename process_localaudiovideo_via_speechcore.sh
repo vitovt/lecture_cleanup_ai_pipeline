@@ -208,6 +208,8 @@ if [[ ! -f "$INPUT_FILE" ]]; then
     exit 1
 fi
 
+python3 "$SCRIPT_DIR/subtitle-utils/audio_streams.py" --single "$INPUT_FILE" || exit $?
+
 if [[ ${#CONTEXT_FILES[@]} -gt 0 ]]; then
     for ctx in "${CONTEXT_FILES[@]}"; do
         if [[ ! -f "$ctx" ]]; then

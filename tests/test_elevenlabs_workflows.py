@@ -168,7 +168,7 @@ elevenlabs_primary_label ceb
                 self.assertIn("any number of languages", result.stdout)
                 self.assertIn("--custom-vocabulary-file FILE", result.stdout)
                 self.assertIn("keyterms array", result.stdout)
-                self.assertIn("--diarization on", result.stdout)
+                self.assertIn("--diarization provider", result.stdout)
                 self.assertIn("speaker_0", result.stdout)
                 self.assertIn("uk-UA", result.stdout)
                 self.assertIn("ru-RU", result.stdout)
@@ -221,7 +221,7 @@ elevenlabs_primary_label ceb
                 "--language-code", "ru-ru",
                 "--custom-vocabulary", "Sicherheitsgruppe",
                 "--timestamps", "on",
-                "--diarization", "on",
+                "--diarization", "provider",
             ],
             cwd=PROJECT,
             env={**env, "PYTHONPATH": str(PROJECT / "stt-api")},

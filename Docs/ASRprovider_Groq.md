@@ -3,7 +3,7 @@
 Groq transcription is implemented in the independent `groq-api/` repository
 and invoked through `groq-api/groq_api.sh`. Existing YouTube/local wrappers use
 `scripts/groq_shell_common.sh`; multitrack code uses
-`multitrack.providers.groq.GroqProvider`.
+the provider-environment bridge in `scripts/multitrack_provider.py`.
 
 The provider handles media inspection, upload-limit policies, chunked ASR,
 quality retries, optional pyannote diarization, timestamp merging, cost guards,

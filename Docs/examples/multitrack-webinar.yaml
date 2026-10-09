@@ -1,0 +1,14 @@
+# Pass the recording as the final CLI argument. Descriptive names are recommended.
+# ./StartMe.sh multitrack --preset Docs/examples/multitrack-webinar.yaml --dry-run recording.mkv
+defaults:
+  provider: elevenlabs
+  lang: uk
+  additional_lang: [de]
+  diarization: off
+sources:
+  - id: student
+    track: 2
+    name: Student_Nazar
+  - id: teacher
+    track: 5
+    name: Teacher_Vitalii

@@ -1,31 +1,19 @@
-# Tool: merge transcripts
+# Tool: merge timestamped TXT
 
-`scripts/merge_transcripts.py` combines provider-neutral event documents. It
-does not call an ASR provider or the cleanup LLM.
-
-## Merge a resolved session
+No provider or cleanup call is involved. Inputs use the standard cleanup TXT:
+`[HH:MM:SS,mmm] [Speaker] text`. Missing/invalid timestamps are rejected.
 
 ```bash
 python3 scripts/merge_transcripts.py \
-  --manifest ./multitrack-work/resolved-manifest.yaml \
-  --output-base ./multitrack-work/combined/webinar.uk \
-  --format events --format txt --format srt
+  --file work/sources/host/source.txt \
+  --file work/sources/guest/source.txt \
+  --offset-ms 0 --offset-ms 250 \
+  --output work/combined/session.txt
 ```
 
-## Merge explicit event files
+Offsets are milliseconds, in file order. Omit all offsets for zero, or supply
+one per file. Negative adjusted timestamps are errors. Equal start times retain
+source order. Simultaneous speech and cross-track leakage are preserved.
 
-```bash
-python3 scripts/merge_transcripts.py \
-  --file ./tracks/00-host.events.json \
-  --file ./tracks/01-guest.events.json \
-  --output-base ./combined/webinar \
-  --format txt
-```
-
-The tool applies each document's `offset_ms`, rejects events shifted before
-zero, sorts by start/end/track order, and preserves simultaneous events. The
-default output format is custom TXT. Formats are repeatable and documented in
-[FORMATS.md](FORMATS.md).
-
-To resynchronize without another ASR request, edit offsets in the resolved
-manifest and run this tool again.
+The merger does not interpret provider JSON or invent utterance end times.
+Changing offsets and merging again does not require retranscription.

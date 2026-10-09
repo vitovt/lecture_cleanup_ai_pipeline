@@ -172,7 +172,7 @@ The transcription key lives only in `stt-api/.env`. The root `.env` and its
 
 # ElevenLabs Scribe v2: automatic languages and teacher/student separation
 ./StartMe.sh youtube-elevenlabs --lang uk --multilingual \
-  --diarization on --custom-vocabulary-file ./terms.txt "https://youtu.be/ID"
+  --diarization provider --custom-vocabulary-file ./terms.txt "https://youtu.be/ID"
 
 ./StartMe.sh local-elevenlabs --lang uk --additional-lang de ./lesson.m4a
 ```
@@ -185,7 +185,7 @@ BCP-47 codes. Repeat `--custom-vocabulary` for individual terms and
 
 For ElevenLabs, `--multilingual` or any `--additional-lang` selects automatic
 multilingual detection. `--lang` still controls cleanup and the filename
-suffix. `--diarization on` writes anonymous `speaker_0`, `speaker_1`, and
+suffix. `--diarization provider` writes anonymous `speaker_0`, `speaker_1`, and
 similar labels to timestamped TXT and events JSON. Pass ElevenLabs keyterms
 with repeatable `--custom-vocabulary` and/or `--custom-vocabulary-file`; the
 wrapper merges files into the keyterms array sent to the API. Each term must be

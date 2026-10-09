@@ -138,7 +138,7 @@ timestamps, diarization, and `--mode smart` (`no_verbatim=true`):
 ./process_localaudiovideo_via_elevenlabs.sh \
   --lang uk \
   --multilingual \
-  --diarization on \
+  --diarization provider \
   --custom-vocabulary 'Halbleiter' \
   --custom-vocabulary-file ./physics-de.txt \
   ./lesson.m4a
@@ -208,3 +208,13 @@ The current provider behavior and limitations follow Google's
 See the official ElevenLabs
 [Speech-to-Text API reference](https://elevenlabs.io/docs/api-reference/speech-to-text/convert)
 and [Scribe overview](https://elevenlabs.io/docs/overview/capabilities/speech-to-text).
+
+## Multitrack integration
+
+Use `../StartMe.sh multitrack` for explicit sources and TXT merging. Native
+speaker detection is selected with `--diarization provider`; the old `on` value
+is rejected. `--num-speakers N` passes an expected speaker count to ElevenLabs;
+Gemini rejects this unsupported option. Multitrack runs reject native diarization
+when the source requires multiple API chunks, since identities cannot be assumed
+to remain stable across independent requests. Groq/Pyannote uses its separate
+adapter. See `../Docs/MULTITRACK_DESIGN.md` for source overrides and presets.

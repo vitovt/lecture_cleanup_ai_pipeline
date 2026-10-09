@@ -20,7 +20,7 @@ normalization, merging, and LLM cleanup without embedding provider logic.
 4. Provider adapters isolate external ASR behavior. See
    [ASRprovider_Groq.md](ASRprovider_Groq.md) and
    [ASRprovider_SpeechCore.md](ASRprovider_SpeechCore.md).
-5. Provider-neutral event documents form the boundary between transcription
+5. Timestamped TXT documents form the boundary between transcription
    and timeline merging. See [FORMATS.md](FORMATS.md).
 6. Speaker detection is an optional provider-independent component. See
    [COMPONENT_Diarization.md](COMPONENT_Diarization.md).

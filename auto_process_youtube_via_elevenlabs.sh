@@ -96,13 +96,13 @@ ElevenLabs transcription options:
   --model MODEL           Default: scribe_v2
   --mode verbatim|smart   smart maps to no_verbatim and removes disfluencies
   --timestamps on|off     Word timestamps; default from config is on
-  --diarization on|off    ElevenLabs speaker labels; default off
+  --diarization provider|off    ElevenLabs speaker labels; default off
   --resume on|off         Reuse matching chunk checkpoints; default on
   --cache-dir DIR         Checkpoint directory
 
 Scribe v2 accepts keyterms, word timestamps, diarization, and smart mode in the
 same request. Invalid keyterm syntax is rejected before YouTube download.
-With --diarization on, Scribe labels turns as speaker_0, speaker_1, and so on in
+With --diarization provider, Scribe labels turns as speaker_0, speaker_1, and so on in
 the timestamped TXT and events JSON. These are anonymous labels, not names.
 
 Pipeline options:
@@ -123,7 +123,7 @@ Examples:
   ./${0##*/} --lang uk-UA --additional-lang de-DE 'https://youtu.be/VIDEO_ID'
   ./${0##*/} --lang uk --additional-lang de --additional-lang en \
       'https://youtu.be/VIDEO_ID'
-  ./${0##*/} --lang uk --multilingual --diarization on \
+  ./${0##*/} --lang uk --multilingual --diarization provider \
       'https://youtu.be/VIDEO_ID'
   ./${0##*/} --lang uk --custom-vocabulary-file ./german-terms.txt \
       'https://youtu.be/VIDEO_ID'

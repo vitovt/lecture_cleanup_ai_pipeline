@@ -42,7 +42,8 @@ def _add_provider_options(parser: argparse.ArgumentParser) -> None:
     )
     parser.add_argument("--mode", choices=("verbatim", "smart"), help="Transcription mode.")
     parser.add_argument("--timestamps", choices=("on", "off"), help="Word timestamps.")
-    parser.add_argument("--diarization", choices=("on", "off"), help="Speaker diarization.")
+    parser.add_argument("--diarization", choices=("provider", "off"), help="Native provider speaker diarization.")
+    parser.add_argument("--num-speakers", type=int, help="Expected native speaker count (ElevenLabs only).")
     parser.add_argument("--resume", choices=("on", "off"), help="Reuse chunk checkpoints.")
     parser.add_argument("--cache-dir", help="Checkpoint directory override.")
 
@@ -92,12 +93,14 @@ def _apply_overrides(config: dict[str, Any], args: argparse.Namespace) -> None:
     ):
         if value is not None:
             set_path(config, dotted, value)
+    if args.num_speakers is not None:
+        set_path(config, "transcription.diarization.num_speakers", args.num_speakers)
     if args.language_code:
         set_path(config, "transcription.languages.codes", args.language_code)
     if args.timestamps is not None:
         set_path(config, "transcription.timestamps.enabled", args.timestamps == "on")
     if args.diarization is not None:
-        set_path(config, "transcription.diarization.enabled", args.diarization == "on")
+        set_path(config, "transcription.diarization.enabled", args.diarization == "provider")
     if getattr(args, "log_level", None):
         set_path(config, "logging.level", args.log_level)
 
@@ -140,6 +143,12 @@ def _effective_settings(
     diarization = bool(get_path(config, "transcription.diarization.enabled", False))
     if mode not in {"verbatim", "smart"}:
         raise ConfigError("transcription.mode.type must be verbatim or smart")
+    num_speakers = get_path(config, "transcription.diarization.num_speakers")
+    if num_speakers is not None:
+        if provider != "elevenlabs" or not diarization:
+            raise InputError("num-speakers requires ElevenLabs provider diarization")
+        if isinstance(num_speakers, bool) or not isinstance(num_speakers, int) or not 1 <= num_speakers <= 32:
+            raise InputError("num-speakers must be an integer from 1 to 32")
     conflicts: list[str] = []
     if provider == "gemini":
         if vocabulary and timestamps:
@@ -170,6 +179,8 @@ def _effective_settings(
         overlap = float(
             get_path(config, "providers.elevenlabs.chunking.overlap_seconds", 5)
         )
+    if overlap < 0 or overlap >= max_seconds:
+        raise ConfigError("chunk overlap must be non-negative and shorter than the chunk")
     if max_seconds <= 0:
         raise ConfigError("media chunk duration must be positive")
     return {
@@ -180,6 +191,7 @@ def _effective_settings(
         "mode": mode,
         "timestamps": timestamps,
         "diarization": diarization,
+        "num_speakers": num_speakers,
         "max_seconds": max_seconds,
         "overlap": overlap,
         "provider_language_code": (
@@ -323,6 +335,7 @@ def transcribe(config: dict[str, Any], args: argparse.Namespace, settings: dict[
                     mode=settings["mode"],
                     timestamps=settings["timestamps"],
                     diarization=settings["diarization"],
+                    **({"num_speakers": settings["num_speakers"]} if settings.get("num_speakers") is not None else {}),
                 )
                 store.write(key, result)
             else:
@@ -409,7 +422,7 @@ def main(argv: list[str] | None = None) -> int:
                     langs=",".join(settings["language_codes"]) or "auto",
                     provider_language=settings["provider_language_code"] or "auto",
                     timestamps="on" if settings["timestamps"] else "off",
-                    diarization="on" if settings["diarization"] else "off",
+                    diarization="provider" if settings["diarization"] else "off",
                     vocabulary=len(settings["vocabulary"]),
                 )
             )

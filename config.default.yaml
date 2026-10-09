@@ -351,3 +351,9 @@ parasites:
 #   --trace  -> sets level=trace (implies debug)
 logging:
   level: info
+
+# Multitrack workflows retain extracted audio/provider artifacts/source TXT.
+# Only multitrack workflows honor this switch; standalone transcription always
+# stops at merged TXT. CLI --cleanup / --stop-after-merge override it.
+multitrack:
+  stop_after_merge: true

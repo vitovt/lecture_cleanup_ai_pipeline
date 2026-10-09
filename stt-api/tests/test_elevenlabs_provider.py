@@ -86,13 +86,14 @@ class ElevenLabsProviderTests(unittest.TestCase):
             result = provider.transcribe(
                 self._audio(directory), model="scribe_v2",
                 language_codes=["uk-UA", "de-DE"], vocabulary=["Halbleiter"],
-                mode="verbatim", timestamps=True, diarization=True,
+                mode="verbatim", timestamps=True, diarization=True, num_speakers=2,
             )
         request = provider.client.speech_to_text.kwargs
         self.assertNotIn("language_code", request)
         self.assertEqual(request["keyterms"], ["Halbleiter"])
         self.assertEqual(request["timestamps_granularity"], "word")
         self.assertTrue(request["diarize"])
+        self.assertEqual(request["num_speakers"], 2)
         self.assertFalse(request["no_verbatim"])
         self.assertEqual(result["language_code"], "ukr")
         self.assertEqual([word["text"] for word in result["words"]], ["Привіт", "Halbleiter"])

@@ -8,6 +8,14 @@ from stt_api.cli import main
 
 
 class CliValidationTests(unittest.TestCase):
+    def test_speaker_count_requires_supported_diarization(self):
+        for options in [
+            ["--provider", "gemini", "--diarization", "provider", "--num-speakers", "2"],
+            ["--provider", "elevenlabs", "--diarization", "off", "--num-speakers", "2"],
+            ["--provider", "elevenlabs", "--diarization", "provider", "--num-speakers", "0"],
+        ]:
+            self.assertEqual(main(["validate", *options]), 2)
+
     def test_validate_requires_provider_credentials(self):
         with patch.dict(os.environ, {"GEMINI_API_KEY": ""}, clear=False):
             self.assertEqual(main(["validate", "--language-code", "uk"]), 2)
@@ -69,7 +77,7 @@ class CliValidationTests(unittest.TestCase):
                         "--language-code", "de-DE",
                         "--custom-vocabulary", "Halbleiter",
                         "--timestamps", "on",
-                        "--diarization", "on",
+                        "--diarization", "provider",
                     ]
                 ),
                 0,

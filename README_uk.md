@@ -162,7 +162,7 @@ Gemini та ElevenLabs workflow призначені для записів із 
 
 # ElevenLabs Scribe v2: автоматичні мови та розділення викладача/учня
 ./StartMe.sh youtube-elevenlabs --lang uk --multilingual \
-  --diarization on --custom-vocabulary-file ./terms.txt "https://youtu.be/ID"
+  --diarization provider --custom-vocabulary-file ./terms.txt "https://youtu.be/ID"
 
 ./StartMe.sh local-elevenlabs --lang uk --additional-lang de ./lesson.m4a
 ```
@@ -176,7 +176,7 @@ UTF-8-файли з одним терміном або фразою на ряд�
 
 Для ElevenLabs `--multilingual` або наявність `--additional-lang` вмикає
 automatic multilingual detection. `--lang` і далі визначає cleanup-мову та
-суфікс. `--diarization on` додає до timestamped TXT та events JSON анонімні
+суфікс. `--diarization provider` додає до timestamped TXT та events JSON анонімні
 мітки `speaker_0`, `speaker_1` тощо. Keyterms передаються повторюваним
 `--custom-vocabulary` або завантажуються з `--custom-vocabulary-file`: wrapper
 об’єднує їх у масив keyterms для API. Кожен має бути коротшим за 50 символів і

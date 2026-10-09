@@ -94,13 +94,13 @@ ElevenLabs transcription options:
   --model MODEL           Model override (default: scribe_v2)
   --mode verbatim|smart   smart maps to no_verbatim and cleans disfluencies
   --timestamps on|off     Word timestamps (default from stt-api config: on)
-  --diarization on|off    ElevenLabs speaker labels (default: off)
+  --diarization provider|off    ElevenLabs speaker labels (default: off)
   --resume on|off         Reuse matching chunk checkpoints (default: on)
   --cache-dir DIR         Checkpoint directory override
 
 Scribe v2 accepts keyterms, word timestamps, diarization, and smart mode in one
 request. Invalid option values and keyterm syntax are rejected before upload.
-With --diarization on, Scribe labels turns as speaker_0, speaker_1, and so on in
+With --diarization provider, Scribe labels turns as speaker_0, speaker_1, and so on in
 the timestamped TXT and events JSON. These are anonymous labels, not names.
 
 Pipeline options:
@@ -122,7 +122,7 @@ Examples:
   ./${0##*/} --lang uk --multilingual ./unknown-languages.m4a
   ./${0##*/} --lang uk-UA --additional-lang de-DE ./bilingual.m4a
   ./${0##*/} --lang uk --additional-lang de --additional-lang en ./lesson.wav
-  ./${0##*/} --lang uk --multilingual --diarization on ./lesson.mp4
+  ./${0##*/} --lang uk --multilingual --diarization provider ./lesson.mp4
   ./${0##*/} --lang uk --custom-vocabulary-file ./terms.txt ./lesson.mp4
   ./${0##*/} --lang ru-RU --preflight ./recording.m4a
 EOF
@@ -183,6 +183,8 @@ elevenlabs_apply_early_log_level
 [[ -n "$LANG" ]] || { echo "Error: --lang is required." >&2; print_help; exit 2; }
 [[ "${LANG,,}" != "auto" ]] || { echo "Error: --lang auto is not allowed in workflows; choose the cleanup language." >&2; exit 2; }
 [[ -f "$INPUT_FILE" ]] || { echo "Error: file not found: $INPUT_FILE" >&2; exit 3; }
+python3 "$SCRIPT_DIR/subtitle-utils/audio_streams.py" --single "$INPUT_FILE" || exit $?
+
 [[ -z "$PREFLIGHT_OUTPUT" || "$PREFLIGHT" -eq 1 ]] || { echo "Error: --preflight-output requires --preflight." >&2; exit 2; }
 for file in "${CONTEXT_FILES[@]}" "${CUSTOM_VOCABULARY_FILES[@]}"; do
     [[ -f "$file" ]] || { echo "Error: referenced file not found: $file" >&2; exit 2; }
