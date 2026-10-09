@@ -253,6 +253,7 @@ def call_llm(
         log_trace_block("System prompt", system_prompt)
         log_trace_block("User prompt", prompt)
         log_trace(f"LLM request END{trace_label}")
+    started = time.monotonic()
     out_text = adapter.generate(
         messages,
         model=model,
@@ -261,6 +262,7 @@ def call_llm(
         debug=(debug or trace),
         label=label,
     )
+    log_debug(f"LLM response{trace_label}: {time.monotonic() - started:.2f}s, {len(out_text or '')} characters")
     if trace:
         log_trace(f"LLM response BEGIN{trace_label}")
         log_trace_block("LLM response", out_text)
@@ -855,8 +857,7 @@ def main() -> int:
             try:
                 # Optional delay before the first attempt on this chunk (inter-request pacing)
                 if attempt_i == 1 and request_delay > 0 and idx > 1:
-                    if debug:
-                        log_debug(f"Sleeping {request_delay}s before first attempt for chunk {idx}")
+                    log_info(f"Waiting {request_delay:g}s before chunk {idx} (configured request delay)")
                     time.sleep(request_delay)
                 cleaned = call_llm(
                     adapter=adapter,

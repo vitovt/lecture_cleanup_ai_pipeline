@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import os
 import sys
+import traceback
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -13,7 +14,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from scripts.config_loader import load_effective_config
-from scripts.logging_helper import set_log_level
+from scripts.logging_helper import set_log_level, log_info, log_error, log_debug
 from scripts.summary_document import SummaryError, prepare_source, read_markdown
 from scripts.summary_regeneration import (
     digest, external_inventory, generate_actions, plan_actions,
@@ -72,6 +73,7 @@ def parser():
     result.add_argument("--model", help="override the selected provider's model")
     result.add_argument("--request-delay", type=float, help="delay before each LLM request in seconds")
     result.add_argument("--retry-attempts", type=int, help="total attempts per request, including validation failures")
+    result.add_argument("--log-level", choices=("quiet", "error", "info", "debug", "trace"))
     result.add_argument("--debug", action="store_true")
     result.add_argument("--trace", action="store_true", help="log full prompts and responses")
     result.set_defaults(legacy_detection=None, legacy_case_sensitive=None, references=None, backup=None)
@@ -83,7 +85,10 @@ def run(args):
         raise SummaryError("invalid_config", f"Config file does not exist: {args.config}")
     cfg, _ = load_effective_config(PROJECT_ROOT, local_name=str(args.config.resolve()) if args.config else "config.yaml")
     cfg, policy = regeneration_config(cfg, args)
-    set_log_level("trace" if args.trace else "debug" if args.debug else cfg.get("logging", {}).get("level", "info"))
+    level = args.log_level or ("trace" if args.trace else "debug" if args.debug else cfg.get("logging", {}).get("level", "info"))
+    set_log_level(level)
+    args.trace = level == 'trace'
+    args.debug = level in {'debug', 'trace'}
     path = args.filename.expanduser().resolve()
     original = read_markdown(path)
     document = prepare_source(path, original, policy)
@@ -142,7 +147,7 @@ def run(args):
         print("DRY_RUN llm_requests=0 writes=0")
         return 0
     if not active:
-        print("SUMMARY status=skipped llm_requests=0 writes=0")
+        log_info("SUMMARY status=skipped llm_requests=0 writes=0")
         return 0
     for block in all_blocks:
         if block.metadata.get("source_hash") and block.metadata["source_hash"] != digest(document.source):
@@ -156,9 +161,9 @@ def run(args):
     else:
         publish(updates, originals, backups)
         for output in sorted(updates):
-            print(f"WRITE file={str(output)!r}")
+            log_info(f"WRITE file={str(output)!r}")
         for backup in backups.values():
-            print(f"BACKUP file={str(backup)!r}")
+            log_info(f"BACKUP file={str(backup)!r}")
     return 0
 
 
@@ -169,16 +174,20 @@ def main(argv=None):
         arguments.print_help()
         return 0
     args = arguments.parse_args(argv)
+    set_log_level(args.log_level or ("trace" if args.trace else "debug" if args.debug else "info"))
     try:
         return run(args)
     except SummaryError as exc:
-        print(f"ERROR code={exc.code} {exc}", file=sys.stderr)
+        log_error(f"ERROR code={exc.code} {exc}")
+        log_debug(traceback.format_exc().rstrip())
         return 2
     except (ValueError, KeyError, TypeError) as exc:
-        print(f"ERROR code=invalid_configuration {exc}", file=sys.stderr)
+        log_error(f"ERROR code=invalid_configuration {exc}")
+        log_debug(traceback.format_exc().rstrip())
         return 2
     except Exception as exc:
-        print(f"ERROR code=generation_or_write_failed {exc}", file=sys.stderr)
+        log_error(f"ERROR code=generation_or_write_failed {exc}")
+        log_debug(traceback.format_exc().rstrip())
         return 1
 
 

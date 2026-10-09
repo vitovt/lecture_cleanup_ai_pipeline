@@ -79,7 +79,7 @@ class SummaryRegenerationTests(unittest.TestCase):
         self.cfg["summary"]["long"].update(enabled=True, lang="uk")
         self.cfg["llm"].update(provider="dummy", dummy={"model": "test-model"}, request_delay_seconds=0)
         self.cfg["retry"].update(attempts=1, pause_seconds=0)
-        self.cfg["logging"]["level"] = "quiet"
+        self.cfg["logging"]["level"] = "info"
         self.adapter = SummaryAdapter()
 
     def invoke(self, *args):
@@ -98,6 +98,15 @@ class SummaryRegenerationTests(unittest.TestCase):
         text = self.source.read_text(encoding="utf-8")
         block = _summary_block(kind, body, "## Summary", metadata={"id": identifier, "lang": lang, "source": str(self.source)})
         self.source.write_text(text + "\n" + block + "\n", encoding="utf-8")
+
+    def test_quiet_suppresses_errors_without_changing_failure_status(self):
+        self.cfg['logging']['level'] = 'quiet'
+        self.source.unlink()
+        status, output, errors, factory = self.invoke()
+        self.assertNotEqual(status, 0)
+        self.assertEqual(output, '')
+        self.assertEqual(errors, '')
+        factory.assert_not_called()
 
     def test_both_use_one_request_and_backup_original(self):
         status, _, errors, _ = self.invoke()

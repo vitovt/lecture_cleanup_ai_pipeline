@@ -49,6 +49,8 @@ INDIR="./input"
 PASSTHRU=()
 
 # Validate the complete cleanup option allowlist before asking for confirmation.
+lecture_workflow_init_logging "$@"
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     -h|--help)

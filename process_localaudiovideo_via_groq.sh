@@ -113,6 +113,8 @@ need_value() {
     fi
 }
 
+lecture_workflow_init_logging "$@"
+
 while [[ $# -gt 0 ]]; do
     case "$1" in
         -h|--help) print_help; exit 0 ;;

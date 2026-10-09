@@ -21,7 +21,8 @@ from scripts.summary_references import SummaryReferenceError, collect_source_blo
 
 
 def warning(code, message):
-    print(f"WARNING code={code} {message}", file=sys.stderr)
+    from scripts.logging_helper import log_warn
+    log_warn(f"WARNING code={code} {message}")
 
 
 def digest(text):

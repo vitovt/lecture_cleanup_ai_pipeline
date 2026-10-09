@@ -109,6 +109,8 @@ CONTEXT_FLAGS=()
 CONTEXT_FILES=()
 
 # Parse arguments
+lecture_workflow_init_logging "$@"
+
 while [[ $# -gt 0 ]]; do
     case "$1" in
         -h|--help)
@@ -117,7 +119,7 @@ while [[ $# -gt 0 ]]; do
             ;;
         --outdir)
             if [[ -z "$2" ]]; then
-                echo "Error: --outdir requires a directory path."
+                echo "Error: --outdir requires a directory path." >&2
                 exit 1
             fi
             OUTDIR="$2"
@@ -125,7 +127,7 @@ while [[ $# -gt 0 ]]; do
             ;;
         --srtoutdir)
             if [[ -z "$2" ]]; then
-                echo "Error: --srtoutdir requires a directory path."
+                echo "Error: --srtoutdir requires a directory path." >&2
                 exit 1
             fi
             SRTOUTDIR="$2"
@@ -133,7 +135,7 @@ while [[ $# -gt 0 ]]; do
             ;;
         --context-file)
             if [[ -z "$2" ]]; then
-                echo "Error: --context-file requires a filename."
+                echo "Error: --context-file requires a filename." >&2
                 exit 1
             fi
             CONTEXT_FLAGS+=(--context-file "$2")
@@ -153,7 +155,7 @@ while [[ $# -gt 0 ]]; do
                 shift "$LECTURE_CLEANUP_OPTION_SHIFT"
             else
                 status=$?
-                [[ "$status" -eq 2 ]] || echo "Error: unknown option '$1'."
+                [[ "$status" -eq 2 ]] || echo "Error: unknown option '$1'." >&2
                 print_help
                 exit 2
             fi
@@ -163,7 +165,7 @@ while [[ $# -gt 0 ]]; do
                 URL="$1"
                 shift
             else
-                echo "Error: Unexpected argument '$1'."
+                echo "Error: Unexpected argument '$1'." >&2
                 echo
                 print_help
                 exit 1
@@ -173,7 +175,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ -z "$URL" ]]; then
-    echo "Error: No URL provided."
+    echo "Error: No URL provided." >&2
     echo
     print_help
     exit 1
@@ -182,7 +184,7 @@ fi
 if [[ ${#CONTEXT_FILES[@]} -gt 0 ]]; then
     for ctx in "${CONTEXT_FILES[@]}"; do
         if [[ ! -f "$ctx" ]]; then
-            echo "Error: context file not found: $ctx"
+            echo "Error: context file not found: $ctx" >&2
             exit 1
         fi
     done
@@ -200,13 +202,13 @@ fi
 # Normalize and validate the URL regardless of parameter order
 RAW_URL="$URL"
 if ! URL=$(normalize_youtube_url "$RAW_URL"); then
-    echo "Error: '$RAW_URL' is not a recognized YouTube video URL."
+    echo "Error: '$RAW_URL' is not a recognized YouTube video URL." >&2
     exit 1
 fi
-echo "[*] Normalized URL: $URL"
+echo "[INFO] Normalized URL: $URL"
 
 # Step 1: List subtitles
-echo "[*] Detecting available subtitles..."
+echo "[INFO] Detecting available subtitles..."
 SUB_INFO=$(yt-dlp "${YT_DLP_SILENT_FLAGS[@]}" --print "%(upload_date)s" --list-subs "$URL")
 
 # Step 2: Extract auto-generated subtitle language code
@@ -219,13 +221,13 @@ elif [[ -n "$YOUTUBE_UPLOAD_DATE_RAW" ]]; then
 fi
 
 if [ -z "$AUTO_LANG" ]; then
-    echo "[!] No auto-generated subtitles found."
+    echo "[WARN] No auto-generated subtitles found."
     exit 2
 fi
 
 LANG="${AUTO_LANG%-orig}"
 
-echo "[*] Detected auto-sub language: $AUTO_LANG lang: $LANG"
+echo "[INFO] Detected auto-sub language: $AUTO_LANG lang: $LANG"
 
 # Step 3: Download the auto-generated subtitles
 filename=$(yt-dlp "${YT_DLP_SILENT_FLAGS[@]}" --print filename --skip-download --extractor-args "youtube:player_client=default" "$URL")
@@ -255,7 +257,7 @@ printf 'Download dir: %s\n' "$SRTOUTDIR"
 # Step 4: Convert .srt to .txt
 echo 'Converting srt to txt:'
 "$SCRIPT_DIR/subtitle-utils/srt_to_custom.py" "$SRTOUTDIR/$SRT_FILE" > "$SRTOUTDIR/$TXT_FILE"
-echo "[✓] Subtitles saved as plain text: $TXT_FILE"
+echo "[INFO] Subtitles saved as plain text: $TXT_FILE"
 
 echo "Starting AI processing"
 
@@ -279,7 +281,7 @@ if [[ "$cleanup_status" -ne 0 ]]; then
     elif [[ -f "$OUT_MD" ]]; then
         echo "[WARN] Output .md exists after failed run (possible leftover from earlier behavior): $OUT_MD"
     fi
-    echo "[ERROR] AI processing failed (exit=$cleanup_status). Markdown front matter step skipped."
+    echo "[ERROR] AI processing failed (exit=$cleanup_status). Markdown front matter step skipped." >&2
     exit "$cleanup_status"
 fi
 
@@ -300,7 +302,7 @@ if [[ -f "$OUT_MD" ]]; then
         cat "$OUT_MD"
     } > "$tmp_md"
     mv "$tmp_md" "$OUT_MD"
-    echo "[+] Prepended front matter to $OUT_MD"
+    echo "[INFO] Prepended front matter to $OUT_MD"
 else
     echo "[WARN] Markdown output not found; expected: $OUT_MD"
 fi

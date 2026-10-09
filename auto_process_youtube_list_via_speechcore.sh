@@ -44,6 +44,8 @@ EOF
     lecture_cleanup_print_forwarded_help
 }
 
+lecture_workflow_init_logging "$@"
+
 while [[ $# -gt 0 ]]; do
     case "$1" in
         -h|--help)
@@ -52,7 +54,7 @@ while [[ $# -gt 0 ]]; do
             ;;
         --outdir)
             if [[ -z "${2-}" ]]; then
-                echo "Error: --outdir requires a directory path."
+                echo "Error: --outdir requires a directory path." >&2
                 exit 1
             fi
             OUTDIR="$2"
@@ -60,7 +62,7 @@ while [[ $# -gt 0 ]]; do
             ;;
         --srtoutdir)
             if [[ -z "${2-}" ]]; then
-                echo "Error: --srtoutdir requires a directory path."
+                echo "Error: --srtoutdir requires a directory path." >&2
                 exit 1
             fi
             SRT_OUTDIR="$2"
@@ -68,7 +70,7 @@ while [[ $# -gt 0 ]]; do
             ;;
         --videos)
             if [[ -z "${2-}" ]]; then
-                echo "Error: --videos requires a list, e.g. 1-3,5,7"
+                echo "Error: --videos requires a list, e.g. 1-3,5,7" >&2
                 exit 1
             fi
             VIDEOS_SPEC="$2"
@@ -76,7 +78,7 @@ while [[ $# -gt 0 ]]; do
             ;;
         --lang)
             if [[ -z "${2-}" ]]; then
-                echo "Error: --lang requires a language code or auto."
+                echo "Error: --lang requires a language code or auto." >&2
                 exit 1
             fi
             LANG="${2,,}"
@@ -84,7 +86,7 @@ while [[ $# -gt 0 ]]; do
             ;;
         --context-file)
             if [[ -z "${2-}" ]]; then
-                echo "Error: --context-file requires a filename."
+                echo "Error: --context-file requires a filename." >&2
                 exit 1
             fi
             CONTEXT_FILES+=("$2")
@@ -103,7 +105,7 @@ while [[ $# -gt 0 ]]; do
                 shift "$LECTURE_CLEANUP_OPTION_SHIFT"
             else
                 status=$?
-                [[ "$status" -eq 2 ]] || echo "Error: unknown option '$1'."
+                [[ "$status" -eq 2 ]] || echo "Error: unknown option '$1'." >&2
                 print_help
                 exit 2
             fi
@@ -113,7 +115,7 @@ while [[ $# -gt 0 ]]; do
                 PLAYLIST_URL="$1"
                 shift
             else
-                echo "Error: Unexpected argument '$1'."
+                echo "Error: Unexpected argument '$1'." >&2
                 echo
                 print_help
                 exit 1
@@ -123,32 +125,32 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ -z "$PLAYLIST_URL" ]]; then
-    echo "Error: No playlist URL provided."
+    echo "Error: No playlist URL provided." >&2
     echo
     print_help
     exit 1
 fi
 if [[ "$LANG" != "auto" && ! "$LANG" =~ ^[a-z]{2}$ ]]; then
-    echo "Error: --lang must be a two-letter code or auto."
+    echo "Error: --lang must be a two-letter code or auto." >&2
     exit 2
 fi
 
 # Basic YouTube URL validation
 if [[ ! "$PLAYLIST_URL" =~ ^https?://(www\.)?(youtube\.com|youtu\.be)/ ]]; then
-    echo "Error: '$PLAYLIST_URL' is not a valid YouTube URL."
+    echo "Error: '$PLAYLIST_URL' is not a valid YouTube URL." >&2
     exit 1
 fi
 
 # Ensure playlist parameter is present
 if [[ "$PLAYLIST_URL" != *"list="* ]]; then
-    echo "Error: URL does not contain a playlist 'list=' parameter. Please pass a playlist link."
+    echo "Error: URL does not contain a playlist 'list=' parameter. Please pass a playlist link." >&2
     exit 1
 fi
 
 if [[ ${#CONTEXT_FILES[@]} -gt 0 ]]; then
     for ctx in "${CONTEXT_FILES[@]}"; do
         if [[ ! -f "$ctx" ]]; then
-            echo "Error: context file not found: $ctx"
+            echo "Error: context file not found: $ctx" >&2
             exit 1
         fi
     done
@@ -178,11 +180,11 @@ if [[ ${#CONTEXT_FILES[@]} -gt 0 ]]; then
     done
 fi
 
-echo "[*] Fetching playlist items…"
+echo "[INFO] Fetching playlist items…"
 mapfile -t VIDEO_IDS < <(yt-dlp "${YT_DLP_SILENT_FLAGS[@]}" --flat-playlist --get-id "$PLAYLIST_URL")
 
 if [[ ${#VIDEO_IDS[@]} -eq 0 ]]; then
-    echo "[!] No videos found in playlist."
+    echo "[WARN] No videos found in playlist."
     exit 1
 fi
 
@@ -223,7 +225,7 @@ done
 
 PLAN_TOTAL=${#PROCESS_IDX[@]}
 if (( PLAN_TOTAL == 0 )); then
-    echo "[!] No videos selected (check --videos range against playlist length=${#VIDEO_IDS[@]})."
+    echo "[WARN] No videos selected (check --videos range against playlist length=${#VIDEO_IDS[@]})."
     exit 1
 fi
 

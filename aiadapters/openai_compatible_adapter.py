@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from scripts.logging_helper import log_trace
+
 import http.client as http_client
 import json
 import os
@@ -259,9 +261,6 @@ class OpenAICompatibleChatAdapter(LLMAdapter):
         except Exception:
             retry_after = ""
 
-        preview = self._short_body_preview(err_body)
-        if preview and not provider_msg:
-            return f"{base}{retry_after} | body: {preview}"
         return f"{base}{retry_after}"
 
     def _raise_mapped_error(self, message: str, *, status: Optional[int], debug: bool) -> None:
@@ -331,22 +330,12 @@ class OpenAICompatibleChatAdapter(LLMAdapter):
         endpoint = self._endpoint()
 
         if debug:
-            print(
-                f"===== DEBUG: {self._provider_label} request BEGIN"
-                + (f" [{label}]" if label else "")
-                + " ====="
-            )
-            print(f"Endpoint: {endpoint}")
-            print(
-                f"Model: {payload.get('model')} | temperature: {payload.get('temperature')} "
-                f"| top_p: {payload.get('top_p')} | reasoning_effort: {payload.get('reasoning_effort')} "
-                f"| reasoning_format: {payload.get('reasoning_format')} | thinking: {payload.get('thinking')}"
-            )
-            print(
-                f"Messages: {len(payload.get('messages', []))} "
-                f"(system={sum(1 for m in payload.get('messages', []) if m.get('role') == 'system')})"
-            )
-            print(f"===== DEBUG: {self._provider_label} request END =====")
+            print(f"[DEBUG] {self._provider_label} request [{label or 'generation'}]: "
+                  f"model={payload.get('model')}, messages={len(payload.get('messages', []))}, "
+                  f"temperature={payload.get('temperature')}, top_p={payload.get('top_p')}, "
+                  f"reasoning_effort={payload.get('reasoning_effort')}")
+            print(f"[DEBUG] Endpoint: {endpoint}")
+        log_trace(f"{self._provider_label} request payload: {json.dumps(payload, ensure_ascii=False)}")
 
         req = urllib_request.Request(
             endpoint,
@@ -364,20 +353,10 @@ class OpenAICompatibleChatAdapter(LLMAdapter):
             with urllib_request.urlopen(req, timeout=self._timeout_seconds) as resp:
                 raw = resp.read()
                 parsed = self._json_loads_bytes(raw)
+                log_trace(f"{self._provider_label} response body: {raw.decode('utf-8', errors='replace')}")
                 if not parsed:
-                    if debug:
-                        preview = self._short_body_preview(raw)
-                        if preview:
-                            print(f"[DEBUG] {self.name()} non-JSON success body: {preview}")
                     raise LLMUnknownError(f"{self._provider_label} response is not valid JSON")
-                text = self._extract_text(parsed)
-                if text:
-                    return text
-                if debug:
-                    preview = self._short_body_preview(raw)
-                    if preview:
-                        print(f"[DEBUG] {self.name()} success JSON body (empty text after parse): {preview}")
-                return ""
+                return self._extract_text(parsed) or ""
         except urllib_error.HTTPError as e:
             status = getattr(e, "code", None)
             err_body = b""
@@ -385,10 +364,7 @@ class OpenAICompatibleChatAdapter(LLMAdapter):
                 err_body = e.read()
             except Exception:
                 err_body = b""
-            if debug:
-                preview = self._short_body_preview(err_body)
-                if preview:
-                    print(f"[DEBUG] {self.name()} HTTP {status} body: {preview}")
+            log_trace(f"{self._provider_label} HTTP {status} body: {err_body.decode('utf-8', errors='replace')}")
             parsed = self._json_loads_bytes(err_body)
             message = self._format_http_error_message(
                 status=status,

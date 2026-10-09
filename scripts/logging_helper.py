@@ -12,6 +12,13 @@ def _routing_filter(max_level: int) -> Callable[[logging.LogRecord], bool]:
     return _filter
 
 
+class _ConsoleHandler(logging.StreamHandler):
+    def emit(self, record: logging.LogRecord) -> None:
+        # Follow the active streams, including CLI redirection and embedded runs.
+        self.stream = sys.stderr if record.levelno >= logging.WARNING else sys.stdout
+        super().emit(record)
+
+
 def _build_logger() -> logging.Logger:
     logger = logging.getLogger("lecture_pipeline")
     if logger.handlers:
@@ -20,11 +27,11 @@ def _build_logger() -> logging.Logger:
     logger.setLevel(logging.INFO)
     fmt = logging.Formatter("[%(levelname)s] %(message)s")
 
-    stdout_handler = logging.StreamHandler(sys.stdout)
+    stdout_handler = _ConsoleHandler(sys.stdout)
     stdout_handler.setFormatter(fmt)
     stdout_handler.addFilter(_routing_filter(logging.INFO))
 
-    stderr_handler = logging.StreamHandler(sys.stderr)
+    stderr_handler = _ConsoleHandler(sys.stderr)
     stderr_handler.setFormatter(fmt)
     stderr_handler.setLevel(logging.WARNING)
 
@@ -51,6 +58,9 @@ def set_log_level(level: str) -> None:
     }
     resolved = mapping.get(lvl, logging.INFO)
     _LOGGER.setLevel(resolved)
+    # SDK transport diagnostics obscure workflow progress and may contain headers.
+    for name in ('httpx', 'httpcore', 'openai', 'google_genai'):
+        logging.getLogger(name).setLevel(logging.CRITICAL + 1 if lvl == 'quiet' else logging.ERROR)
 
 
 def log_trace(message: str) -> None:

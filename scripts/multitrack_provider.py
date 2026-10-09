@@ -6,6 +6,7 @@ import json
 import os
 import subprocess
 import sys
+import traceback
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -99,6 +100,7 @@ def execute(payload: dict) -> dict:
         return json.loads((Path(payload['output']) / 'metadata.json').read_text())
     sys.path.insert(0, str(ROOT / 'stt-api'))
     from stt_api import cli
+    cli.configure_logging(level)
     from stt_api.config import load_config, load_env_file
     directory = ROOT / 'stt-api'
     args = cli.build_parser().parse_args(['transcribe', '--input-file', source['input'], *stt_args(source)])
@@ -120,19 +122,20 @@ def execute(payload: dict) -> dict:
     args.output_basename = 'transcript'
     args.metadata_output = str(Path(payload['output']) / 'metadata.json')
     load_env_file(directory / '.env')
-    # Provider's metadata stdout belongs to the bridge protocol, so redirect it.
-    from contextlib import redirect_stdout
-    from io import StringIO
-    metadata_stdout = StringIO()
-    with redirect_stdout(metadata_stdout):
-        cli.transcribe(config, args, settings)
-    logging.log(5, "Provider metadata: %s", metadata_stdout.getvalue().strip())
+    # Explicit metadata output keeps stdout reserved for the bridge protocol.
+    cli.transcribe(config, args, settings)
     return json.loads(Path(args.metadata_output).read_text())
 
 
 if __name__ == '__main__':
+    payload = {}
     try:
-        print(json.dumps(execute(json.load(sys.stdin)), ensure_ascii=False))
+        payload = json.load(sys.stdin)
+        print(json.dumps(execute(payload), ensure_ascii=False))
     except Exception as exc:
-        print(f'Error: {exc}', file=sys.stderr)
+        level = payload.get('source', {}).get('log_level', 'info')
+        if level != 'quiet':
+            print(f'[ERROR] {exc}', file=sys.stderr)
+        if level in {'debug', 'trace'}:
+            traceback.print_exc()
         raise SystemExit(2)

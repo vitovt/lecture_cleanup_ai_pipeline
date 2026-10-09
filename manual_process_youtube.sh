@@ -116,6 +116,8 @@ EOF
 }
 
 # Parse arguments
+lecture_workflow_init_logging "$@"
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     -h|--help)
@@ -161,13 +163,13 @@ while [[ $# -gt 0 ]]; do
         shift "$LECTURE_CLEANUP_OPTION_SHIFT"
       else
         status=$?
-        [[ "$status" -eq 2 ]] || echo "Error: unknown option '$1'."
+        [[ "$status" -eq 2 ]] || echo "Error: unknown option '$1'." >&2
         print_help
         exit 2
       fi
       ;;
     *)
-      echo "Error: Unexpected argument '$1'."
+      echo "Error: Unexpected argument '$1'." >&2
       echo
       print_help
       exit 1
@@ -177,21 +179,21 @@ done
 
 # Validate mandatory args
 if [[ -z "$INPUT_FILE" || -z "$LANG" ]]; then
-  echo "Error: --input and --lang are mandatory."
+  echo "Error: --input and --lang are mandatory." >&2
   echo
   print_help
   exit 1
 fi
 
 if [[ ! -f "$INPUT_FILE" ]]; then
-  echo "Error: Input file not found: $INPUT_FILE"
+  echo "Error: Input file not found: $INPUT_FILE" >&2
   exit 1
 fi
 
 if [[ ${#EXTRA_CONTEXT_FILES[@]} -gt 0 ]]; then
   for ctx in "${EXTRA_CONTEXT_FILES[@]}"; do
     if [[ ! -f "$ctx" ]]; then
-      echo "Error: context file not found: $ctx"
+      echo "Error: context file not found: $ctx" >&2
       exit 1
     fi
   done
@@ -219,10 +221,10 @@ NORMALIZED_URL=""
 if [[ -n "$URL" ]]; then
   RAW_URL="$URL"
   if ! NORMALIZED_URL="$(normalize_youtube_url "$RAW_URL")"; then
-    echo "Error: '$RAW_URL' is not a recognized YouTube video URL."
+    echo "Error: '$RAW_URL' is not a recognized YouTube video URL." >&2
     exit 1
   fi
-  echo "[*] Normalized URL: $NORMALIZED_URL"
+  echo "[INFO] Normalized URL: $NORMALIZED_URL"
 
   # Derive filename from yt-dlp (skip download) to preserve prior naming
   YT_DLP_FLAGS=()
@@ -261,9 +263,9 @@ if [[ -f "$OUT_MD" && "$OVERWRITE" -ne 1 ]]; then
   exit 0
 fi
 
-echo "[*] Input: $INPUT_FILE"
-echo "[*] Lang:  $LANG"
-echo "[*] Out:   $OUT_MD"
+echo "[INFO] Input: $INPUT_FILE"
+echo "[INFO] Lang:  $LANG"
+echo "[INFO] Out:   $OUT_MD"
 
 # Build context args:
 # Always include lection-monolog-with-questions.txt
@@ -287,7 +289,7 @@ if [[ ${#EXTRA_CONTEXT_FLAGS[@]} -gt 0 ]]; then
   CONTEXT_ARGS+=("${EXTRA_CONTEXT_FLAGS[@]}")
 fi
 
-echo "[*] Starting AI processing"
+echo "[INFO] Starting AI processing"
 "$SCRIPT_DIR/lecture_cleanup.sh" \
   --input "$INPUT_FILE" \
   --lang="$LANG" \
@@ -326,7 +328,7 @@ if [[ -f "$OUT_MD" ]]; then
     cat "$OUT_MD"
   } > "$tmp_md"
   mv "$tmp_md" "$OUT_MD"
-  echo "[+] Prepended front matter to $OUT_MD"
+  echo "[INFO] Prepended front matter to $OUT_MD"
 else
   echo "[WARN] Markdown output not found; expected: $OUT_MD"
   exit 3

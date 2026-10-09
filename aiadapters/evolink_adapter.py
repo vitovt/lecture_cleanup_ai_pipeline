@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from scripts.logging_helper import log_trace
+
 import json
 import os
 import socket
@@ -118,9 +120,6 @@ class EvoLinkAdapter(LLMAdapter):
                 base = f"EvoLink HTTP error {status}"
         else:
             base = f"EvoLink HTTP error: {http_error}"
-        preview = self._short_body_preview(err_body)
-        if preview:
-            return f"{base} | body: {preview}"
         return base
 
     @staticmethod
@@ -309,14 +308,13 @@ class EvoLinkAdapter(LLMAdapter):
         payload = self._build_payload(messages, model=model_name, temperature=temperature, top_p=top_p)
 
         if debug:
-            print("===== DEBUG: EvoLink request BEGIN" + (f" [{label}]" if label else "") + " =====")
-            print(f"Endpoint: {endpoint}")
+            print(f"[DEBUG] EvoLink request [{label or 'generation'}]")
+            print(f"[DEBUG] Endpoint: {endpoint}")
             gen_cfg = payload.get("generationConfig", {})
             if not isinstance(gen_cfg, dict):
                 gen_cfg = {}
-            print(f"Model: {model_name} | method: {self._method} | temperature: {gen_cfg.get('temperature')} | topP: {gen_cfg.get('topP')}")
-            print(f"Contents: {len(payload.get('contents', []))}")
-            print("===== DEBUG: EvoLink request END =====")
+            print(f"[DEBUG] Model: {model_name} | method: {self._method} | temperature: {gen_cfg.get('temperature')} | topP: {gen_cfg.get('topP')}")
+            print(f"[DEBUG] Contents: {len(payload.get('contents', []))}")
 
         req = urllib_request.Request(
             endpoint,
@@ -335,19 +333,13 @@ class EvoLinkAdapter(LLMAdapter):
                 raw = resp.read()
                 parsed = self._json_loads_bytes(raw)
                 if not parsed:
-                    if debug:
-                        preview = self._short_body_preview(raw)
-                        if preview:
-                            print(f"[DEBUG] {self.name()} non-JSON success body: {preview}")
+                    log_trace(f"{self.name()} non-JSON success body: {raw.decode('utf-8', errors='replace')}")
                     raise LLMUnknownError("EvoLink response is not valid JSON")
                 self._raise_if_app_error(parsed, debug=debug)
                 text = self._extract_text(parsed)
                 if text:
                     return text
-                if debug:
-                    preview = self._short_body_preview(raw)
-                    if preview:
-                        print(f"[DEBUG] {self.name()} success JSON body (empty text after parse): {preview}")
+                log_trace(f"{self.name()} success JSON body (empty text after parse): {raw.decode('utf-8', errors='replace')}")
                 return ""
         except urllib_error.HTTPError as e:
             status = getattr(e, "code", None)
@@ -356,10 +348,7 @@ class EvoLinkAdapter(LLMAdapter):
                 err_body = e.read()
             except Exception:
                 err_body = b""
-            if debug:
-                preview = self._short_body_preview(err_body)
-                if preview:
-                    print(f"[DEBUG] {self.name()} HTTP {status} body: {preview}")
+            log_trace(f"{self.name()} HTTP {status} body: {err_body.decode('utf-8', errors='replace')}")
             parsed = self._json_loads_bytes(err_body)
             msg = self._format_http_error_message(
                 status=status,

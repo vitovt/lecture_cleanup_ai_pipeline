@@ -85,8 +85,8 @@ Forwarded lecture cleanup options:
                                 Disable fallback ^txt-N IDs
   --process-timecodes-by-ai     Let the LLM process source timestamps
   --no-process-timecodes-by-ai  Disable LLM-side timestamp processing
-  --log-level LEVEL             Cleanup logging: quiet|error|info|debug|trace
-  --trace                       Trace full cleanup prompts and responses
+  --log-level LEVEL             Workflow logging: quiet|error|info|debug|trace
+  --trace                       Trace full provider requests/responses (no credentials)
 
 Configured content modes (set content_mode in config.yaml):
   strict | normal | creative | creativedetailed
@@ -96,4 +96,44 @@ Workflow wrappers prepare a TXT transcript, so cleanup --input is managed
 internally; media wrappers also manage --format. Wrapper-specific help above
 documents source, language, output, context, overwrite, and debug options.
 EOF
+}
+
+# Resolve verbosity before parsing/validation so quiet also covers early failures.
+# Workflow wrappers call this once; provider tools keep their own configurations.
+lecture_workflow_init_logging() {
+    local previous="" arg level="" python="$SCRIPT_DIR/.venv/bin/python"
+    for arg in "$@"; do
+        [[ "$arg" == -- ]] && break
+        case "$arg" in -h|--help) return 0 ;; esac
+        if [[ "$previous" == --log-level ]]; then
+            level="$arg"
+        else
+            case "$arg" in
+                --quiet|--error|--info|--debug|--trace) level="${arg#--}" ;;
+                --log-level=*) level="${arg#*=}" ;;
+            esac
+        fi
+        previous="$arg"
+    done
+    if [[ -z "$level" ]]; then
+        [[ -x "$python" ]] || python=python3
+        level="$("$python" -c 'import sys; from pathlib import Path; sys.path.insert(0, sys.argv[1]); from scripts.config_loader import load_effective_config; print(load_effective_config(Path(sys.argv[1]))[0].get("logging", {}).get("level", "info"))' "$SCRIPT_DIR")" || return 2
+    fi
+    case "$level" in
+        quiet|error|info|debug|trace) ;;
+        *) printf '[ERROR] Invalid logging level: %s\n' "$level" >&2; return 2 ;;
+    esac
+    LOG_LEVEL="$level"
+    LOG_LEVEL_OVERRIDE="$level"
+    DEBUG=0
+    [[ "$level" == debug || "$level" == trace ]] && DEBUG=1
+    LECTURE_CLEANUP_FLAGS+=(--log-level "$level")
+    # Keep stdout available in command substitutions used for filenames/metadata.
+    # Only the outer workflow's human console is redirected.
+    if [[ "$level" == quiet ]]; then
+        exec >/dev/null 2>/dev/null
+    elif [[ "$level" == error ]]; then
+        exec >/dev/null
+    fi
+    return 0
 }

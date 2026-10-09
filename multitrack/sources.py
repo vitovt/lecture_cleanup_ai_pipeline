@@ -297,7 +297,7 @@ def resolve(argv: list[str], *, standalone: bool = False) -> dict:
     if excerpt and not workflow.get('output_name'):
         end_label = str(round(end * 1000)) if end is not None else 'end'
         name += f'.excerpt-{round(start * 1000)}-{end_label}ms'
-    level = 'trace' if workflow.get('trace') else 'debug' if workflow.get('debug') else workflow.get('log_level', 'info')
+    level = 'trace' if workflow.get('trace') else 'debug' if workflow.get('debug') else workflow.get('log_level', config.get('logging', {}).get('level', 'info'))
     if level not in {'quiet', 'error', 'info', 'debug', 'trace'}:
         raise ValueError('invalid log level')
     return {

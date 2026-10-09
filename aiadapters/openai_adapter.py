@@ -67,11 +67,10 @@ class OpenAIAdapter(LLMAdapter):
     ) -> str:
         params = self._build_params(messages, model, temperature, top_p)
         if debug:
-            print("===== DEBUG: OpenAI request BEGIN" + (f" [{label}]" if label else "") + " =====")
-            print(f"Model: {params.get('model')} | temperature: {params.get('temperature')} | top_p: {params.get('top_p', None)}")
+            print(f"[DEBUG] OpenAI request [{label or 'generation'}]")
+            print(f"[DEBUG] Model: {params.get('model')} | temperature: {params.get('temperature')} | top_p: {params.get('top_p', None)}")
             # Print only counts to avoid leaking full content by default
-            print(f"Messages: {len(params.get('input', []))} (system={sum(1 for m in params.get('input', []) if m.get('role')=='system')})")
-            print("===== DEBUG: OpenAI request END =====")
+            print(f"[DEBUG] Messages: {len(params.get('input', []))} (system={sum(1 for m in params.get('input', []) if m.get('role')=='system')})")
         try:
             resp = self._client.responses.create(**params)
             try:

@@ -12,7 +12,7 @@ from typing import Dict, List, Optional, Tuple
 from aiadapters.base import (
     LLMAdapter, LLMAuthError, LLMConnectionError, LLMRateLimitError, LLMUnknownError,
 )
-from scripts.logging_helper import log_debug, log_trace, log_trace_block, log_warn
+from scripts.logging_helper import log_info, log_debug, log_trace, log_trace_block, log_warn
 from scripts.summary_references import (
     render_long_summary_reference_display, validate_long_summary_references,
 )
@@ -375,14 +375,14 @@ def generate_summaries(
     attempts = max(1, attempts)
     for attempt in range(1, attempts + 1):
         if attempt == 1 and request_delay > 0:
-            if debug:
-                log_debug(f"Sleeping {request_delay}s before summary request")
+            log_info(f"Waiting {request_delay:g}s before summary request (configured request delay)")
             time.sleep(request_delay)
         try:
             options = dict(
                 temperature=temperature, top_p=top_p, debug=debug, trace=trace,
                 label=f"{description} (attempt {attempt}/{attempts})",
             )
+            started = time.monotonic()
             if len(kinds) == 2:
                 summaries = call_llm_combined_summaries(
                     adapter, model, source, settings.long.lang,
@@ -398,6 +398,7 @@ def generate_summaries(
                     **options,
                 )
                 summaries = {kind: (result or "").strip()}
+            log_debug(f"Summary response: {time.monotonic() - started:.2f}s, {sum(len(body) for body in summaries.values())} characters")
             for kind, body in summaries.items():
                 if not body.strip():
                     raise RuntimeError(f"Empty response text ({kind} summary)")

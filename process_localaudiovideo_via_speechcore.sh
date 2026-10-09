@@ -118,6 +118,8 @@ detect_media_kind() {
 }
 
 # Parse arguments
+lecture_workflow_init_logging "$@"
+
 while [[ $# -gt 0 ]]; do
     case "$1" in
         -h|--help)
@@ -126,7 +128,7 @@ while [[ $# -gt 0 ]]; do
             ;;
         --outdir)
             if [[ -z "${2:-}" ]]; then
-                echo "Error: --outdir requires a directory path."
+                echo "Error: --outdir requires a directory path." >&2
                 exit 1
             fi
             OUTDIR="$2"
@@ -134,7 +136,7 @@ while [[ $# -gt 0 ]]; do
             ;;
         --srtoutdir)
             if [[ -z "${2:-}" ]]; then
-                echo "Error: --srtoutdir requires a directory path."
+                echo "Error: --srtoutdir requires a directory path." >&2
                 exit 1
             fi
             SRTOUTDIR="$2"
@@ -142,7 +144,7 @@ while [[ $# -gt 0 ]]; do
             ;;
         --lang)
             if [[ -z "${2:-}" ]]; then
-                echo "Error: --lang requires a language code."
+                echo "Error: --lang requires a language code." >&2
                 exit 1
             fi
             LANG="$2"
@@ -150,7 +152,7 @@ while [[ $# -gt 0 ]]; do
             ;;
         --context-file)
             if [[ -z "${2:-}" ]]; then
-                echo "Error: --context-file requires a filename."
+                echo "Error: --context-file requires a filename." >&2
                 exit 1
             fi
             CONTEXT_FLAGS+=(--context-file "$2")
@@ -170,7 +172,7 @@ while [[ $# -gt 0 ]]; do
                 shift "$LECTURE_CLEANUP_OPTION_SHIFT"
             else
                 status=$?
-                [[ "$status" -eq 2 ]] || echo "Error: unknown option '$1'."
+                [[ "$status" -eq 2 ]] || echo "Error: unknown option '$1'." >&2
                 print_help
                 exit 2
             fi
@@ -180,7 +182,7 @@ while [[ $# -gt 0 ]]; do
                 INPUT_FILE="$1"
                 shift
             else
-                echo "Error: Unexpected argument '$1'."
+                echo "Error: Unexpected argument '$1'." >&2
                 echo
                 print_help
                 exit 1
@@ -190,21 +192,21 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ -z "$INPUT_FILE" ]]; then
-    echo "Error: No local media file provided."
+    echo "Error: No local media file provided." >&2
     echo
     print_help
     exit 1
 fi
 
 if [[ -z "$LANG" ]]; then
-    echo "Error: --lang is mandatory for local media processing."
+    echo "Error: --lang is mandatory for local media processing." >&2
     echo
     print_help
     exit 1
 fi
 
 if [[ ! -f "$INPUT_FILE" ]]; then
-    echo "Error: local media file not found: $INPUT_FILE"
+    echo "Error: local media file not found: $INPUT_FILE" >&2
     exit 1
 fi
 
@@ -213,7 +215,7 @@ python3 "$SCRIPT_DIR/subtitle-utils/audio_streams.py" --single "$INPUT_FILE" || 
 if [[ ${#CONTEXT_FILES[@]} -gt 0 ]]; then
     for ctx in "${CONTEXT_FILES[@]}"; do
         if [[ ! -f "$ctx" ]]; then
-            echo "Error: context file not found: $ctx"
+            echo "Error: context file not found: $ctx" >&2
             exit 1
         fi
     done
@@ -247,15 +249,15 @@ RAW_TXT_FILE=""
 
 if [[ "$MEDIA_KIND" == "audio" ]]; then
     if ! is_supported_audio_ext "$INPUT_EXT"; then
-        echo "Error: unsupported audio file extension: '.${INPUT_EXT}'. Speechcore supports: mp3, m4a, wav."
+        echo "Error: unsupported audio file extension: '.${INPUT_EXT}'. Speechcore supports: mp3, m4a, wav." >&2
         exit 1
     fi
     AUDIO_INPUT_PATH="$INPUT_PATH"
     RAW_TXT_FILE="${BASE_RAW}.txt"
-    echo "[*] Detected audio input; processing directly: $INPUT_BASENAME"
+    echo "[INFO] Detected audio input; processing directly: $INPUT_BASENAME"
 else
     if ! command -v ffmpeg >/dev/null 2>&1; then
-        echo "Error: ffmpeg is required to extract audio from video input."
+        echo "Error: ffmpeg is required to extract audio from video input." >&2
         exit 1
     fi
 
@@ -264,7 +266,7 @@ else
     RAW_TXT_FILE="${BASE_SAFE}.txt"
 
     if [[ ! -f "$MP3_PATH" || "$OVERWRITE" -eq 1 ]]; then
-        echo "[*] Extracting audio from video to MP3..."
+        echo "[INFO] Extracting audio from video to MP3..."
         FFMPEG_ARGS=(-hide_banner)
         if [[ "$DEBUG" -eq 1 ]]; then
             FFMPEG_ARGS+=(-loglevel info)
@@ -284,11 +286,11 @@ else
             ffmpeg "${FFMPEG_ARGS[@]}" >/dev/null 2>&1
         fi
     else
-        echo "[*] Reusing existing extracted audio: $MP3_FILE"
+        echo "[INFO] Reusing existing extracted audio: $MP3_FILE"
     fi
 
     if [[ ! -f "$MP3_PATH" ]]; then
-        echo "[ERROR] MP3 not found after extraction: $MP3_PATH"
+        echo "[ERROR] MP3 not found after extraction: $MP3_PATH" >&2
         exit 1
     fi
 
@@ -299,14 +301,14 @@ RAW_TXT_PATH="$SRTOUTDIR/$RAW_TXT_FILE"
 TXT_PATH="$SRTOUTDIR/$TXT_FILE"
 
 if [[ -f "$TXT_PATH" && "$OVERWRITE" -ne 1 ]]; then
-    echo "[*] Transcript exists, skipping SpeechcoreAI: $TXT_FILE"
+    echo "[INFO] Transcript exists, skipping SpeechcoreAI: $TXT_FILE"
 elif [[ -f "$RAW_TXT_PATH" && "$OVERWRITE" -ne 1 && "$RAW_TXT_PATH" != "$TXT_PATH" ]]; then
     mv -f "$RAW_TXT_PATH" "$TXT_PATH"
-    echo "[*] Using existing transcript: $TXT_FILE"
+    echo "[INFO] Using existing transcript: $TXT_FILE"
 else
     SPEECHCORE_CLI="$SCRIPT_DIR/speechcoreai-api/speechcoreai_cli.py"
     if [[ ! -f "$SPEECHCORE_CLI" ]]; then
-        echo "[ERROR] SpeechcoreAI CLI not found: $SPEECHCORE_CLI"
+        echo "[ERROR] SpeechcoreAI CLI not found: $SPEECHCORE_CLI" >&2
         exit 1
     fi
 
@@ -316,9 +318,11 @@ else
     fi
 
     SPEECHCORE_ARGS=(--input-file "$AUDIO_INPUT_PATH" --output-dir "$SRTOUTDIR" --task-output "$TASK_ID_FILE" --language "$LANG")
-    if [[ "$DEBUG" -eq 1 ]]; then
-        SPEECHCORE_ARGS+=(--log-level DEBUG)
-    fi
+    case "$LOG_LEVEL" in
+        quiet|error) SPEECHCORE_ARGS+=(--log-level ERROR) ;;
+        debug|trace) SPEECHCORE_ARGS+=(--log-level DEBUG) ;;
+        *) SPEECHCORE_ARGS+=(--log-level INFO) ;;
+    esac
 
     python3 "$SPEECHCORE_CLI" "${SPEECHCORE_ARGS[@]}"
 
@@ -384,7 +388,7 @@ if [[ -f "$OUT_MD" ]]; then
         cat "$OUT_MD"
     } > "$tmp_md"
     mv "$tmp_md" "$OUT_MD"
-    echo "[+] Prepended front matter to $OUT_MD"
+    echo "[INFO] Prepended front matter to $OUT_MD"
 else
     echo "[WARN] Markdown output not found; expected: $OUT_MD"
 fi

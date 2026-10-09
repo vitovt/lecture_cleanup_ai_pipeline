@@ -87,6 +87,8 @@ EOF
 
 need_value() { [[ -n "${2:-}" ]] || { echo "Error: $1 requires a value." >&2; exit 2; }; }
 
+lecture_workflow_init_logging "$@"
+
 while [[ $# -gt 0 ]]; do
     case "$1" in
         -h|--help) print_help; exit 0 ;;

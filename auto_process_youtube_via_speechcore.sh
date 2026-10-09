@@ -128,6 +128,8 @@ CONTEXT_FLAGS=()
 CONTEXT_FILES=()
 
 # Parse arguments
+lecture_workflow_init_logging "$@"
+
 while [[ $# -gt 0 ]]; do
     case "$1" in
         -h|--help)
@@ -136,7 +138,7 @@ while [[ $# -gt 0 ]]; do
             ;;
         --outdir)
             if [[ -z "$2" ]]; then
-                echo "Error: --outdir requires a directory path."
+                echo "Error: --outdir requires a directory path." >&2
                 exit 1
             fi
             OUTDIR="$2"
@@ -144,7 +146,7 @@ while [[ $# -gt 0 ]]; do
             ;;
         --srtoutdir)
             if [[ -z "$2" ]]; then
-                echo "Error: --srtoutdir requires a directory path."
+                echo "Error: --srtoutdir requires a directory path." >&2
                 exit 1
             fi
             SRTOUTDIR="$2"
@@ -152,7 +154,7 @@ while [[ $# -gt 0 ]]; do
             ;;
         --lang)
             if [[ -z "$2" ]]; then
-                echo "Error: --lang requires a language code."
+                echo "Error: --lang requires a language code." >&2
                 exit 1
             fi
             LANG_OVERRIDE="$2"
@@ -160,7 +162,7 @@ while [[ $# -gt 0 ]]; do
             ;;
         --context-file)
             if [[ -z "$2" ]]; then
-                echo "Error: --context-file requires a filename."
+                echo "Error: --context-file requires a filename." >&2
                 exit 1
             fi
             CONTEXT_FLAGS+=(--context-file "$2")
@@ -180,7 +182,7 @@ while [[ $# -gt 0 ]]; do
                 shift "$LECTURE_CLEANUP_OPTION_SHIFT"
             else
                 status=$?
-                [[ "$status" -eq 2 ]] || echo "Error: unknown option '$1'."
+                [[ "$status" -eq 2 ]] || echo "Error: unknown option '$1'." >&2
                 print_help
                 exit 2
             fi
@@ -190,7 +192,7 @@ while [[ $# -gt 0 ]]; do
                 URL="$1"
                 shift
             else
-                echo "Error: Unexpected argument '$1'."
+                echo "Error: Unexpected argument '$1'." >&2
                 echo
                 print_help
                 exit 1
@@ -200,7 +202,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ -z "$URL" ]]; then
-    echo "Error: No URL provided."
+    echo "Error: No URL provided." >&2
     echo
     print_help
     exit 1
@@ -209,7 +211,7 @@ fi
 if [[ ${#CONTEXT_FILES[@]} -gt 0 ]]; then
     for ctx in "${CONTEXT_FILES[@]}"; do
         if [[ ! -f "$ctx" ]]; then
-            echo "Error: context file not found: $ctx"
+            echo "Error: context file not found: $ctx" >&2
             exit 1
         fi
     done
@@ -227,10 +229,10 @@ fi
 # Normalize and validate the URL regardless of parameter order
 RAW_URL="$URL"
 if ! URL=$(normalize_youtube_url "$RAW_URL"); then
-    echo "Error: '$RAW_URL' is not a recognized YouTube video URL."
+    echo "Error: '$RAW_URL' is not a recognized YouTube video URL." >&2
     exit 1
 fi
-echo "[*] Normalized URL: $URL"
+echo "[INFO] Normalized URL: $URL"
 
 # Detect language from YouTube subtitles unless overridden
 AUTO_LANG=""
@@ -240,7 +242,7 @@ if [[ "$LANG_OVERRIDE" != "auto" ]]; then
     LANG="$LANG_OVERRIDE"
     AUTO_LANG="$LANG_OVERRIDE"
 else
-    echo "[*] Detecting available subtitles..."
+    echo "[INFO] Detecting available subtitles..."
     SUB_INFO=$(yt-dlp "${YT_DLP_SILENT_FLAGS[@]}" --print "%(upload_date)s" --list-subs "$URL")
 
     AUTO_LANG=$(echo "$SUB_INFO" | grep '(Original)' | awk '{print $1}' | head -n 1)
@@ -251,18 +253,18 @@ else
         YOUTUBE_UPLOAD_DATE="$YOUTUBE_UPLOAD_DATE_RAW"
     fi
     if [[ -z "$AUTO_LANG" ]]; then
-        echo "[!] No auto-generated subtitles found."
-        echo "[!] Automatic mode needs YouTube language metadata for cleanup filenames."
-        echo "[!] Pass --lang CODE to continue without that metadata."
+        echo "[WARN] No auto-generated subtitles found."
+        echo "[WARN] Automatic mode needs YouTube language metadata for cleanup filenames."
+        echo "[WARN] Pass --lang CODE to continue without that metadata."
         exit 2
     fi
     LANG="${AUTO_LANG%-orig}"
     LANG="${LANG%%-*}"
-    echo "[*] Detected auto-sub language: $AUTO_LANG lang: $LANG"
+    echo "[INFO] Detected auto-sub language: $AUTO_LANG lang: $LANG"
 fi
 
 if [[ ! "$LANG" =~ ^[a-z]{2}$ ]]; then
-    echo "Error: --lang must be a two-letter code or auto."
+    echo "Error: --lang must be a two-letter code or auto." >&2
     exit 2
 fi
 
@@ -316,11 +318,11 @@ if [[ ! -f "$MP3_PATH" || "$OVERWRITE" -eq 1 ]]; then
     AUDIO_TEMPLATE="$SRTOUTDIR/${base}.%(ext)s"
     yt-dlp "${YT_DLP_SILENT_FLAGS[@]}" "${YT_DLP_AUDIO_FLAGS[@]}" -o "$AUDIO_TEMPLATE" "$URL"
 else
-    echo "[*] Reusing existing audio: $MP3_FILE"
+    echo "[INFO] Reusing existing audio: $MP3_FILE"
 fi
 
 if [[ ! -f "$MP3_PATH" ]]; then
-    echo "[ERROR] MP3 not found after download: $MP3_PATH"
+    echo "[ERROR] MP3 not found after download: $MP3_PATH" >&2
     exit 1
 fi
 
@@ -328,14 +330,14 @@ RAW_TXT_PATH="$SRTOUTDIR/$RAW_TXT_FILE"
 TXT_PATH="$SRTOUTDIR/$TXT_FILE"
 
 if [[ -f "$TXT_PATH" && "$OVERWRITE" -ne 1 ]]; then
-    echo "[*] Transcript exists, skipping SpeechcoreAI: $TXT_FILE"
+    echo "[INFO] Transcript exists, skipping SpeechcoreAI: $TXT_FILE"
 elif [[ -f "$RAW_TXT_PATH" && "$OVERWRITE" -ne 1 && "$RAW_TXT_PATH" != "$TXT_PATH" ]]; then
     mv -f "$RAW_TXT_PATH" "$TXT_PATH"
-    echo "[*] Using existing transcript: $TXT_FILE"
+    echo "[INFO] Using existing transcript: $TXT_FILE"
 else
     SPEECHCORE_CLI="$SCRIPT_DIR/speechcoreai-api/speechcoreai_cli.py"
     if [[ ! -f "$SPEECHCORE_CLI" ]]; then
-        echo "[ERROR] SpeechcoreAI CLI not found: $SPEECHCORE_CLI"
+        echo "[ERROR] SpeechcoreAI CLI not found: $SPEECHCORE_CLI" >&2
         exit 1
     fi
     TASK_ID_FILE="$SRTOUTDIR/${base}.speechcore_task_id"
@@ -343,9 +345,11 @@ else
         rm -f "$TASK_ID_FILE"
     fi
     SPEECHCORE_ARGS=(--input-file "$MP3_PATH" --output-dir "$SRTOUTDIR" --task-output "$TASK_ID_FILE" --language "$LANG")
-    if [[ "$DEBUG" -eq 1 ]]; then
-        SPEECHCORE_ARGS+=(--log-level DEBUG)
-    fi
+    case "$LOG_LEVEL" in
+        quiet|error) SPEECHCORE_ARGS+=(--log-level ERROR) ;;
+        debug|trace) SPEECHCORE_ARGS+=(--log-level DEBUG) ;;
+        *) SPEECHCORE_ARGS+=(--log-level INFO) ;;
+    esac
     python3 "$SPEECHCORE_CLI" "${SPEECHCORE_ARGS[@]}"
 
     if [[ -f "$RAW_TXT_PATH" && "$RAW_TXT_PATH" != "$TXT_PATH" ]]; then
@@ -407,7 +411,7 @@ if [[ -f "$OUT_MD" ]]; then
         cat "$OUT_MD"
     } > "$tmp_md"
     mv "$tmp_md" "$OUT_MD"
-    echo "[+] Prepended front matter to $OUT_MD"
+    echo "[INFO] Prepended front matter to $OUT_MD"
 else
     echo "[WARN] Markdown output not found; expected: $OUT_MD"
 fi

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from scripts.logging_helper import log_trace
+
 import json
 import os
 import socket
@@ -391,9 +393,6 @@ class KieAdapter(LLMAdapter):
         else:
             base = f"Kie HTTP error: {http_error}"
 
-        preview = self._short_body_preview(err_body)
-        if preview:
-            return f"{base} | body: {preview}"
         return base
 
     def _build_sdk_params(
@@ -436,11 +435,10 @@ class KieAdapter(LLMAdapter):
         base_url = self._base_url_for_model(model_name)
 
         if debug:
-            print("===== DEBUG: Kie request BEGIN" + (f" [{label}]" if label else "") + " =====")
-            print(f"Base URL (OpenAI SDK): {base_url}")
-            print(f"Model: {model_name} | temperature: {params.get('temperature')} | top_p: {params.get('top_p')}")
-            print(f"Messages: {len(params.get('messages', []))} (system={sum(1 for m in params.get('messages', []) if m.get('role') == 'system')})")
-            print("===== DEBUG: Kie request END =====")
+            print(f"[DEBUG] Kie request [{label or 'generation'}]")
+            print(f"[DEBUG] Base URL (OpenAI SDK): {base_url}")
+            print(f"[DEBUG] Model: {model_name} | temperature: {params.get('temperature')} | top_p: {params.get('top_p')}")
+            print(f"[DEBUG] Messages: {len(params.get('messages', []))} (system={sum(1 for m in params.get('messages', []) if m.get('role') == 'system')})")
 
         client = self._OpenAI(api_key=self._api_key, base_url=base_url)
         try:
@@ -477,10 +475,7 @@ class KieAdapter(LLMAdapter):
                 text = self._extract_text(dumped)
                 if text:
                     return text
-                if debug:
-                    preview = self._short_body_preview(json.dumps(dumped, ensure_ascii=False).encode("utf-8"))
-                    if preview:
-                        print(f"[DEBUG] {self.name()} SDK response dump (empty text): {preview}")
+                log_trace(f"{self.name()} SDK response dump (empty text): {json.dumps(dumped, ensure_ascii=False)}")
             return ""
         except Exception as e:
             self._raise_mapped_error(str(e), status=None, debug=debug)
@@ -501,11 +496,10 @@ class KieAdapter(LLMAdapter):
         endpoint = self._endpoint_for_model(model_name)
 
         if debug:
-            print("===== DEBUG: Kie request BEGIN" + (f" [{label}]" if label else "") + " =====")
-            print(f"Endpoint: {endpoint}")
-            print(f"Model: {model_name} | temperature: {payload.get('temperature')} | top_p: {payload.get('top_p')}")
-            print(f"Messages: {len(payload.get('messages', []))} (system={sum(1 for m in payload.get('messages', []) if m.get('role') == 'system')})")
-            print("===== DEBUG: Kie request END =====")
+            print(f"[DEBUG] Kie request [{label or 'generation'}]")
+            print(f"[DEBUG] Endpoint: {endpoint}")
+            print(f"[DEBUG] Model: {model_name} | temperature: {payload.get('temperature')} | top_p: {payload.get('top_p')}")
+            print(f"[DEBUG] Messages: {len(payload.get('messages', []))} (system={sum(1 for m in payload.get('messages', []) if m.get('role') == 'system')})")
 
         body = json.dumps(payload).encode("utf-8")
         req = urllib_request.Request(
@@ -525,19 +519,13 @@ class KieAdapter(LLMAdapter):
                 raw = resp.read()
                 parsed = self._json_loads_bytes(raw)
                 if not parsed:
-                    if debug:
-                        preview = self._short_body_preview(raw)
-                        if preview:
-                            print(f"[DEBUG] {self.name()} non-JSON success body: {preview}")
+                    log_trace(f"{self.name()} non-JSON success body: {raw.decode('utf-8', errors='replace')}")
                     raise LLMUnknownError("Kie response is not valid JSON")
                 self._raise_if_kie_envelope_error(parsed, debug=debug)
                 text = self._extract_text(parsed)
                 if text:
                     return text
-                if debug:
-                    preview = self._short_body_preview(raw)
-                    if preview:
-                        print(f"[DEBUG] {self.name()} success JSON body (empty text after parse): {preview}")
+                log_trace(f"{self.name()} success JSON body (empty text after parse): {raw.decode('utf-8', errors='replace')}")
                 return ""
         except urllib_error.HTTPError as e:
             status = getattr(e, "code", None)
@@ -546,10 +534,7 @@ class KieAdapter(LLMAdapter):
                 err_body = e.read()
             except Exception:
                 err_body = b""
-            if debug:
-                preview = self._short_body_preview(err_body)
-                if preview:
-                    print(f"[DEBUG] {self.name()} HTTP {status} body: {preview}")
+            log_trace(f"{self.name()} HTTP {status} body: {err_body.decode('utf-8', errors='replace')}")
             parsed = self._json_loads_bytes(err_body)
             provider_msg = self._extract_error_message(parsed)
             message = self._format_http_error_message(

@@ -68,6 +68,8 @@ is_media_extension() {
     esac
 }
 
+lecture_workflow_init_logging "$@"
+
 while [[ $# -gt 0 ]]; do
     case "$1" in
         -h|--help)
@@ -76,7 +78,7 @@ while [[ $# -gt 0 ]]; do
             ;;
         --lang)
             if [[ -z "${2:-}" ]]; then
-                echo "Error: --lang requires a language code."
+                echo "Error: --lang requires a language code." >&2
                 exit 1
             fi
             LANG="$2"
@@ -84,7 +86,7 @@ while [[ $# -gt 0 ]]; do
             ;;
         --outdir)
             if [[ -z "${2:-}" ]]; then
-                echo "Error: --outdir requires a directory path."
+                echo "Error: --outdir requires a directory path." >&2
                 exit 1
             fi
             OUTDIR="$2"
@@ -92,7 +94,7 @@ while [[ $# -gt 0 ]]; do
             ;;
         --srtoutdir)
             if [[ -z "${2:-}" ]]; then
-                echo "Error: --srtoutdir requires a directory path."
+                echo "Error: --srtoutdir requires a directory path." >&2
                 exit 1
             fi
             SRT_OUTDIR="$2"
@@ -100,7 +102,7 @@ while [[ $# -gt 0 ]]; do
             ;;
         --context-file)
             if [[ -z "${2:-}" ]]; then
-                echo "Error: --context-file requires a filename."
+                echo "Error: --context-file requires a filename." >&2
                 exit 1
             fi
             CONTEXT_FILES+=("$2")
@@ -123,7 +125,7 @@ while [[ $# -gt 0 ]]; do
                 shift "$LECTURE_CLEANUP_OPTION_SHIFT"
             else
                 status=$?
-                [[ "$status" -eq 2 ]] || echo "Error: unknown option '$1'."
+                [[ "$status" -eq 2 ]] || echo "Error: unknown option '$1'." >&2
                 print_help
                 exit 2
             fi
@@ -136,19 +138,19 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ -z "$LANG" ]]; then
-    echo "Error: --lang is mandatory."
+    echo "Error: --lang is mandatory." >&2
     echo
     print_help
     exit 1
 fi
 
 if [[ "$ALL_MODE" -eq 1 && ${#INPUT_FILES[@]} -gt 0 ]]; then
-    echo "Error: --all cannot be combined with explicit file arguments."
+    echo "Error: --all cannot be combined with explicit file arguments." >&2
     exit 1
 fi
 
 if [[ "$ALL_MODE" -eq 0 && ${#INPUT_FILES[@]} -eq 0 ]]; then
-    echo "Error: Provide files to process or use --all."
+    echo "Error: Provide files to process or use --all." >&2
     echo
     print_help
     exit 1
@@ -157,7 +159,7 @@ fi
 if [[ ${#CONTEXT_FILES[@]} -gt 0 ]]; then
     for ctx in "${CONTEXT_FILES[@]}"; do
         if [[ ! -f "$ctx" ]]; then
-            echo "Error: context file not found: $ctx"
+            echo "Error: context file not found: $ctx" >&2
             exit 1
         fi
     done
@@ -178,21 +180,21 @@ if [[ "$ALL_MODE" -eq 1 ]]; then
     shopt -u nullglob
 
     if [[ ${#INPUT_FILES[@]} -eq 0 ]]; then
-        echo "[!] No known audio/video files found in current directory: $PWD"
+        echo "[WARN] No known audio/video files found in current directory: $PWD"
         exit 1
     fi
 fi
 
 for media_file in "${INPUT_FILES[@]}"; do
     if [[ ! -f "$media_file" ]]; then
-        echo "Error: file not found: $media_file"
+        echo "Error: file not found: $media_file" >&2
         exit 1
     fi
 done
 
 CHILD_SCRIPT="$SCRIPT_DIR/process_localaudiovideo_via_speechcore.sh"
 if [[ ! -f "$CHILD_SCRIPT" ]]; then
-    echo "Error: child script not found: $CHILD_SCRIPT"
+    echo "Error: child script not found: $CHILD_SCRIPT" >&2
     exit 1
 fi
 

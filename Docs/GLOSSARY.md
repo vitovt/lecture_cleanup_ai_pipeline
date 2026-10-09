@@ -2,6 +2,8 @@
 
 This file is the entry point for project documentation.
 
+- [LOGGING.md](LOGGING.md) — shared verbosity levels, progress messages, and command-output boundaries.
+
 - [ARCHITECTURE.md](ARCHITECTURE.md) — short module and dependency map.
 - [FORMATS.md](FORMATS.md) — configuration, manifest, transcript, event, report,
   and interconnection formats.

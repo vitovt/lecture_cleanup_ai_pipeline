@@ -26,7 +26,8 @@ class CliValidationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             audio = Path(directory) / 'audio.flac'
             audio.write_bytes(b'audio')
-            args = build_parser().parse_args(['transcribe', '--input-file', str(audio), '--output-dir', directory])
+            args = build_parser().parse_args(['transcribe', '--input-file', str(audio), '--output-dir', directory,
+                                               '--metadata-output', str(Path(directory) / 'metadata.json')])
             settings = dict(provider='elevenlabs', model='test', language_codes=['uk'],
                             provider_language_code='uk', vocabulary=[], mode='verbatim',
                             timestamps=True, diarization=False, max_seconds=100, overlap=0)
@@ -34,12 +35,15 @@ class CliValidationTests(unittest.TestCase):
             provider.transcribe.return_value = {'text': 'PRIVATE_TRANSCRIPT', 'words': []}
             for level in [20, 10, 5]:
                 prepared = PreparedAudio([AudioPart(audio, 0, 1, 0, 1)], 1)
+                stdout = StringIO()
                 with patch('stt_api.cli._provider', return_value=provider), \
                      patch('stt_api.cli.prepare_audio', return_value=prepared), \
                      patch('stt_api.cli.CheckpointStore') as store, \
-                     redirect_stdout(StringIO()), self.assertLogs('stt-api', level=level) as logs:
+                     redirect_stdout(stdout), self.assertLogs('stt-api', level=level) as logs:
                     store.return_value.read.return_value = None
                     transcribe({}, args, settings)
+                self.assertEqual(stdout.getvalue(), '')  # Bridge stdout stays protocol-only.
+                self.assertTrue(Path(args.metadata_output).is_file())
                 output = '\n'.join(logs.output)
                 self.assertLess(output.index('Preparing provider audio'), output.index('Transcribing part'))
                 self.assertIn('Audio ready', output)

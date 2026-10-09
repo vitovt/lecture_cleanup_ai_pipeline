@@ -91,10 +91,9 @@ class GeminiAdapter(LLMAdapter):
                 model_obj = self._genai.GenerativeModel(model_name)
 
             if debug:
-                print("===== DEBUG: Gemini request BEGIN" + (f" [{label}]" if label else "") + " =====")
-                print(f"Model: {model_name} | temperature: {generation_config.get('temperature')} | top_p: {generation_config.get('top_p')}")
-                print(f"Prompt chars: {len(prompt)} | system: {bool(system_instruction)}")
-                print("===== DEBUG: Gemini request END =====")
+                print(f"[DEBUG] Gemini request [{label or 'generation'}]: model={model_name}, "
+                      f"temperature={generation_config.get('temperature')}, top_p={generation_config.get('top_p')}, "
+                      f"prompt characters={len(prompt)}, system={bool(system_instruction)}")
 
             resp = model_obj.generate_content(
                 prompt,
