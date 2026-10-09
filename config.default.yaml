@@ -158,7 +158,7 @@ process_timecodes_by_ai: true
 # - outdir         : write next to the .md output (current behavior)
 # - default_outdir : always write to ./output regardless of --outdir
 # - off            : do not create a QC report
-qc_report_mode: outdir
+qc_report_mode: "off"
 
 # Content optimization mode:
 # Provide file name relative to prompts/system_ (without .md).
