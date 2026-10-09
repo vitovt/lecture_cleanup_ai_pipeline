@@ -5,6 +5,7 @@ import json
 import logging
 import os
 import sys
+import time
 from pathlib import Path
 from typing import Any
 
@@ -316,9 +317,13 @@ def transcribe(config: dict[str, Any], args: argparse.Namespace, settings: dict[
     resume = bool(get_path(config, "processing.resume.enabled", True))
     store = CheckpointStore(cache_dir, resume)
     provider = _provider(config, settings)
+    LOG.info("Preparing provider audio: inspecting duration and splitting if needed")
+    started = time.monotonic()
     prepared = prepare_audio(
         input_path, max_seconds=settings["max_seconds"], overlap_seconds=settings["overlap"]
     )
+    LOG.info("Audio ready: %.3fs, %d part(s)", prepared.duration, len(prepared.parts))
+    LOG.debug("Audio preparation completed in %.2fs; input=%s", time.monotonic() - started, input_path)
     all_events: list[dict[str, Any]] = []
     plain_parts: list[str] = []
     raw_parts: list[dict[str, Any]] = []
@@ -326,10 +331,15 @@ def transcribe(config: dict[str, Any], args: argparse.Namespace, settings: dict[
     try:
         for index, part in enumerate(prepared.parts):
             checkpoint_settings = {**settings, "offset": part.offset, "duration": part.duration}
+            LOG.info("Checking checkpoint for part %d/%d", index + 1, len(prepared.parts))
+            started = time.monotonic()
             key = fingerprint(part.path, checkpoint_settings)
             result = store.read(key)
+            LOG.debug("Checkpoint %s in %.2fs; offset=%.3fs, duration=%.3fs", "hit" if result is not None else "miss", time.monotonic() - started, part.offset, part.duration)
             if result is None:
                 LOG.info("Transcribing part %d/%d", index + 1, len(prepared.parts))
+                started = time.monotonic()
+                LOG.log(5, "Transcription settings: %s", checkpoint_settings)
                 result = provider.transcribe(
                     part.path,
                     model=settings["model"],
@@ -340,6 +350,8 @@ def transcribe(config: dict[str, Any], args: argparse.Namespace, settings: dict[
                     diarization=settings["diarization"],
                     **({"num_speakers": settings["num_speakers"]} if settings.get("num_speakers") is not None else {}),
                 )
+                LOG.debug("Part %d completed in %.2fs; words=%d, text characters=%d", index + 1, time.monotonic() - started, len(result.get("words") or []), len(result.get("text") or ""))
+                LOG.log(5, "Provider response: %s", result)
                 store.write(key, result)
             else:
                 LOG.info("Reusing checkpoint for part %d/%d", index + 1, len(prepared.parts))

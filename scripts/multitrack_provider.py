@@ -47,8 +47,12 @@ def execute(payload: dict) -> dict:
     import logging
     level = source.get('log_level', 'info')
     logging.basicConfig(level={'quiet': 100, 'error': logging.ERROR, 'info': logging.INFO,
-                               'debug': logging.DEBUG, 'trace': logging.DEBUG}[level],
+                               'debug': logging.DEBUG, 'trace': 5}[level],
                         format='[%(levelname)s] %(message)s', stream=sys.stderr)
+    logging.addLevelName(5, 'TRACE')
+    logging.getLogger('httpx').setLevel(logging.WARNING)
+    logging.getLogger('httpcore').setLevel(logging.WARNING)
+    logging.debug('Provider bridge: action=%s, provider=%s, source=%s', action, provider, source['id'])
     if provider == 'groq':
         sys.path.insert(0, str(ROOT / 'groq-api'))
         from groq_api import cli
@@ -118,8 +122,11 @@ def execute(payload: dict) -> dict:
     load_env_file(directory / '.env')
     # Provider's metadata stdout belongs to the bridge protocol, so redirect it.
     from contextlib import redirect_stdout
-    with redirect_stdout(sys.stderr):
+    from io import StringIO
+    metadata_stdout = StringIO()
+    with redirect_stdout(metadata_stdout):
         cli.transcribe(config, args, settings)
+    logging.log(5, "Provider metadata: %s", metadata_stdout.getvalue().strip())
     return json.loads(Path(args.metadata_output).read_text())
 
 

@@ -2,12 +2,39 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import patch, Mock
 
-from stt_api.cli import main, _preflight
+from stt_api.cli import main, _preflight, build_parser, transcribe
+from stt_api.media import PreparedAudio, AudioPart
+from contextlib import redirect_stdout
+from io import StringIO
 
 
 class CliValidationTests(unittest.TestCase):
+    def test_progress_and_payload_log_levels(self):
+        with tempfile.TemporaryDirectory() as directory:
+            audio = Path(directory) / 'audio.flac'
+            audio.write_bytes(b'audio')
+            args = build_parser().parse_args(['transcribe', '--input-file', str(audio), '--output-dir', directory])
+            settings = dict(provider='elevenlabs', model='test', language_codes=['uk'],
+                            provider_language_code='uk', vocabulary=[], mode='verbatim',
+                            timestamps=True, diarization=False, max_seconds=100, overlap=0)
+            provider = Mock()
+            provider.transcribe.return_value = {'text': 'PRIVATE_TRANSCRIPT', 'words': []}
+            for level in [20, 10, 5]:
+                prepared = PreparedAudio([AudioPart(audio, 0, 1, 0, 1)], 1)
+                with patch('stt_api.cli._provider', return_value=provider), \
+                     patch('stt_api.cli.prepare_audio', return_value=prepared), \
+                     patch('stt_api.cli.CheckpointStore') as store, \
+                     redirect_stdout(StringIO()), self.assertLogs('stt-api', level=level) as logs:
+                    store.return_value.read.return_value = None
+                    transcribe({}, args, settings)
+                output = '\n'.join(logs.output)
+                self.assertLess(output.index('Preparing provider audio'), output.index('Transcribing part'))
+                self.assertIn('Audio ready', output)
+                self.assertEqual('PRIVATE_TRANSCRIPT' in output, level == 5)
+                self.assertEqual('Checkpoint miss in' in output, level <= 10)
+
     def test_excerpt_preflight_uses_planned_duration_without_reading_full_media(self):
         settings = {
             "max_seconds": 1500, "overlap": 5, "provider": "gemini", "model": "test",

@@ -7,6 +7,7 @@ import os
 import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import yaml
@@ -18,6 +19,13 @@ from multitrack.formats import write_custom_txt
 
 sys.path.insert(0, str(ROOT / 'subtitle-utils'))
 from audio_streams import inspect_audio, require_single_audio
+
+
+def _log(plan: dict, message: str, *, debug: bool = False) -> None:
+    level = plan.get('log_level', 'info')
+    if level in {'quiet', 'error'} or (debug and level not in {'debug', 'trace'}):
+        return
+    print(f"[{'DEBUG' if debug else 'INFO'}] {message}", file=sys.stderr, flush=True)
 
 
 def provider_call(source: dict, action: str, *, credentials: bool = False, output: Path | None = None) -> dict:
@@ -155,11 +163,13 @@ def run(plan: dict) -> Path:
     inputs = []
     speaker_owners = {}
     for source in plan['sources']:
-        if plan["log_level"] not in {"quiet", "error"}:
-            print(f"Source {source['id']}: {source['provider']} / {source['diarization']}", flush=True)
+        _log(plan, f"Source {source['id']}: {source['provider']} / {source['diarization']}")
         destination = Path(source['audio_output']).parent
         destination.mkdir(parents=True, exist_ok=True)
+        _log(plan, f"Source {source['id']}: hashing input and checking completed-source cache")
+        started = time.monotonic()
         signature = _fingerprint(source)
+        _log(plan, f"Input fingerprint ready in {time.monotonic() - started:.2f}s; input={source['input']}", debug=True)
         stamp = destination / 'completed.json'
         txt = Path(source['txt_output'])
         cached = False
@@ -170,6 +180,7 @@ def run(plan: dict) -> Path:
                     read_timestamped_txt(txt)
             except (ValueError, OSError):
                 cached = False
+        _log(plan, f"Source {source['id']}: cache {'hit; reusing source TXT' if cached else 'miss or bypassed; processing audio'}")
         if not cached:
             audio = Path(source['audio_output'])
             temporary = audio.with_name('audio.part.flac')
@@ -177,16 +188,23 @@ def run(plan: dict) -> Path:
                        '-ss', str(source['extract_seek']), '-i', source['input'],
                        '-t', str(source['duration']), '-map', f"0:{source['stream_index']}",
                        '-vn', '-c:a', 'flac', str(temporary)]
+            _log(plan, f"Source {source['id']}: extracting {source['duration']:.3f}s of audio")
+            _log(plan, f"Extraction: stream={source['stream_index']}, seek={source['extract_seek']:.3f}s, output={audio}", debug=True)
+            started = time.monotonic()
             result = subprocess.run(command, capture_output=True, text=True)
             if result.returncode:
                 raise ValueError(f'extraction failed: {result.stderr.strip()}')
             temporary.replace(audio)
+            _log(plan, f"Extraction complete in {time.monotonic() - started:.2f}s; {audio.stat().st_size} bytes", debug=True)
             provider_dir = destination / 'provider'
             provider_dir.mkdir(exist_ok=True)
             effective = {**source, 'input': str(audio)}
             if plan['overwrite']:
                 effective['resume'] = 'off'
+            _log(plan, f"Source {source['id']}: starting {source['provider']} provider preparation")
+            started = time.monotonic()
             metadata = provider_call(effective, 'transcribe', credentials=True, output=provider_dir)
+            _log(plan, f"Provider completed in {time.monotonic() - started:.2f}s; transcript={metadata['transcript_file']}", debug=True)
             raw_txt = Path(metadata['transcript_file'])
             events = name_source_events(read_timestamped_txt(raw_txt), source['name'], source['diarization'], source['num_speakers'])
             write_custom_txt(txt, events)
@@ -199,9 +217,12 @@ def run(plan: dict) -> Path:
     output = Path(plan['merged_txt'])
     output.parent.mkdir(parents=True, exist_ok=True)
     temporary = output.with_suffix('.part.txt')
+    _log(plan, f"Merging {len(inputs)} source transcripts by timestamp")
     merge_txt_files(inputs, temporary)
     temporary.replace(output)
+    _log(plan, f"Merged transcript: {output}")
     if plan['cleanup']:
+        _log(plan, 'Starting lecture cleanup')
         speaker_context = workdir / 'speaker-context.md'
         speaker_context.write_text(
             'Preserve every speaker label and speaker change in this conversation. '
@@ -211,4 +232,6 @@ def run(plan: dict) -> Path:
                    '--outdir', plan['outdir'], '--log-level', plan['log_level'],
                    '--context-file', str(speaker_context), *plan['cleanup_args']]
         subprocess.run(command, check=True)
+    else:
+        _log(plan, f"Stopping after merge: {plan.get('stop_reason') or 'cleanup disabled'}. Source artifacts retained.")
     return output

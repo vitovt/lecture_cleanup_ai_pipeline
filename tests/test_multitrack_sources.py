@@ -13,6 +13,13 @@ from multitrack.merging import read_timestamped_txt, name_source_events, merge_t
 
 
 class ResolutionTests(unittest.TestCase):
+    def test_stop_reason_follows_effective_cleanup_policy(self):
+        source = ['--source', 'a', '--file', 'a.wav']
+        self.assertIn('multitrack.stop_after_merge=true', resolve(source)['stop_reason'])
+        self.assertIn('--stop-after-merge', resolve(['--stop-after-merge', *source])['stop_reason'])
+        self.assertIn('standalone', resolve(['--cleanup', *source], standalone=True)['stop_reason'])
+        self.assertIsNone(resolve(['--cleanup', *source])['stop_reason'])
+
     def test_scope_and_conditional_recording(self):
         p = resolve(['--lang','uk','--source','a','--track','2','--name','Alice','movie.mkv'])
         self.assertEqual(p['sources'][0]['name'], 'Alice')

@@ -308,5 +308,8 @@ def resolve(argv: list[str], *, standalone: bool = False) -> dict:
         'output_name': name, 'dry_run': workflow.get('dry_run', False),
         'overwrite': workflow.get('overwrite', False), 'log_level': level,
         'cleanup': not standalone and not workflow.get('stop_after_merge', False) and (workflow.get('cleanup', False) or not configured.get('stop_after_merge', True)),
+        'stop_reason': ('standalone transcription never runs cleanup' if standalone else
+                        '--stop-after-merge was specified' if workflow.get('stop_after_merge') else
+                        'multitrack.stop_after_merge=true (root configuration/default)' if not workflow.get('cleanup') and configured.get('stop_after_merge', True) else None),
         'cleanup_lang': workflow.get('cleanup_lang'), 'cleanup_args': cleanup,
     }

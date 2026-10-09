@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import subprocess
+from contextlib import redirect_stderr
+from io import StringIO
 import tempfile
 import unittest
 from pathlib import Path
@@ -68,7 +70,13 @@ class ExcerptTests(unittest.TestCase):
                 plan = preflight(resolve([*base,'--start','0.5','--end','1.25',*sources]))
                 self.assertFalse((root/'work').exists())
                 self.assertEqual([s['extract_start'] for s in plan['sources']],[.5,.25])
-                events=read_timestamped_txt(run(plan))
+                logs = StringIO()
+                with redirect_stderr(logs):
+                    events=read_timestamped_txt(run(plan))
+                for message in ['hashing input', 'extracting 0.750s', 'provider preparation',
+                                'Merging 2 source', 'multitrack.stop_after_merge=true']:
+                    self.assertIn(message, logs.getvalue())
+                self.assertNotIn('[DEBUG]', logs.getvalue())
                 self.assertEqual([e.start for e in events],[.51,.51])
                 self.assertEqual([e.speaker for e in events],['Teacher','Student'])
                 run(plan)

@@ -147,6 +147,17 @@ stops after TXT merging. To merge already reviewed source TXT without any ASR or
 cleanup calls, use [merge_transcripts.py](TOOL_MergeTranscripts.md). Supply the
 appropriate offsets, including excerpt origins when using excerpt-local TXT.
 
+## Progress logging
+
+INFO reports hashing/cache checks, extraction, provider preparation, chunk
+preparation, transcription, merging, and the reason cleanup is skipped.
+Use global `--debug` for elapsed times, sizes, paths, and concise provider results.
+`--trace` additionally includes STT request settings and full provider responses;
+DEBUG does not print transcript payloads. Credentials and audio bytes are not
+included in these payload logs. Quiet/error modes suppress progress messages.
+The stop message distinguishes `multitrack.stop_after_merge=true`, an explicit
+`--stop-after-merge`, and the always-cleanup-free standalone utility.
+
 ## Reporting a problem
 
 Keep the exact command or preset, the affected source ID/provider, the relevant

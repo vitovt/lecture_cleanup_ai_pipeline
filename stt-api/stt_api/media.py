@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import logging
+import time
 import shutil
 import subprocess
 import tempfile
@@ -72,9 +74,12 @@ def prepare_audio(path: Path, *, max_seconds: float, overlap_seconds: float) -> 
                 "-ss", str(offset), "-i", str(path), "-t", str(part_duration),
                 "-vn", "-ar", "16000", "-ac", "1", "-c:a", "flac", str(output),
             ]
+            logging.getLogger("stt-api").info("Preparing audio part %d: offset=%.3fs, duration=%.3fs", index + 1, offset, part_duration)
+            started = time.monotonic()
             result = subprocess.run(command, capture_output=True, text=True, check=False)
             if result.returncode != 0 or not output.is_file():
                 raise InputError(f"ffmpeg failed to create audio chunk: {result.stderr.strip()}")
+            logging.getLogger("stt-api").debug("Audio part %d ready in %.2fs; %d bytes", index + 1, time.monotonic() - started, output.stat().st_size)
             ownership_start = offset if index == 0 else offset + overlap_seconds / 2
             ownership_end = min(duration, offset + part_duration)
             if ownership_end < duration:
