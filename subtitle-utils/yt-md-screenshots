@@ -1,0 +1,190 @@
+#!/usr/bin/env python3
+"""Insert timestamped YouTube frames after standalone 🎥 links in Markdown."""
+
+import argparse
+import os
+import re
+import shutil
+import stat
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+from urllib.parse import parse_qs, urlparse
+
+VIDEO_LINK = re.compile(r"^([ \t]*)\[🎥[^\]\r\n]*\]\((https?://[^\s)]+)\)[ \t]*$")
+FENCE = re.compile(r"^[ \t]{0,3}(`{3,}|~{3,})")
+VIDEO_ID = re.compile(r"^[A-Za-z0-9_-]{11}$")
+
+
+def seconds_of(value):
+    value = value.strip().lower()
+    if value.isdigit():
+        return int(value)
+    if re.fullmatch(r"\d+(?::\d+){1,2}", value):
+        total = 0
+        for chunk in value.split(":"):
+            total = total * 60 + int(chunk)
+        return total
+    parts = re.findall(r"(\d+)([hms])", value)
+    if parts and "".join(f"{n}{unit}" for n, unit in parts) == value:
+        return sum(int(n) * {"h": 3600, "m": 60, "s": 1}[unit]
+                   for n, unit in parts)
+    return None
+
+
+def youtube_target(url):
+    parsed = urlparse(url)
+    host = (parsed.hostname or "").lower()
+    path = parsed.path.strip("/")
+
+    if host in {"youtu.be", "www.youtu.be"}:
+        video_id = path.split("/")[0]
+    elif host in {"youtube.com", "www.youtube.com", "m.youtube.com", "music.youtube.com", "www.youtube-nocookie.com", "youtube-nocookie.com"}:
+        if path == "watch":
+            video_id = parse_qs(parsed.query).get("v", [""])[0]
+        elif path.split("/")[0] in {"shorts", "live", "embed"}:
+            video_id = path.split("/")[1] if "/" in path else ""
+        else:
+            return None
+    else:
+        return None
+
+    if not VIDEO_ID.fullmatch(video_id):
+        return None
+
+    params = parse_qs(parsed.query)
+    fragment = parse_qs(parsed.fragment)
+    for field in ("t", "start", "time_continue"):
+        value = params.get(field, fragment.get(field, []))
+        if value:
+            seconds = seconds_of(value[0])
+            if seconds is not None:
+                return video_id, seconds
+    return None
+
+
+def create_frame(video_id, seconds, destination):
+    """Fetch only a ~2-second section, and save its opening video frame."""
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix=".ytshot-", dir=destination.parent) as temp:
+        folder = Path(temp)
+        download = [
+            "yt-dlp", "--no-playlist",
+            "-f", "bv*[height<=720]/bv*/b[height<=720]/b",
+            "--download-sections", f"*{seconds}-{seconds + 2}",
+            "--force-keyframes-at-cuts",
+            "-o", str(folder / "clip.%(ext)s"),
+            f"https://www.youtube.com/watch?v={video_id}",
+        ]
+        subprocess.run(download, check=True, stdout=subprocess.DEVNULL,
+                       stderr=subprocess.PIPE, text=True)
+
+        clips = [file for file in folder.glob("clip.*")
+                 if file.is_file() and file.suffix not in {".part", ".ytdl", ".json"}]
+        if not clips:
+            raise RuntimeError("yt-dlp did not produce a video clip")
+
+        frame = folder / "frame.png"
+        subprocess.run([
+            "ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
+            "-i", str(clips[0]), "-frames:v", "1", str(frame),
+        ], check=True, stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE, text=True)
+        if not frame.is_file() or frame.stat().st_size == 0:
+            raise RuntimeError("ffmpeg did not produce an image")
+        os.replace(frame, destination)
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("markdown", type=Path, help="Markdown file to update")
+    parser.add_argument("--force", action="store_true", help="Recreate existing PNG files")
+    args = parser.parse_args()
+    markdown = args.markdown.expanduser().resolve()
+    if not markdown.is_file():
+        parser.error(f"file not found: {markdown}")
+
+    for tool in ("yt-dlp", "ffmpeg"):
+        if not shutil.which(tool):
+            parser.error(f"missing dependency: {tool}")
+
+    with markdown.open("r", encoding="utf-8", newline="") as f:
+        original = f.read()
+    newline = "\r\n" if "\r\n" in original else "\n"
+    lines = original.splitlines(keepends=True)
+    result = []
+    inserted = failed = 0
+    fence_char = ""
+    fence_length = 0
+    resources = markdown.parent / "_resources"
+    processed = set()
+
+    for index, line in enumerate(lines):
+        result.append(line)
+        stripped = line.rstrip("\r\n")
+        fence = FENCE.match(stripped)
+        if fence:
+            marker = fence.group(1)
+            if not fence_char:
+                fence_char, fence_length = marker[0], len(marker)
+                continue
+            if marker[0] == fence_char and len(marker) >= fence_length and not stripped[fence.end():].strip():
+                fence_char, fence_length = "", 0
+            continue
+        if fence_char:
+            continue
+
+        match = VIDEO_LINK.fullmatch(stripped)
+        if not match:
+            continue
+        indent, url = match.groups()
+        target = youtube_target(url)
+        if target is None:
+            continue
+        video_id, seconds = target
+        name = f"img-{video_id}-{seconds}.png"
+        img_link = f"![](_resources/{name})"
+        already_linked = (index + 1 < len(lines)
+                          and lines[index + 1].strip() == img_link)
+        destination = resources / name
+
+        if (video_id, seconds) not in processed and (args.force or not destination.is_file()):
+            print(f"Extracting {video_id} @ {seconds}s ...", flush=True)
+            try:
+                create_frame(video_id, seconds, destination)
+            except (subprocess.CalledProcessError, OSError, RuntimeError) as exc:
+                details = (exc.stderr or "").strip() if isinstance(exc, subprocess.CalledProcessError) else str(exc)
+                print(f"ERROR: {video_id} @ {seconds}s: {details[-800:]}", file=sys.stderr)
+                failed += 1
+                continue
+        if not destination.is_file():
+            failed += 1
+            continue
+        processed.add((video_id, seconds))
+
+        if not already_linked:
+            if not line.endswith(("\n", "\r")):
+                result[-1] += newline
+            result.append(f"{indent}{img_link}{newline}")
+            inserted += 1
+
+    updated = "".join(result)
+    if updated != original:
+        with tempfile.NamedTemporaryFile("w", encoding="utf-8", newline="",
+                                         dir=markdown.parent, prefix=".mdedit-",
+                                         delete=False) as tmp:
+            temp_path = Path(tmp.name)
+            tmp.write(updated)
+        try:
+            os.chmod(temp_path, stat.S_IMODE(markdown.stat().st_mode))
+            os.replace(temp_path, markdown)
+        finally:
+            temp_path.unlink(missing_ok=True)
+
+    print(f"Done: inserted {inserted} image links; errors: {failed}")
+    return 1 if failed else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
