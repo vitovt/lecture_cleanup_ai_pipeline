@@ -1,190 +1,746 @@
 #!/usr/bin/env python3
-"""Insert timestamped YouTube frames after standalone 🎥 links in Markdown."""
+"""Insert timestamped video frames after standalone 🎥 links in Markdown."""
 
 import argparse
+import hashlib
+import html
+import json
+import math
 import os
 import re
+import shlex
 import shutil
+import signal
 import stat
 import subprocess
 import sys
 import tempfile
+import time
+import traceback
+from datetime import datetime
+from decimal import Decimal
 from pathlib import Path
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, quote, unquote, urlparse
 
-VIDEO_LINK = re.compile(r"^([ \t]*)\[🎥[^\]\r\n]*\]\((https?://[^\s)]+)\)[ \t]*$")
-FENCE = re.compile(r"^[ \t]{0,3}(`{3,}|~{3,})")
-VIDEO_ID = re.compile(r"^[A-Za-z0-9_-]{11}$")
+VIDEO_LINK = re.compile(r'^([ ]{0,3})\[🎥[^\]\r\n]*\]\(<?(https?://[^\s<>]+?)>?\)[ \t]*$')
+VIDEO_ID = re.compile(r'^[A-Za-z0-9_-]{11}$')
+FENCE = re.compile(r'^ {0,3}(`{3,}|~{3,})(.*)$')
+IMAGE = re.compile(r'!\[(?:\\.|[^\]\\])*\]\(\s*(?:<([^>\n]+)>|((?:\\.|[^\s])+?))(?:\s+["\'].*["\'])?\s*\)')
+GENERATED = re.compile(r'^img-(?:[A-Za-z0-9_-]{11}|local-.+-[0-9a-f]{4})-\d+(?:-offset-[pm][\d.]+)?\.png$')
+FORMAT = 'bv*[height<=1080]'
+
+
+class Problem(Exception):
+    def __init__(self, message, retryable=False):
+        super().__init__(message)
+        self.retryable = retryable
+
+
+class StopRun(Exception):
+    pass
+
+
+class Log:
+    def __init__(self, level):
+        self.level = {'quiet': 0, 'error': 1, 'info': 2, 'debug': 3, 'trace': 3}[level]
+
+    def info(self, message):
+        if self.level >= 2:
+            print(message, flush=True)
+
+    def error(self, message):
+        if self.level >= 1:
+            print(f'ERROR: {message}', file=sys.stderr, flush=True)
+
+    def debug(self, message):
+        if self.level >= 3:
+            print(message, file=sys.stderr, flush=True)
 
 
 def seconds_of(value):
     value = value.strip().lower()
-    if value.isdigit():
+    if re.fullmatch(r'[0-9]+', value):
         return int(value)
-    if re.fullmatch(r"\d+(?::\d+){1,2}", value):
+    if re.fullmatch(r'[0-9]+(?::[0-9]{1,2}){1,2}', value):
+        parts = [int(p) for p in value.split(':')]
+        if any(p >= 60 for p in parts[1:]):
+            return None
         total = 0
-        for chunk in value.split(":"):
-            total = total * 60 + int(chunk)
+        for part in parts:
+            total = total * 60 + part
         return total
-    parts = re.findall(r"(\d+)([hms])", value)
-    if parts and "".join(f"{n}{unit}" for n, unit in parts) == value:
-        return sum(int(n) * {"h": 3600, "m": 60, "s": 1}[unit]
-                   for n, unit in parts)
+    match = re.fullmatch(r'(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?', value, re.ASCII)
+    if match and any(match.groups()):
+        return sum(int(n or 0) * unit for n, unit in zip(match.groups(), (3600, 60, 1)))
     return None
 
 
 def youtube_target(url):
-    parsed = urlparse(url)
-    host = (parsed.hostname or "").lower()
-    path = parsed.path.strip("/")
-
-    if host in {"youtu.be", "www.youtu.be"}:
-        video_id = path.split("/")[0]
-    elif host in {"youtube.com", "www.youtube.com", "m.youtube.com", "music.youtube.com", "www.youtube-nocookie.com", "youtube-nocookie.com"}:
-        if path == "watch":
-            video_id = parse_qs(parsed.query).get("v", [""])[0]
-        elif path.split("/")[0] in {"shorts", "live", "embed"}:
-            video_id = path.split("/")[1] if "/" in path else ""
+    try:
+        parsed = urlparse(html.unescape(url))
+        host = (parsed.hostname or '').lower()
+        path = parsed.path.strip('/').split('/')
+        params = parse_qs(parsed.query, keep_blank_values=True)
+        fragment = parse_qs(parsed.fragment, keep_blank_values=True)
+    except ValueError as exc:
+        raise Problem('Malformed URL') from exc
+    if host in {'youtu.be', 'www.youtu.be'}:
+        video_id = path[0]
+    elif host in {'youtube.com', 'www.youtube.com', 'm.youtube.com', 'music.youtube.com',
+                  'youtube-nocookie.com', 'www.youtube-nocookie.com'}:
+        if path == ['watch']:
+            video_id = params.get('v', [''])[0]
+        elif len(path) >= 2 and path[0] in {'shorts', 'live', 'embed'}:
+            video_id = path[1]
         else:
-            return None
+            raise Problem('Unsupported YouTube URL path')
     else:
         return None
-
     if not VIDEO_ID.fullmatch(video_id):
-        return None
-
-    params = parse_qs(parsed.query)
-    fragment = parse_qs(parsed.fragment)
-    for field in ("t", "start", "time_continue"):
-        value = params.get(field, fragment.get(field, []))
-        if value:
-            seconds = seconds_of(value[0])
-            if seconds is not None:
-                return video_id, seconds
+        raise Problem('Invalid YouTube video ID')
+    for field in ('t', 'start', 'time_continue'):
+        values = params.get(field, fragment.get(field))
+        if values is not None:
+            seconds = seconds_of(values[0])
+            if seconds is None:
+                raise Problem(f'Invalid timestamp in {field}')
+            return video_id, seconds
     return None
 
 
-def create_frame(video_id, seconds, destination):
-    """Fetch only a ~2-second section, and save its opening video frame."""
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(prefix=".ytshot-", dir=destination.parent) as temp:
-        folder = Path(temp)
-        download = [
-            "yt-dlp", "--no-playlist",
-            "-f", "bv*[height<=720]/bv*/b[height<=720]/b",
-            "--download-sections", f"*{seconds}-{seconds + 2}",
-            "--force-keyframes-at-cuts",
-            "-o", str(folder / "clip.%(ext)s"),
-            f"https://www.youtube.com/watch?v={video_id}",
-        ]
-        subprocess.run(download, check=True, stdout=subprocess.DEVNULL,
-                       stderr=subprocess.PIPE, text=True)
-
-        clips = [file for file in folder.glob("clip.*")
-                 if file.is_file() and file.suffix not in {".part", ".ytdl", ".json"}]
-        if not clips:
-            raise RuntimeError("yt-dlp did not produce a video clip")
-
-        frame = folder / "frame.png"
-        subprocess.run([
-            "ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
-            "-i", str(clips[0]), "-frames:v", "1", str(frame),
-        ], check=True, stdout=subprocess.DEVNULL,
-            stderr=subprocess.PIPE, text=True)
-        if not frame.is_file() or frame.stat().st_size == 0:
-            raise RuntimeError("ffmpeg did not produce an image")
-        os.replace(frame, destination)
-
-
-def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("markdown", type=Path, help="Markdown file to update")
-    parser.add_argument("--force", action="store_true", help="Recreate existing PNG files")
-    args = parser.parse_args()
-    markdown = args.markdown.expanduser().resolve()
-    if not markdown.is_file():
-        parser.error(f"file not found: {markdown}")
-
-    for tool in ("yt-dlp", "ffmpeg"):
-        if not shutil.which(tool):
-            parser.error(f"missing dependency: {tool}")
-
-    with markdown.open("r", encoding="utf-8", newline="") as f:
-        original = f.read()
-    newline = "\r\n" if "\r\n" in original else "\n"
-    lines = original.splitlines(keepends=True)
-    result = []
-    inserted = failed = 0
-    fence_char = ""
-    fence_length = 0
-    resources = markdown.parent / "_resources"
-    processed = set()
-
-    for index, line in enumerate(lines):
-        result.append(line)
-        stripped = line.rstrip("\r\n")
-        fence = FENCE.match(stripped)
+def active_lines(lines):
+    """Conservative line scanner: exclude comments and code, including nested fences."""
+    active = []
+    fence = None
+    comment = False
+    for line in lines:
+        raw = line.rstrip('\r\n').lstrip('\ufeff')
+        # Strip list/quote prefixes only for detecting fences, never for finding links.
+        container = re.sub(r'^(?:\s*>\s*)+', '', raw)
+        container = re.sub(r'^\s*(?:[-+*]|\d+[.)])\s+', '', container)
+        marker = FENCE.match(container.lstrip() if fence else container)
         if fence:
-            marker = fence.group(1)
-            if not fence_char:
-                fence_char, fence_length = marker[0], len(marker)
-                continue
-            if marker[0] == fence_char and len(marker) >= fence_length and not stripped[fence.end():].strip():
-                fence_char, fence_length = "", 0
+            if marker and marker[1][0] == fence[0] and len(marker[1]) >= fence[1] and not marker[2].strip():
+                fence = None
+            active.append(False)
             continue
-        if fence_char:
+        had_comment = comment or '<!--' in raw
+        cursor = 0
+        while cursor < len(raw):
+            token = '-->' if comment else '<!--'
+            found = raw.find(token, cursor)
+            if found < 0:
+                break
+            comment = not comment
+            cursor = found + len(token)
+        if had_comment:
+            active.append(False)
             continue
+        if marker and not (marker[1][0] == '`' and '`' in marker[2]):
+            fence = (marker[1][0], len(marker[1]))
+            active.append(False)
+            continue
+        active.append(not (raw.startswith('    ') or raw.startswith('\t')))
+    return active
 
-        match = VIDEO_LINK.fullmatch(stripped)
+
+def image_filename(text):
+    match = IMAGE.fullmatch(text.strip())
+    if not match:
+        return None
+    url = html.unescape(match[1] or match[2])
+    url = re.sub(r'\\([!"#$%&\'()*+,\-./:;<=>?@\[\]^_`{|}~])', r'\1', url)
+    try:
+        parsed = urlparse(url)
+    except ValueError:
+        return None
+    if parsed.scheme or parsed.netloc:
+        return None
+    path = Path(unquote(parsed.path))
+    if path.parent not in (Path('_resources'), Path('./_resources')):
+        return None
+    return path.name if GENERATED.fullmatch(path.name) else None
+
+
+def collect(lines, report):
+    active = active_lines(lines)
+    references = {}
+    for index, line in enumerate(lines):
+        definition = re.fullmatch(r' {0,3}\[([^\]]+)\]:\s*(.+?)\s*', line.rstrip('\r\n'))
+        if active[index] and definition:
+            references.setdefault(' '.join(definition[1].casefold().split()),
+                                  image_filename(f'![]({definition[2]})'))
+
+    def attached_image(line):
+        name = image_filename(line)
+        if name:
+            return name
+        reference = re.fullmatch(r'!\[([^\]]*)\](?:\[([^\]]*)\])?', line.strip())
+        if reference:
+            label = reference[2] or reference[1]
+            return references.get(' '.join(label.casefold().split()))
+        return None
+
+    entries = []
+    for index, line in enumerate(lines):
+        if not active[index]:
+            continue
+        match = VIDEO_LINK.fullmatch(line.rstrip('\r\n').lstrip('\ufeff'))
         if not match:
             continue
-        indent, url = match.groups()
-        target = youtube_target(url)
+        try:
+            target = youtube_target(match[2])
+        except (Problem, ValueError) as exc:
+            report(f'line {index + 1}: {exc}')
+            continue
         if target is None:
             continue
-        video_id, seconds = target
-        name = f"img-{video_id}-{seconds}.png"
-        img_link = f"![](_resources/{name})"
-        already_linked = (index + 1 < len(lines)
-                          and lines[index + 1].strip() == img_link)
-        destination = resources / name
-
-        if (video_id, seconds) not in processed and (args.force or not destination.is_file()):
-            print(f"Extracting {video_id} @ {seconds}s ...", flush=True)
-            try:
-                create_frame(video_id, seconds, destination)
-            except (subprocess.CalledProcessError, OSError, RuntimeError) as exc:
-                details = (exc.stderr or "").strip() if isinstance(exc, subprocess.CalledProcessError) else str(exc)
-                print(f"ERROR: {video_id} @ {seconds}s: {details[-800:]}", file=sys.stderr)
-                failed += 1
+        images = []
+        following = index + 1
+        while following < len(lines):
+            if not lines[following].strip():
+                following += 1
                 continue
-        if not destination.is_file():
-            failed += 1
-            continue
-        processed.add((video_id, seconds))
+            name = attached_image(lines[following]) if active[following] else None
+            if not name:
+                break
+            images.append((following, name))
+            following += 1
+        entries.append({'index': index, 'indent': match[1], 'target': target, 'images': images})
+    return entries
 
-        if not already_linked:
-            if not line.endswith(("\n", "\r")):
-                result[-1] += newline
-            result.append(f"{indent}{img_link}{newline}")
-            inserted += 1
 
-    updated = "".join(result)
-    if updated != original:
-        with tempfile.NamedTemporaryFile("w", encoding="utf-8", newline="",
-                                         dir=markdown.parent, prefix=".mdedit-",
-                                         delete=False) as tmp:
-            temp_path = Path(tmp.name)
-            tmp.write(updated)
+def local_identity(path):
+    """Mirror sanitize_filename.sh, then constrain the readable portion of the name."""
+    name = ''.join(c for c in path.stem if ord(c) >= 32 and ord(c) != 127)
+    name = re.sub(r'[<>:"/\\|?*]', ' ', name)
+    name = re.sub(r'\s+', ' ', name).strip().rstrip('. ') or 'untitled'
+    if re.fullmatch(r'con|prn|aux|nul|com[1-9]|lpt[1-9]', name, re.I):
+        name = '_' + name
+    name = name.replace(' ', '_')[:64]
+    digest = hashlib.sha256()
+    before = path.stat()
+    with path.open('rb') as source:
+        for chunk in iter(lambda: source.read(1024 * 1024), b''):
+            digest.update(chunk)
+    after = path.stat()
+    if (before.st_size, before.st_mtime_ns) != (after.st_size, after.st_mtime_ns):
+        raise Problem(f'Local video changed while hashing: {path}')
+    return name, digest.hexdigest()[:4]
+
+
+def frame_name(video_id, seconds, offset, identity=None):
+    suffix = f'-{seconds}'
+    if offset:
+        offset_text = format(Decimal(str(abs(offset))), 'f')
+        if '.' in offset_text:
+            offset_text = offset_text.rstrip('0').rstrip('.')
+        suffix += f'-offset-{"p" if offset > 0 else "m"}{offset_text}'
+    suffix += '.png'
+    if len(suffix) > 100:
+        raise Problem('Timestamp/offset is too large for a PNG filename')
+    if identity:
+        stem, digest = identity
+        while len(f'img-local-{stem}-{digest}{suffix}'.encode('utf-8')) > 255:
+            stem = stem[:-1]
+        return f'img-local-{stem}-{digest}{suffix}'
+    return f'img-{video_id}{suffix}'
+
+
+def run_command(command, timeout, log):
+    tool = Path(command[0]).name
+    log.debug('$ ' + shlex.join(command))
+    try:
+        with subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                              text=True, errors='replace', start_new_session=True) as process:
+            try:
+                stdout, stderr = process.communicate(timeout=timeout)
+            except (subprocess.TimeoutExpired, KeyboardInterrupt) as exc:
+                os.killpg(process.pid, signal.SIGKILL)
+                stdout, stderr = process.communicate()
+                log.debug(stderr)
+                if isinstance(exc, KeyboardInterrupt):
+                    raise
+                raise Problem(f'{tool} timed out after {timeout:g}s', retryable=True) from exc
+    except FileNotFoundError as exc:
+        raise Problem(f'Missing dependency: {tool}') from exc
+    log.debug(stderr)
+    if process.returncode:
+        detail = stderr.lower()
+        transient = any(s in detail for s in ('403', '429', '500', '502', '503', '504',
+                        'timed out', 'timeout', 'connection', 'temporary failure', 'network'))
+        reason = next((f'HTTP {code}' for code in ('403', '404', '429', '500', '502', '503', '504')
+                       if code in detail), f'exited with code {process.returncode}')
+        raise Problem(f'{tool}: {reason}; use --debug for diagnostics', transient)
+    return stdout
+
+
+def retry(operation, attempts, log):
+    for number in range(1, attempts + 1):
         try:
-            os.chmod(temp_path, stat.S_IMODE(markdown.stat().st_mode))
-            os.replace(temp_path, markdown)
-        finally:
-            temp_path.unlink(missing_ok=True)
+            return operation()
+        except Problem as exc:
+            if not exc.retryable or number == attempts:
+                raise
+            log.info(f'Retrying after {exc} (attempt {number + 1}/{attempts})')
+            time.sleep(min(number, 3))
 
-    print(f"Done: inserted {inserted} image links; errors: {failed}")
-    return 1 if failed else 0
+
+def probe(path, timeout, log):
+    raw = run_command(['ffprobe', '-v', 'error', '-select_streams', 'v:0',
+                       '-show_entries', 'format=duration:stream=codec_name,duration,avg_frame_rate',
+                       '-of', 'json', str(path)], timeout, log)
+    try:
+        data = json.loads(raw)
+        stream = data['streams'][0]
+        duration = float(stream.get('duration', data.get('format', {}).get('duration', 0)))
+        if not math.isfinite(duration) or duration <= 0:
+            raise ValueError('Invalid duration')
+    except (ValueError, KeyError, IndexError, TypeError) as exc:
+        raise Problem(f'No usable video stream/duration: {path}') from exc
+    # Decode a frame as well; metadata alone does not establish decodability.
+    run_command(['ffmpeg', '-nostdin', '-v', 'error', '-xerror', '-i', str(path),
+                 '-map', '0:v:0', '-frames:v', '1', '-f', 'null', '-'], timeout, log)
+    return duration
 
 
-if __name__ == "__main__":
+def valid_png(path, timeout, log):
+    if not path.is_file() or path.stat().st_size == 0:
+        return False
+    with path.open('rb') as source:
+        if source.read(8) != b'\x89PNG\r\n\x1a\n':
+            return False
+    try:
+        run_command(['ffmpeg', '-nostdin', '-v', 'error', '-xerror', '-i', str(path),
+                     '-frames:v', '1', '-f', 'null', '-'], timeout, log)
+        return True
+    except Problem:
+        return False
+
+
+def atomic_copy(source, destination):
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    fd, name = tempfile.mkstemp(prefix='.ytshot-', suffix='.png', dir=destination.parent)
+    temporary = Path(name)
+    try:
+        with os.fdopen(fd, 'wb') as out, source.open('rb') as inp:
+            shutil.copyfileobj(inp, out)
+        os.replace(temporary, destination)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def create_frame(video, seconds, duration, destination, work, timeout, log):
+    frame = work / destination.name
+    frame.unlink(missing_ok=True)
+    if seconds >= duration:
+        # Decode the final tail and update the output for every frame: keep the last one.
+        seek = ['-sseof', '-5'] if duration > 5 else []
+        output = ['-update', '1']
+    else:
+        seek = ['-ss', f'{seconds:.6f}']
+        output = ['-frames:v', '1']
+    run_command(['ffmpeg', '-nostdin', '-hide_banner', '-v', 'error', '-xerror', '-y',
+                 *seek, '-i', str(video), '-map', '0:v:0', *output, str(frame)], timeout, log)
+    if not valid_png(frame, timeout, log):
+        raise Problem('ffmpeg did not produce a valid PNG')
+    atomic_copy(frame, destination)
+
+
+def yt_options(args):
+    return ['yt-dlp', '--no-playlist', '-f', FORMAT, '-S', 'res:1080', '--retries', '0',
+            '--fragment-retries', '0', '--extractor-retries', '0',
+            '--socket-timeout', str(args.socket_timeout),
+            *(['--verbose'] if args.log.level >= 3 else [])]
+
+
+def metadata(video_id, args):
+    raw = retry(lambda: run_command(
+        [*yt_options(args), '--simulate', '--dump-single-json',
+         f'https://www.youtube.com/watch?v={video_id}'], args.timeout, args.log),
+        args.attempts, args.log)
+    try:
+        # A user configuration may print extra fields alongside --dump-single-json.
+        objects = [json.loads(line) for line in raw.splitlines() if line.startswith('{')]
+        data = next(item for item in reversed(objects) if item.get('id') == video_id)
+        if data.get('is_live') or data.get('live_status') in ('is_live', 'is_upcoming'):
+            raise Problem('Active/upcoming livestreams are unsupported; use a completed recording')
+        duration = float(data['duration'])
+        if not math.isfinite(duration) or duration <= 0:
+            raise ValueError('Invalid duration')
+        if not data.get('formats'):
+            raise Problem('No downloadable video formats')
+        return duration
+    except (ValueError, KeyError, TypeError, StopIteration) as exc:
+        raise Problem('yt-dlp returned no usable video duration/metadata') from exc
+
+
+def download(video_id, work, args):
+    folder = work / video_id
+    folder.mkdir(exist_ok=True)
+    receipt = folder / 'download-path.jsonl'
+
+    def attempt():
+        receipt.unlink(missing_ok=True)
+        output = run_command([*yt_options(args), '--no-simulate',
+                     '--abort-on-unavailable-fragments', '--no-write-playlist-metafiles',
+                     '-P', f'temp:{folder}', '-o', str(folder / 'video.%(ext)s'),
+                     '--print-to-file', 'after_move:%(filepath)j', str(receipt),
+                     f'https://www.youtube.com/watch?v={video_id}'],
+                    args.download_timeout, args.log)
+        args.log.debug(output)
+        if not receipt.is_file():
+            raise Problem('yt-dlp produced no video path; check your yt-dlp configuration')
+        try:
+            path = Path(json.loads(receipt.read_text().splitlines()[-1])).resolve()
+        except (ValueError, IndexError, TypeError) as exc:
+            raise Problem('Invalid yt-dlp output path') from exc
+        if not path.is_relative_to(folder.resolve()) or not path.is_file() or path.suffix in ('.part', '.ytdl'):
+            raise Problem('yt-dlp did not produce a complete video inside the run directory')
+        duration = probe(path, args.timeout, args.log)
+        return path, duration
+
+    return retry(attempt, args.attempts, args.log)
+
+
+def write_markdown(path, original, updated, mode=None):
+    """Prepare in the destination filesystem, then check the source before replacement."""
+    if mode is None:
+        mode = stat.S_IMODE(path.stat().st_mode)
+    fd, name = tempfile.mkstemp(prefix='.mdedit-', dir=path.parent)
+    temporary = Path(name)
+    try:
+        with os.fdopen(fd, 'wb') as output:
+            output.write(updated)
+        os.chmod(temporary, mode)
+        try:
+            current = path.read_bytes()
+        except FileNotFoundError:
+            current = None
+        if current != original:
+            stamp = datetime.now().strftime('%Y%m%d-%H%M%S-%f')
+            conflict = path.with_name(f'{path.stem}-conflict-{stamp}{path.suffix}')
+            os.replace(temporary, conflict)
+            return conflict
+        os.replace(temporary, path)
+        return None
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def render(lines, entries, outcomes, args):
+    newline = '\r\n' if any(line.endswith('\r\n') for line in lines) else '\n'
+    edits, additions, removed = {}, {}, set()
+    seen = set()
+    for entry in entries:
+        target = entry['target']
+        first = target not in seen
+        seen.add(target)
+        name = outcomes.get(target)
+        if name is None:
+            continue
+        want = first or args.all_occurrences
+        images = entry['images']
+        if not want:
+            if args.deduplicate:
+                for index, old in images:
+                    edits[index] = ''
+                    removed.add(old)
+            continue
+        matching = [(i, old) for i, old in images if old == name]
+        replacement = f'{entry["indent"]}![](<_resources/{quote(name)}>)' + newline
+        if matching:
+            if args.deduplicate:
+                for index, old in images:
+                    if index != matching[0][0]:
+                        edits[index] = ''
+                        removed.add(old)
+            continue
+        if images:
+            index, old = images[0]
+            edits[index] = replacement
+            removed.add(old)
+            if args.deduplicate:
+                for index, old in images[1:]:
+                    edits[index] = ''
+                    removed.add(old)
+        else:
+            additions[entry['index']] = replacement
+    result = []
+    for index, line in enumerate(lines):
+        result.append(edits.get(index, line))
+        if index in additions:
+            if not line.endswith(('\n', '\r')):
+                result.append(newline)
+            result.append(additions[index])
+    updated = ''.join(result)
+    # Conservative reference check, including inline/reference-style links and code samples.
+    decoded = html.unescape(unquote(updated))
+    removed = {name for name in removed if name not in decoded}
+    return updated, removed, len(additions), len(edits)
+
+
+def positive(value):
+    number = float(value)
+    if not math.isfinite(number) or number <= 0:
+        raise argparse.ArgumentTypeError('must be a positive finite number')
+    return number
+
+
+def finite(value):
+    number = float(value)
+    if not math.isfinite(number):
+        raise argparse.ArgumentTypeError('must be finite')
+    return number
+
+
+class Parser(argparse.ArgumentParser):
+    def error(self, message):
+        raise Problem(message)
+
+
+def parser():
+    p = Parser(description=__doc__)
+    p.add_argument('markdown', type=Path, help='Markdown file to update')
+    p.add_argument('--local-video', action='append', default=[], metavar='[VIDEO_ID=]PATH',
+                   help='Use a local video; repeat with IDs for multiple sources (never modified)')
+    p.add_argument('--force', action='store_true', help='Regenerate PNGs even when cached')
+    group = p.add_mutually_exclusive_group()
+    group.add_argument('--all-occurrences', action='store_true', help='Insert at every occurrence')
+    group.add_argument('--deduplicate', action='store_true', help='Keep generated images only at the first occurrence')
+    p.add_argument('--preserve-cache', action='store_true', help='Keep the temporary run directory even on success')
+    p.add_argument('--offset', type=finite, default=0, metavar='SECONDS', help='Signed frame offset (default: 0)')
+    p.add_argument('--attempts', type=int, default=2, help='Total attempts for transient failures, including the first (default: 2)')
+    p.add_argument('--timeout', type=positive, default=120, metavar='SECONDS', help='Metadata/probe/frame timeout (default: 120)')
+    p.add_argument('--download-timeout', type=positive, default=3600, metavar='SECONDS', help='Full download timeout (default: 3600)')
+    p.add_argument('--socket-timeout', type=positive, default=30, metavar='SECONDS', help='Network socket timeout (default: 30)')
+    p.add_argument('--fail-fast', action='store_true', help='Stop at the first error; do not write partial Markdown')
+    p.add_argument('--follow-symlinks', action='store_true', help='Follow Markdown symlinks; use resources beside the real file')
+    p.add_argument('--dry-run', action='store_true', help='Validate and plan without downloading video or writing files')
+    p.add_argument('--log-level', choices=['quiet', 'error', 'info', 'debug', 'trace'], default='info',
+                   help='Logging verbosity (default: info; trace is equivalent to debug)')
+    p.add_argument('--debug', dest='log_level', action='store_const', const='debug', help='Show diagnostics, including yt-dlp and ffmpeg logs')
+    p.add_argument('--trace', dest='log_level', action='store_const', const='trace', help='Alias for --debug')
+    return p
+
+
+def local_sources(specs, video_ids):
+    sources = {}
+    for spec in specs:
+        if len(spec) > 11 and spec[11] == '=' and VIDEO_ID.fullmatch(spec[:11]):
+            video_id, filename = spec[:11], spec[12:]
+        elif len(video_ids) == 1:
+            video_id, filename = next(iter(video_ids)), spec
+        else:
+            raise Problem('Use --local-video VIDEO_ID=PATH when the document has multiple/no videos')
+        if video_id not in video_ids:
+            raise Problem(f'Local video mapping has no matching Markdown target: {video_id}')
+        if video_id in sources:
+            raise Problem(f'Duplicate local video mapping: {video_id}')
+        path = Path(filename).expanduser().resolve()
+        if not path.is_file():
+            raise Problem(f'Local video not found: {path}')
+        sources[video_id] = path
+    return sources
+
+
+def execute(args):
+    log = args.log
+    failures = 0
+    work = None
+    finished = False
+
+    def report(message):
+        nonlocal failures
+        failures += 1
+        log.error(message)
+        if sys.exc_info()[0]:
+            log.debug(traceback.format_exc())
+        if args.fail_fast:
+            raise StopRun()
+
+    def workspace():
+        nonlocal work
+        if work is None:
+            work = Path(tempfile.mkdtemp(prefix='md-screenshots-run-dir', dir='/tmp'))
+            log.info(f'Run directory: {work}')
+        return work
+
+    try:
+        if args.attempts < 1:
+            raise Problem('--attempts must be at least 1')
+        entered = Path(os.path.abspath(args.markdown.expanduser()))
+        markdown = entered.resolve()
+        if entered != markdown:
+            message = f'Markdown path follows a symlink: {entered} -> {markdown}'
+            if not args.follow_symlinks:
+                raise Problem(message + '; use --follow-symlinks to continue')
+            log.info('WARNING: ' + message)
+        if not markdown.is_file():
+            raise Problem(f'Markdown file not found: {markdown}')
+        if not os.access(markdown.parent, os.W_OK):
+            raise Problem(f'Markdown directory is not writable: {markdown.parent}')
+        original = markdown.read_bytes()
+        original_mode = stat.S_IMODE(markdown.stat().st_mode)
+        lines = original.decode('utf-8').splitlines(keepends=True)
+        entries = collect(lines, report)
+        targets = {}
+        for entry in entries:
+            targets.setdefault(entry['target'], entry['index'] + 1)
+        sources = local_sources(args.local_video, {v for v, _ in targets})
+        if targets:
+            for tool in ('ffmpeg', 'ffprobe'):
+                if not shutil.which(tool):
+                    raise Problem(f'Missing dependency: {tool}')
+        resources = markdown.parent / '_resources'
+        if resources.exists() and (not resources.is_dir() or not os.access(resources, os.W_OK)):
+            raise Problem(f'Resources path is not a writable directory: {resources}')
+        outcomes = {}
+        generated = cached = 0
+        identities = {}
+        for video_id in dict.fromkeys(v for v, _ in targets):
+            video_targets = [(target, line) for target, line in targets.items() if target[0] == video_id]
+            try:
+                local = sources.get(video_id)
+                identity = None
+                duration = None
+                if local:
+                    if local not in identities:
+                        identities[local] = local_identity(local)
+                    identity = identities[local]
+                    duration = retry(lambda: probe(local, args.timeout, log), args.attempts, log)
+                pending = []
+                for target, line in video_targets:
+                    seconds = target[1]
+                    try:
+                        name = frame_name(video_id, seconds, args.offset, identity)
+                    except Problem as exc:
+                        report(f'line {line}: {video_id}: {exc}')
+                        continue
+                    if duration is not None and not 0 <= seconds < duration:
+                        report(f'line {line}: {video_id} @ {seconds}s exceeds video duration {duration:g}s')
+                        continue
+                    destination = resources / name
+                    if valid_png(destination, args.timeout, log) and not args.force:
+                        log.info(f'line {line}: PNG already exists: {destination}')
+                        outcomes[target] = name
+                        cached += 1
+                    else:
+                        pending.append((target, line, name))
+                if not local and (pending or args.dry_run):
+                    duration = metadata(video_id, args)
+                # Dry-run also checks timestamps of otherwise cached targets.
+                if args.dry_run and duration is not None:
+                    for target, line in video_targets:
+                        if target in outcomes and not 0 <= target[1] < duration:
+                            outcomes.pop(target)
+                            report(f'line {line}: {video_id} @ {target[1]}s exceeds video duration {duration:g}s')
+                valid = []
+                for target, line, name in pending:
+                    if not 0 <= target[1] < duration:
+                        report(f'line {line}: {video_id} @ {target[1]}s exceeds video duration {duration:g}s')
+                    else:
+                        valid.append((target, line, name))
+                if not valid:
+                    continue
+                if not args.dry_run:
+                    workspace()
+                    if not local:
+                        log.info(f'Downloading {video_id} (best video up to 1080p) ...')
+                        local, downloaded_duration = download(video_id, work, args)
+                        if abs(downloaded_duration - duration) > max(2, duration * .001):
+                            raise Problem('Downloaded duration differs from YouTube metadata; '
+                                          'check yt-dlp configuration for cutting/postprocessing options')
+                        duration = downloaded_duration
+                for target, line, name in valid:
+                    seconds = target[1]
+                    context = f'line {line}: {video_id} @ {seconds}s'
+                    if not 0 <= seconds < duration:
+                        report(f'{context} exceeds downloaded video duration {duration:g}s')
+                        continue
+                    effective = min(max(seconds + args.offset, 0), duration)
+                    if effective != seconds + args.offset:
+                        log.info(f'WARNING: {context}: offset clamped to {effective:g}s (boundary frame)')
+                    if args.dry_run:
+                        log.info(f'Would generate {name} at {effective:g}s')
+                        outcomes[target] = name
+                        continue
+                    log.info(f'Extracting {context}, frame time {effective:g}s ...')
+                    try:
+                        retry(lambda: create_frame(local, effective, duration, resources / name,
+                                                   work, args.timeout, log), args.attempts, log)
+                        outcomes[target] = name
+                        generated += 1
+                    except (Problem, OSError) as exc:
+                        report(f'{context}: {exc}; existing PNG/link kept, if present; frame NOT updated')
+            except (Problem, OSError) as exc:
+                locations = ', '.join(str(line) for _, line in video_targets)
+                report(f'{video_id}, lines {locations}: {exc}')
+        updated, removed, inserted, edited = render(lines, entries, outcomes, args)
+        written = False
+        if args.dry_run:
+            log.info(f'Plan: {inserted} insertions; {edited} image-line edits')
+            for name in sorted(removed):
+                log.info(f'Would remove the Markdown reference to: {resources / name}')
+            log.info('Dry-run: media download and remote frame decoding were not tested; HTTP/media errors may still occur.')
+        elif updated.encode('utf-8') != original:
+            conflict = write_markdown(markdown, original, updated.encode('utf-8'), original_mode)
+            if conflict:
+                report(f'Markdown changed during processing; original NOT overwritten. Proposed result: {conflict}')
+            else:
+                written = True
+                if removed:
+                    log.info('Removed references (other documents may still use these PNGs; commands are NOT executed):')
+                    for name in sorted(removed):
+                        log.info(f'rm -- {shlex.quote(str(resources / name))} # Reference removed from this Markdown')
+        log.info(f'Done: {generated} generated; {cached} cached; {inserted} image links '
+                 f'{"inserted" if written else "planned" if args.dry_run or failures else "added"}; '
+                 f'{edited} image-line edits; errors: {failures}')
+        finished = True
+    except StopRun:
+        log.info('Stopped at the first error; Markdown was not written.')
+    except (Problem, OSError, ValueError) as exc:
+        failures += 1
+        log.error(str(exc))
+        log.debug(traceback.format_exc())
+    except KeyboardInterrupt:
+        failures += 1
+        log.error('Interrupted; temporary artifacts are retained.')
+    finally:
+        if work:
+            if finished and not failures and not args.preserve_cache:
+                try:
+                    shutil.rmtree(work)
+                except OSError as exc:
+                    failures += 1
+                    log.error(f'Cannot clean temporary directory {work}: {exc}')
+            if work.exists():
+                log.info(f'Temporary artifacts retained: {work}')
+                for video in work.rglob('video.*'):
+                    log.info(f'Video artifact: {video}')
+    return 1 if failures else 0
+
+
+def main(argv=None):
+    argv = sys.argv[1:] if argv is None else argv
+    # Honor quiet even for argument parsing errors.
+    level = 'info'
+    for index, value in enumerate(argv):
+        if value.startswith('--log-level='):
+            level = value.split('=', 1)[1]
+        elif value == '--log-level' and index + 1 < len(argv):
+            level = argv[index + 1]
+        elif value in ('--debug', '--trace'):
+            level = value[2:]
+    log = Log(level if level in ('quiet', 'error', 'info', 'debug', 'trace') else 'info')
+    try:
+        args = parser().parse_args(argv)
+    except Problem as exc:
+        log.error(str(exc))
+        return 2
+    args.log = Log(args.log_level)
+    return execute(args)
+
+
+if __name__ == '__main__':
     sys.exit(main())

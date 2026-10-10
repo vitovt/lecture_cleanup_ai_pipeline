@@ -3,6 +3,8 @@
 Project documentation starts at [Docs/GLOSSARY.md](Docs/GLOSSARY.md).
 For multitrack recordings, see the [quick start](Docs/MULTITRACK_QUICKSTART.md)
 and [stage status / known limits](Docs/MULTITRACK_STATUS.md).
+For timestamped video frames in Markdown, see the
+[yt-md-screenshots guide](subtitle-utils/yt-md-screenshots.md).
 
 <img width="1178" height="653" alt="cleanup-pipeline03" src="https://github.com/user-attachments/assets/bb4cc7b1-eba5-401e-9b50-be5a65bd235e" />
 
