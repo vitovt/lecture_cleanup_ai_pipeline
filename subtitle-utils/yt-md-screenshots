@@ -17,6 +17,7 @@ import sys
 import tempfile
 import time
 import traceback
+from contextlib import nullcontext
 from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
@@ -247,11 +248,12 @@ def frame_name(video_id, seconds, offset, identity=None):
     return f'img-{video_id}{suffix}'
 
 
-def run_command(command, timeout, log):
+def run_command(command, timeout, log, output_path=None):
     tool = Path(command[0]).name
     log.debug('$ ' + shlex.join(command))
     try:
-        with subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        with (output_path.open('wb') if output_path else nullcontext(subprocess.PIPE)) as output, \
+                subprocess.Popen(command, stdout=output, stderr=subprocess.PIPE,
                               text=True, errors='replace', start_new_session=True) as process:
             try:
                 stdout, stderr = process.communicate(timeout=timeout)
@@ -272,7 +274,7 @@ def run_command(command, timeout, log):
         reason = next((f'HTTP {code}' for code in ('403', '404', '429', '500', '502', '503', '504')
                        if code in detail), f'exited with code {process.returncode}')
         raise Problem(f'{tool}: {reason}; use --debug for diagnostics', transient)
-    return stdout
+    return stdout or ''
 
 
 def retry(operation, attempts, log):
@@ -375,10 +377,33 @@ def metadata(video_id, args):
         raise Problem('yt-dlp returned no usable video duration/metadata') from exc
 
 
+def snap_downloader():
+    executable = shutil.which('yt-dlp')
+    return bool(executable and (Path(executable).parent == Path('/snap/bin')
+                               or Path(executable).resolve().name == 'snap'))
+
+
 def download(video_id, work, args):
     folder = work / video_id
     folder.mkdir(exist_ok=True)
     receipt = folder / 'download-path.jsonl'
+
+    if snap_downloader():
+        # Snap has a private /tmp. Open the output in the parent process and pass
+        # its descriptor, without requiring yt-dlp to access the host's run path.
+        args.log.info('Snap yt-dlp detected: streaming video into the host run directory.')
+
+        def stream_attempt():
+            partial = folder / 'video.media.part'
+            run_command([*yt_options(args), '--no-simulate', '--abort-on-unavailable-fragments',
+                         '-o', '-', f'https://www.youtube.com/watch?v={video_id}'],
+                        args.download_timeout, args.log, output_path=partial)
+            duration = probe(partial, args.timeout, args.log)
+            path = folder / 'video.media'
+            os.replace(partial, path)
+            return path, duration
+
+        return retry(stream_attempt, args.attempts, args.log)
 
     def attempt():
         receipt.unlink(missing_ok=True)

@@ -90,6 +90,13 @@ There is no automatic discovery of previous run directories. Reuse a retained
 video with `--local-video`; this uses local-source PNG naming. Nothing deletes
 existing PNG files automatically.
 
+Snap-installed `yt-dlp` has a private `/tmp`. The tool detects the Snap launcher
+and streams its binary stdout into a file opened by the parent process in the
+host run directory. Completed streams are retained as `video.media` (ffmpeg
+detects their container from the contents). Interrupted streams remain `.part`
+files and retries restart the stream. Non-Snap installations use normal file
+downloads and yt-dlp's output-path receipt.
+
 User `yt-dlp` configuration is inherited, including cookies and proxies. The tool
 overrides the format, main output path, and retry counts. Configuration that skips
 downloads, extracts audio, cuts sections, or otherwise transforms the source may

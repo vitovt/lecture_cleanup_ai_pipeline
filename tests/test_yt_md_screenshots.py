@@ -403,6 +403,34 @@ class CommandTests(unittest.TestCase):
         with self.assertRaisesRegex(m.Problem, 'timed out'):
             m.run_command([sys.executable,'-c','import time;time.sleep(5)'], .05, m.Log('quiet'))
 
+    def test_binary_stdout_is_saved_without_decoding_or_logging(self):
+        with tempfile.TemporaryDirectory() as directory:
+            destination = Path(directory)/'video.part'
+            result = m.run_command([sys.executable, '-c',
+                'import sys;sys.stdout.buffer.write(bytes(range(256)))'], 5,
+                m.Log('quiet'), output_path=destination)
+            self.assertEqual(result, '')
+            self.assertEqual(destination.read_bytes(), bytes(range(256)))
+
+    def test_snap_streams_without_passing_host_tmp_paths(self):
+        with tempfile.TemporaryDirectory() as directory:
+            args = m.parser().parse_args(['note.md'])
+            args.log = m.Log('quiet')
+            def command(cmd, *unused, output_path=None):
+                self.assertEqual(cmd[cmd.index('-o')+1], '-')
+                self.assertNotIn('--print-to-file', cmd)
+                self.assertFalse(any(directory in arg for arg in cmd))
+                output_path.write_bytes(b'VIDEO')
+                return ''
+            with patch.object(m, 'snap_downloader', return_value=True), \
+                    patch.object(m, 'run_command', side_effect=command), \
+                    patch.object(m, 'probe', return_value=10):
+                path, duration = m.download(VIDEO, Path(directory), args)
+            self.assertEqual(path.name, 'video.media')
+            self.assertEqual(path.read_bytes(), b'VIDEO')
+            self.assertEqual(duration, 10)
+            self.assertFalse(path.with_suffix('.media.part').exists())
+
     def test_download_uses_receipt_and_keeps_configuration(self):
         with tempfile.TemporaryDirectory() as directory:
             args = m.parser().parse_args(['note.md', '--debug'])
@@ -417,7 +445,9 @@ class CommandTests(unittest.TestCase):
                 self.assertNotIn('--download-sections', cmd)
                 self.assertIn('bv*[height<=1080]', cmd)
                 return ''
-            with patch.object(m, 'run_command', side_effect=command), patch.object(m, 'probe', return_value=10):
+            with patch.object(m, 'snap_downloader', return_value=False), \
+                    patch.object(m, 'run_command', side_effect=command), \
+                    patch.object(m, 'probe', return_value=10):
                 path, duration = m.download(VIDEO, work, args)
             self.assertEqual(path.name, 'video.webm')
             self.assertEqual(duration, 10)
@@ -441,7 +471,11 @@ with (root/'calls.txt').open('a') as out:
 if '--simulate' in args:
     print(json.dumps({'id':'1ASzWklab2U','duration':3,'formats':[{'height':48}]}))
 else:
-    destination = pathlib.Path(args[args.index('-o')+1].replace('%(ext)s','mkv'))
+    output = args[args.index('-o')+1]
+    if output == '-':
+        sys.stdout.buffer.write((root/'fixture.mkv').read_bytes())
+        sys.exit(0)
+    destination = pathlib.Path(output.replace('%(ext)s','mkv'))
     shutil.copyfile(root/'fixture.mkv', destination)
     receipt = pathlib.Path(args[args.index('--print-to-file')+2])
     receipt.write_text(json.dumps(str(destination))+'\\n')
@@ -454,6 +488,17 @@ else:
                                     text=True, capture_output=True)
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertEqual((root/'calls.txt').read_text(), 'metadata\ndownload\n')
+            self.assertEqual(md.read_text().count('!['), 2)
+            for line in result.stdout.splitlines():
+                if line.startswith('Run directory: '):
+                    self.assertFalse(Path(line.removeprefix('Run directory: ')).exists())
+            executable.rename(root/'snap')
+            executable.symlink_to('snap')
+            result = subprocess.run([sys.executable,str(SCRIPT),str(md),'--force'], env=env,
+                                    text=True, capture_output=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn('Snap yt-dlp detected', result.stdout)
+            self.assertEqual((root/'calls.txt').read_text(), 'metadata\ndownload\n'*2)
             self.assertEqual(md.read_text().count('!['), 2)
             for line in result.stdout.splitlines():
                 if line.startswith('Run directory: '):
