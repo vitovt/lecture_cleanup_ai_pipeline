@@ -12,13 +12,25 @@ else
     sanitize_filename() { printf '%s' "$1"; }
 fi
 
-# Check for URL argument
-if [ -z "$1" ]; then
-    echo "Usage: $0 <YouTube_URL>"
-    exit 1
-fi
-
-URL="$1"
+URL=""
+SUBTITLE_TIMING_FLAGS=()
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --time-offset)
+            [[ -n "${2:-}" ]] || { echo 'ERROR: --time-offset requires signed HH:MM:SS.' >&2; exit 2; }
+            SUBTITLE_TIMING_FLAGS=("--time-offset=$2")
+            shift 2 ;;
+        -h|--help)
+            echo "Usage: $0 [--time-offset +/-HH:MM:SS] <YouTube_URL>"
+            echo 'Shift subtitle timestamps; example: --time-offset -00:15:33'
+            exit 0 ;;
+        --*) echo "ERROR: Unknown option: $1" >&2; exit 2 ;;
+        *)
+            [[ -z "$URL" ]] || { echo "ERROR: Unexpected argument: $1" >&2; exit 2; }
+            URL="$1"; shift ;;
+    esac
+done
+[[ -n "$URL" ]] || { echo "Usage: $0 [--time-offset +/-HH:MM:SS] <YouTube_URL>" >&2; exit 2; }
 
 # Step 1: List subtitles
 echo "[*] Detecting available subtitles..."
@@ -38,10 +50,11 @@ echo "[*] Detected auto-sub language: $AUTO_LANG"
 filename=$(yt-dlp --get-filename --no-download-archive "$URL")
 base_raw="${filename%.*}"
 base="$(sanitize_filename "$base_raw")"
-yt-dlp --write-auto-sub --sub-lang "$AUTO_LANG" --convert-subs srt --skip-download -o "${base}.%(ext)s" "$URL"
+yt-dlp --force-overwrites --write-auto-sub --sub-lang "$AUTO_LANG" --convert-subs srt --skip-download -o "${base}.%(ext)s" "$URL" || exit $?
 
 SRT_FILE="${base}.${AUTO_LANG}.srt"
 TXT_FILE="${base}.${AUTO_LANG}.txt"
+python3 "$SCRIPT_DIR/subtitle_timing.py" "$SRT_FILE" "$URL" "${SUBTITLE_TIMING_FLAGS[@]}" || exit $?
 
 echo "Downloaded: $SRT_FILE"
 ls "$SRT_FILE"

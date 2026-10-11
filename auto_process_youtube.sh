@@ -13,6 +13,7 @@ fi
 
 DEBUG=0
 OVERWRITE=0
+SUBTITLE_TIMING_FLAGS=()
 YOUTUBE_UPLOAD_DATE=""
 
 # External helper for URL normalization
@@ -90,6 +91,7 @@ Options:
     default: $SRTOUTDIR; 
   --overwrite      Re-process even if destination .md already exists (default: error if Markdown exists)
   --debug          Show yt-dlp output and pass --debug to lecture_cleanup.sh
+  --time-offset OFFSET  Shift subtitles by signed HH:MM:SS (e.g. -00:15:33)
   --context-file FILE  Additional context file(s) passed to lecture_cleanup.sh (can be repeated)
 
 Examples:
@@ -141,6 +143,11 @@ while [[ $# -gt 0 ]]; do
         --overwrite)
             OVERWRITE=1
             shift
+            ;;
+        --time-offset)
+            [[ -n "${2:-}" ]] || { echo 'ERROR: --time-offset requires signed HH:MM:SS.' >&2; exit 2; }
+            SUBTITLE_TIMING_FLAGS=("--time-offset=$2")
+            shift 2
             ;;
         --debug)
             DEBUG=1
@@ -241,7 +248,8 @@ fi
 
 mkdir -p "$SRTOUTDIR" "$OUTDIR"
 
-yt-dlp "${YT_DLP_SILENT_FLAGS[@]}" --write-auto-sub --sub-lang "$AUTO_LANG" --convert-subs srt --skip-download --no-progress --extractor-args "youtube:player_client=default" -o "$SRTOUTDIR/${base}.%(ext)s" "$URL"
+yt-dlp "${YT_DLP_SILENT_FLAGS[@]}" --force-overwrites --write-auto-sub --sub-lang "$AUTO_LANG" --convert-subs srt --skip-download --no-progress --extractor-args "youtube:player_client=default" -o "$SRTOUTDIR/${base}.%(ext)s" "$URL" || exit $?
+python3 "$SCRIPT_DIR/subtitle-utils/subtitle_timing.py" "$SRTOUTDIR/$SRT_FILE" "$URL" "${SUBTITLE_TIMING_FLAGS[@]}" || exit $?
 
 echo "Downloaded: $SRT_FILE"
 #ls -alh  "$SRTOUTDIR/$SRT_FILE"
