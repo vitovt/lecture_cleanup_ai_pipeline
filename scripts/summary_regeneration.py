@@ -119,7 +119,9 @@ def plan_actions(document, settings, policy, args, directory, all_blocks):
                 if len(matching) > 1 and args.target != "all":
                     raise SummaryError("ambiguous_summary", f"Multiple {kind} summaries; choose --target ID or --target all")
                 for block in matching:
-                    language = block.language if args.target and not (args.lang or getattr(args, f"{kind}_lang")) else config.lang
+                    language = block.language if args.target and not (
+                        args.lang or getattr(args, f"{kind}_summary_lang")
+                    ) else config.lang
                     actions.append(Action(kind, language or config.lang, block.path, "replace", block))
                 continue
             warning("duplicate_summary", f"Adding another {kind}/{config.lang} summary as explicitly requested")

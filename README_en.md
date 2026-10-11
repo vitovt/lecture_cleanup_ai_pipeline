@@ -241,7 +241,7 @@ These flags are passed to `scripts/run_pipeline.py` via the `.sh` wrappers.
 * `--long-summary` / `--no-long-summary` — enable or disable the long summary; enabling both types still uses one optimized LLM request
 * `--short-summary-output {append,separate}` / `--long-summary-output {append,separate}` — independently append each summary or write it to a sibling file
 * `--short-summary-file-suffix <SUFFIX>` / `--long-summary-file-suffix <SUFFIX>` — non-empty filename suffixes for separate summaries
-* `--long-summary-lang <default|CODE>` — use the lecture language for the long summary or override it with an ISO-639-1 code
+* `--short-summary-lang <default|CODE>` / `--long-summary-lang <default|CODE>` — use the lecture language for each summary or override it with an ISO-639-1 code; the corresponding summary must be enabled
 * `--long-summary-references` / `--no-long-summary-references` — enable or disable validated source links in the long summary
 * `--context-file <path>` — file with per-input context inserted into the USER prompt right after the generic "Context" sentence (affects all chunks). Can be passed multiple times; blocks are concatenated in order.
 

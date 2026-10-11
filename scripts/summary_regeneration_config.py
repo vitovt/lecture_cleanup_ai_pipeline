@@ -106,7 +106,15 @@ def requested_settings(cfg, args, *, inspection=False):
         options = dict(mapping(summary.get(kind, {}), f"summary.{kind}"))
         if args.type:
             options["enabled"] = args.type in (kind, "both")
-        language = getattr(args, f"{kind}_lang") or args.lang
+        language_option = getattr(args, f"{kind}_summary_lang")
+        if language_option is not None and not options.get("enabled", False):
+            raise ValueError(
+                f"--{kind}-summary-lang was provided, but the {kind} summary is "
+                f"disabled; enable summary_regeneration.{kind}.enabled (or "
+                f"summary.{kind}.enabled) in config, pass --type {kind}|both, or "
+                f"remove --{kind}-summary-lang"
+            )
+        language = language_option or args.lang
         if language:
             options["lang"] = language.lower()
         configured_language = options.get("lang", "default")

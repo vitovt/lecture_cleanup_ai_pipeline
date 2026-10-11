@@ -50,8 +50,11 @@ the local override file, while retaining the tracked defaults.
 
 `--type short|long|both` overrides configured `enabled` flags. Without it, the
 enabled flags determine which types are requested. Tracked defaults disable
-both types. `--lang`, `--short-lang`, and `--long-lang` accept two-letter language
-codes; the type-specific option wins over `--lang`.
+both types. `--lang`, `--short-summary-lang`, and `--long-summary-lang` accept
+two-letter language codes; the type-specific option wins over `--lang`.
+Supplying a type-specific language for a disabled summary is an error: enable
+that type in configuration, select it with `--type`, or remove the language
+option.
 
 With configured `lang: default`, generation requires an explicit language
 option. Neither frontmatter nor the global `language` setting chooses it.

@@ -248,7 +248,7 @@ Diese Parameter werden über die `.sh`-Skripte an `scripts/run_pipeline.py` übe
 * `--long-summary` / `--no-long-summary` — lange Zusammenfassung aktivieren oder deaktivieren; beide Typen gemeinsam verwenden weiterhin nur eine optimierte LLM-Anfrage
 * `--short-summary-output {append,separate}` / `--long-summary-output {append,separate}` — jede Zusammenfassung unabhängig anhängen oder in eine benachbarte Datei schreiben
 * `--short-summary-file-suffix <SUFFIX>` / `--long-summary-file-suffix <SUFFIX>` — nicht leere Dateinamenssuffixe für separate Zusammenfassungen
-* `--long-summary-lang <default|CODE>` — Vorlesungssprache verwenden oder mit einem ISO-639-1-Code überschreiben
+* `--short-summary-lang <default|CODE>` / `--long-summary-lang <default|CODE>` — für die jeweilige Zusammenfassung die Vorlesungssprache verwenden oder sie mit einem ISO-639-1-Code überschreiben; die entsprechende Zusammenfassung muss aktiviert sein
 * `--long-summary-references` / `--no-long-summary-references` — validierte Quellenlinks in der langen Zusammenfassung aktivieren oder deaktivieren
 * `--context-file <Pfad>` — Datei mit dateispezifischem Kontext; wird im USER‑Prompt direkt nach dem allgemeinen Satz „Context“ eingefügt (gilt für alle Blöcke). Mehrfach nutzbar; Inhalte werden in Reihenfolge zusammengefügt.
 

@@ -193,12 +193,14 @@ class SummarySettingsTests(unittest.TestCase):
             cli_short_enabled=True,
             cli_long_enabled=True,
             cli_short_output="separate",
+            cli_short_lang="de",
             cli_long_lang="uk",
             cli_long_references=True,
         )
 
         self.assertTrue(settings.short.enabled)
         self.assertEqual(settings.short.output, "separate")
+        self.assertEqual(settings.short.lang, "de")
         self.assertTrue(settings.long.enabled)
         self.assertEqual(settings.long.lang, "uk")
         self.assertTrue(settings.long.references.enabled)
@@ -218,6 +220,25 @@ class SummarySettingsTests(unittest.TestCase):
         for lang in (None, "", "english", "en-US", 123):
             with self.subTest(lang=lang), self.assertRaisesRegex(ValueError, "summary.short.lang"):
                 _resolve_summary_settings({"summary": {"short": {"lang": lang}}}, "en")
+
+    def test_cli_language_requires_corresponding_summary(self) -> None:
+        for kind in ("short", "long"):
+            kwargs = {f"cli_{kind}_lang": "en"}
+            with self.subTest(kind=kind), self.assertRaisesRegex(
+                ValueError,
+                rf"--{kind}-summary-lang.*{kind} summary is disabled.*"
+                rf"--{kind}-summary.*remove --{kind}-summary-lang",
+            ):
+                _resolve_summary_settings({}, "uk", **kwargs)
+
+    def test_cli_language_is_valid_when_cli_enables_summary(self) -> None:
+        settings = _resolve_summary_settings(
+            {}, "uk", cli_short_enabled=True, cli_short_lang="en",
+            cli_long_enabled=True, cli_long_lang="de",
+        )
+
+        self.assertEqual(settings.short.lang, "en")
+        self.assertEqual(settings.long.lang, "de")
 
     def test_removed_flat_config_is_rejected(self) -> None:
         with self.assertRaisesRegex(ValueError, "Removed summary configuration"):
@@ -602,6 +623,10 @@ class SummaryOutputTests(unittest.TestCase):
                 str(outdir),
                 "--lang",
                 "de",
+                "--short-summary-lang",
+                "en",
+                "--long-summary-lang",
+                "fr",
             ]
 
             with patch("scripts.run_pipeline.load_effective_config", return_value=(cfg, True)), patch(
@@ -614,8 +639,8 @@ class SummaryOutputTests(unittest.TestCase):
             self.assertIn("both summaries", adapter.calls[1][1]["label"])
             system = adapter.calls[1][0][0]["content"]
             long_part, short_part = system.split("[SHORT SUMMARY SYSTEM INSTRUCTIONS]")
-            self.assertIn("code `de`", long_part)
-            self.assertIn("`uk`", short_part)
+            self.assertIn("code `fr`", long_part)
+            self.assertIn("`en`", short_part)
             main_markdown = (outdir / "lecture.md").read_text(encoding="utf-8")
             self.assertNotIn("Long result", main_markdown)
             self.assertNotIn("Short result", main_markdown)

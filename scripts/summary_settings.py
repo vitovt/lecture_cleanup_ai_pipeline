@@ -120,6 +120,7 @@ def resolve_summary_settings(
     cli_long_output: Optional[str] = None,
     cli_short_suffix: Optional[str] = None,
     cli_long_suffix: Optional[str] = None,
+    cli_short_lang: Optional[str] = None,
     cli_long_lang: Optional[str] = None,
     cli_long_references: Optional[bool] = None,
 ) -> SummarySettings:
@@ -151,6 +152,18 @@ def resolve_summary_settings(
         short_enabled = cli_short_enabled
     if cli_long_enabled is not None:
         long_enabled = cli_long_enabled
+    if cli_short_lang is not None and not short_enabled:
+        raise ValueError(
+            "--short-summary-lang was provided, but the short summary is disabled; "
+            "set summary.short.enabled: true in config, pass --short-summary, or "
+            "remove --short-summary-lang"
+        )
+    if cli_long_lang is not None and not long_enabled:
+        raise ValueError(
+            "--long-summary-lang was provided, but the long summary is disabled; "
+            "set summary.long.enabled: true in config, pass --long-summary, or "
+            "remove --long-summary-lang"
+        )
 
     short_output = _output_value(
         cli_short_output or short_cfg.get("output", "append"),
@@ -177,9 +190,10 @@ def resolve_summary_settings(
         "summary.long.file_suffix",
     )
 
-    requested_short_lang = _text_value(
+    configured_short_lang = _text_value(
         short_cfg.get("lang", "default"), "summary.short.lang"
     ).lower()
+    requested_short_lang = (cli_short_lang or configured_short_lang).strip().lower()
     short_lang = lecture_lang if requested_short_lang == "default" else requested_short_lang
     if not re.fullmatch(r"[a-z]{2}", short_lang):
         raise ValueError(

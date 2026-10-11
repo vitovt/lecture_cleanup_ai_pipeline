@@ -360,6 +360,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Suffix for a separate long-summary filename",
     )
     ap.add_argument(
+        "--short-summary-lang",
+        default=None,
+        help="Short-summary language: default or a two-letter ISO-639-1 code",
+    )
+    ap.add_argument(
         "--long-summary-lang",
         default=None,
         help="Long-summary language: default or a two-letter ISO-639-1 code",
@@ -527,6 +532,8 @@ def main() -> int:
         qc_report_mode = "outdir"
 
     lang = args.lang
+    if args.short_summary_lang:
+        args.short_summary_lang = args.short_summary_lang.strip().lower()
     if args.long_summary_lang:
         args.long_summary_lang = args.long_summary_lang.strip().lower()
     include_timecodes = bool(cfg.get("include_timecodes_in_headings", True))
@@ -544,6 +551,7 @@ def main() -> int:
             cli_long_output=args.long_summary_output,
             cli_short_suffix=args.short_summary_file_suffix,
             cli_long_suffix=args.long_summary_file_suffix,
+            cli_short_lang=args.short_summary_lang,
             cli_long_lang=args.long_summary_lang,
             cli_long_references=args.long_summary_references,
         )

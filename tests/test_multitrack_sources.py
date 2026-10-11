@@ -79,8 +79,13 @@ sources:
         self.assertEqual(p['sources'][0]['additional_lang'],[])
 
     def test_cleanup_shared_options(self):
-        p=resolve(['--llm-provider','dummy','--short-summary','--source','a','--file','a.wav'])
-        self.assertEqual(p['cleanup_args'], ['--llm-provider','dummy','--short-summary'])
+        p=resolve(['--llm-provider','dummy','--short-summary','--short-summary-lang','en',
+                   '--long-summary','--long-summary-lang','de',
+                   '--source','a','--file','a.wav'])
+        self.assertEqual(p['cleanup_args'], [
+            '--llm-provider','dummy','--short-summary','--short-summary-lang','en',
+            '--long-summary','--long-summary-lang','de',
+        ])
 
 
 class TxtTests(unittest.TestCase):

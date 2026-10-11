@@ -547,10 +547,51 @@ class SummaryRegenerationTests(unittest.TestCase):
 
     def test_cli_language_and_output_override_regeneration_config(self):
         self.cfg["summary_regeneration"]["short"] = {"lang": "de", "output": "separate"}
-        status, _, errors, _ = self.invoke("--type", "short", "--lang", "en", "--output", "append")
+        status, _, errors, _ = self.invoke(
+            "--type", "short", "--short-summary-lang", "en", "--output", "append"
+        )
         self.assertEqual(status, 0, errors)
         self.assertEqual(self.blocks()[0].language, "en")
         self.assertFalse((self.root / "My lecture-summary.md").exists())
+
+    def test_type_specific_language_flags_work_for_both_regenerated_summaries(self):
+        status, _, errors, _ = self.invoke(
+            "--type", "both",
+            "--short-summary-lang", "en",
+            "--long-summary-lang", "de",
+        )
+
+        self.assertEqual(status, 0, errors)
+        self.assertEqual(len(self.adapter.calls), 1)
+        self.assertEqual(
+            {(block.kind, block.language) for block in self.blocks()},
+            {("short", "en"), ("long", "de")},
+        )
+        system = self.adapter.calls[0][0][0]["content"]
+        long_prompt, short_prompt = system.split("[SHORT SUMMARY SYSTEM INSTRUCTIONS]")
+        self.assertIn("code `de`", long_prompt)
+        self.assertIn("`en`", short_prompt)
+
+    def test_type_specific_language_rejects_disabled_regenerated_summary(self):
+        for kind in ("short", "long"):
+            self.cfg["summary_regeneration"][kind] = {"enabled": False}
+            status, _, errors, factory = self.invoke(
+                f"--{kind}-summary-lang", "en"
+            )
+            self.assertEqual(status, 2)
+            self.assertIn(f"--{kind}-summary-lang was provided", errors)
+            self.assertIn(f"summary_regeneration.{kind}.enabled", errors)
+            self.assertIn(f"--type {kind}|both", errors)
+            factory.assert_not_called()
+            self.cfg["summary_regeneration"].pop(kind)
+
+    def test_removed_short_language_option_is_rejected(self):
+        errors = io.StringIO()
+        with redirect_stderr(errors), self.assertRaises(SystemExit) as raised:
+            TOOL.parser().parse_args([str(self.source), "--short-lang", "en"])
+
+        self.assertEqual(raised.exception.code, 2)
+        self.assertIn("unrecognized arguments: --short-lang en", errors.getvalue())
 
     def test_comment_line_mapping_retains_correct_ids(self):
         text = '<!-- rephrased: first\nsecond -->\n' + self.original + '<!-- END: final -->'
