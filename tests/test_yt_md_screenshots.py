@@ -257,6 +257,88 @@ class WorkflowTests(unittest.TestCase):
         self.assertIn(f'img-local-Lecture-{hashlib.sha256(b"VIDEO").hexdigest()[:4]}-6.png', self.md.read_text())
         self.assertEqual(local.read_bytes(), b'VIDEO')
 
+    def test_delete_orphans_after_migration_reports_deleted_and_preserves_unrelated(self):
+        self.run_cli(link(1)+link(4)+link(7))
+        resources = self.root/'_resources'
+        unrelated = resources/f'img-{OTHER}-9.png'
+        unrelated.write_bytes(b'PNG')
+        code, out, err = self.run_cli(None, '--between-timecodes', '--delete-orphans')
+        self.assertEqual(code, 0, err)
+        commands = [line for line in out.splitlines() if line.startswith('rm --')]
+        self.assertEqual(len(commands), 3)
+        for command in commands:
+            self.assertIn('# DELETED:', command)
+            self.assertFalse(Path(shlex.split(command, comments=True)[2]).exists())
+        self.assertTrue(unrelated.exists())
+        for t in (2, 5, 8):
+            self.assertTrue((resources/f'img-{VIDEO}-{t}.png').exists())
+
+    def test_delete_orphans_preserves_other_references_and_handles_missing_files(self):
+        resources = self.root/'_resources'
+        resources.mkdir()
+        old = resources/f'img-{OTHER}-1.png'
+        old.write_bytes(b'PNG')
+        code, out, err = self.run_cli(link()+image(video=OTHER)+f'Other use: ![](<_resources/{old.name}>)\n', '--delete-orphans')
+        self.assertEqual(code, 0, err)
+        self.assertTrue(old.exists())
+        self.assertNotIn('rm --', out)
+        code, out, err = self.run_cli(link()+image(2, OTHER), '--delete-orphans')
+        self.assertEqual(code, 0, err)
+        self.assertIn('# ALREADY ABSENT:', out)
+
+    def test_between_dry_run_delete_orphans_makes_no_changes(self):
+        self.run_cli(link(1)+link(4)+link(7))
+        original = self.md.read_bytes()
+        files = sorted(p.name for p in (self.root/'_resources').iterdir())
+        self.frame.reset_mock()
+        self.download.reset_mock()
+        code, out, err = self.run_cli(None, '--between-timecodes', '--offset', '1', '--delete-orphans', '--dry-run')
+        self.assertEqual(code, 0, err)
+        self.assertEqual(self.md.read_bytes(), original)
+        self.assertEqual(sorted(p.name for p in (self.root/'_resources').iterdir()), files)
+        self.assertIn('midpoint 2.5s; offset 1s; frame time 3s', out)
+        self.assertIn('Would delete orphan PNG:', out)
+        self.assertNotIn('# DELETED:', out)
+        self.frame.assert_not_called()
+        self.download.assert_not_called()
+
+    def test_delete_orphans_never_runs_on_conflict(self):
+        self.run_cli(link())
+        original = self.md.read_text()
+        old = self.root/f'_resources/img-{VIDEO}-1.png'
+        frame = self.frame.side_effect
+        def edit(*args):
+            frame(*args)
+            self.md.write_text(original+'USER EDIT\n')
+        self.frame.side_effect = edit
+        code, out, err = self.run_cli(None, '--between-timecodes', '--delete-orphans')
+        self.assertEqual(code, 1)
+        self.assertTrue(old.exists())
+        self.assertNotIn('rm --', out)
+
+    def test_delete_orphans_never_deletes_a_local_input_even_with_png_name(self):
+        resources = self.root/'_resources'
+        resources.mkdir()
+        local = resources/f'img-{OTHER}-1.png'
+        local.write_bytes(b'VIDEO')
+        code, out, err = self.run_cli(link()+image(video=OTHER), '--local-video', local,
+                                      '--between-timecodes', '--delete-orphans')
+        self.assertEqual(code, 0, err)
+        self.assertEqual(local.read_bytes(), b'VIDEO')
+        self.assertIn('# KEPT: local video input', out)
+
+    def test_delete_failure_is_reported_after_markdown_write(self):
+        self.run_cli(link())
+        old = self.root/f'_resources/img-{VIDEO}-1.png'
+        old.unlink()
+        old.mkdir()  # unlink must fail; unrelated directory contents remain safe.
+        code, out, err = self.run_cli(None, '--between-timecodes', '--delete-orphans', '--fail-fast')
+        self.assertEqual(code, 1)
+        self.assertTrue(old.is_dir())
+        self.assertIn(f'img-{VIDEO}-5.png', self.md.read_text())
+        self.assertIn('# NOT DELETED:', out)
+        self.assertIn('Cannot delete orphan PNG', err)
+        self.assertIn('Markdown was already written', out)
 
     def test_cache_preserved_on_request(self):
         code, out, err = self.run_cli(link(), '--preserve-cache')
@@ -540,6 +622,37 @@ class CommandTests(unittest.TestCase):
 
 @unittest.skipUnless(shutil.which('ffmpeg') and shutil.which('ffprobe'), 'ffmpeg/ffprobe required')
 class RealVideoTests(unittest.TestCase):
+    def test_real_between_capture_migration_and_orphan_deletion(self):
+        with tempfile.TemporaryDirectory(prefix='yt-md-between-') as directory:
+            root = Path(directory)
+            video = root/'Lecture.mkv'
+            subprocess.run(['ffmpeg', '-nostdin', '-v', 'error', '-f', 'lavfi', '-i',
+                            'testsrc2=size=64x48:rate=2:duration=6', '-c:v', 'ffv1', str(video)], check=True)
+            original_video = video.read_bytes()
+            md = root/'lecture.md'
+            md.write_text(link(1)+link(4))
+            command = [sys.executable, str(SCRIPT), str(md), '--local-video', str(video)]
+            result = subprocess.run(command, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            original_pngs = list((root/'_resources').glob('*.png'))
+            result = subprocess.run(command+['--between-timecodes', '--delete-orphans'], capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertTrue(all(not p.exists() for p in original_pngs))
+            self.assertEqual(result.stdout.count('# DELETED:'), 2)
+            pngs = list((root/'_resources').glob('*.png'))
+            self.assertEqual(len(pngs), 2)
+            self.assertEqual({p.name.rsplit('-', 1)[1] for p in pngs}, {'2.png', '5.png'})
+            self.assertTrue(all(m.valid_png(p, 10, m.Log('quiet')) for p in pngs))
+            expected = root/'expected.png'
+            m.create_frame(video, 2, 6, expected, root, 10, m.Log('quiet'))
+            captured = next(p for p in pngs if p.name.endswith('-2.png'))
+            self.assertEqual(captured.read_bytes(), expected.read_bytes())
+            md_snapshot = md.read_bytes()
+            result = subprocess.run(command+['--between-timecodes', '--delete-orphans'], capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(result.stdout.count('PNG already exists'), 2)
+            self.assertEqual(md.read_bytes(), md_snapshot)
+            self.assertEqual(video.read_bytes(), original_video)
 
     def test_remote_cli_downloads_once_and_cleans_video(self):
         with tempfile.TemporaryDirectory(prefix='yt-md-remote-') as directory:

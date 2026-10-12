@@ -18,6 +18,7 @@ subtitle-utils/yt-md-screenshots '/path/to/lecture.md' --offset 3
 subtitle-utils/yt-md-screenshots '/path/to/lecture.md' --offset -2
 subtitle-utils/yt-md-screenshots '/path/to/lecture.md' --between-timecodes
 subtitle-utils/yt-md-screenshots '/path/to/lecture.md' --between-timecodes --offset 2
+subtitle-utils/yt-md-screenshots '/path/to/lecture.md' --between-timecodes --delete-orphans
 subtitle-utils/yt-md-screenshots '/path/to/lecture.md' --force
 subtitle-utils/yt-md-screenshots '/path/to/lecture.md' --all-occurrences
 subtitle-utils/yt-md-screenshots '/path/to/lecture.md' --deduplicate
@@ -126,7 +127,7 @@ or a dry run, does not need a temporary directory.
 
 There is no automatic discovery of previous run directories. Reuse a retained
 video with `--local-video`; this uses local-source PNG naming. Nothing deletes
-existing PNG files automatically.
+existing PNG files unless `--delete-orphans` is explicitly supplied (see below).
 
 Snap-installed `yt-dlp` has a private `/tmp`. The tool detects the Snap launcher
 and streams its binary stdout into a file opened by the parent process in the
@@ -159,7 +160,7 @@ Only adjacent standalone image lines (allowing intervening blank lines) pointing
 into `_resources` and matching this tool's naming pattern are managed. Unrelated
 images are left alone. Without a registry, the filename convention and adjacency
 are the ownership heuristic. A stale attachment from another source or offset is
-replaced only after the new frame is available. Old PNG files remain on disk.
+replaced only after the new frame is available. Old PNG files remain on disk by default.
 
 After the original Markdown is successfully updated, removed references are
 reported as copyable shell commands, one absolute, shell-quoted path per line:
@@ -171,8 +172,24 @@ rm -- '/path/to/_resources/img-oldvideo123-999.png' # Reference removed from thi
 The commands are **not executed**. Duplicate paths and filenames still mentioned
 anywhere in the updated document are excluded conservatively. Other documents
 may still use these files; inspect before executing the commands. There is no
-registry and no automatic orphan-file cleanup. Unreferenced old files that were
+registry. Unreferenced old files that were
 not removed from this document during this run are not inventoried.
+
+`--delete-orphans` executes deletion for that same report, **only after successfully
+writing the updated original Markdown**. It does not scan `_resources`, check other
+documents, or delete local video inputs. Files still mentioned anywhere in the
+updated document are retained. Use this option only when deleting resources shared
+with other documents is acceptable. With this option, report lines look like:
+
+```sh
+rm -- '/path/to/_resources/img-oldvideo123-999.png' # DELETED: reference removed from this Markdown
+```
+
+Already missing files are marked `ALREADY ABSENT`; deletion failures are marked
+`NOT DELETED`, reported as errors, and result in a nonzero exit status. Such an
+error does not undo the already written Markdown. A conflict or failure before
+Markdown replacement never deletes orphan files. Dry runs only print planned
+deletions. Repeated runs do not rediscover older orphans from prior runs.
 
 ## Force, offsets, and errors
 

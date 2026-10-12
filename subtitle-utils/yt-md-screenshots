@@ -553,6 +553,9 @@ def parser():
     p.add_argument('--between-timecodes', action='store_true',
                    help='Capture halfway to the next distinct same-video timecode in document order; '
                         'last uses video end; add offset, clamp, then round down to whole seconds')
+    p.add_argument('--delete-orphans', action='store_true',
+                   help='Delete generated PNGs whose last reference this run removes from this Markdown; '
+                        'other documents are not checked; still print the report')
     p.add_argument('--attempts', type=int, default=2, help='Total attempts for transient failures, including the first (default: 2)')
     p.add_argument('--timeout', type=positive, default=120, metavar='SECONDS', help='Metadata/probe/frame timeout (default: 120)')
     p.add_argument('--download-timeout', type=positive, default=3600, metavar='SECONDS', help='Full download timeout (default: 3600)')
@@ -592,6 +595,7 @@ def execute(args):
     failures = 0
     work = None
     finished = False
+    written = False
 
     def report(message):
         nonlocal failures
@@ -631,6 +635,7 @@ def execute(args):
         for entry in entries:
             targets.setdefault(entry['target'], entry['index'] + 1)
         sources = local_sources(args.local_video, {v for v, _ in targets})
+        protected_sources = set(sources.values())
         if targets:
             for tool in ('ffmpeg', 'ffprobe'):
                 if not shutil.which(tool):
@@ -747,6 +752,11 @@ def execute(args):
             log.info(f'Plan: {inserted} insertions; {edited} image-line edits')
             for name in sorted(removed):
                 log.info(f'Would remove the Markdown reference to: {resources / name}')
+                if args.delete_orphans:
+                    if (resources / name).resolve() in protected_sources:
+                        log.info(f'Would keep local video input: {resources / name}')
+                    else:
+                        log.info(f'Would delete orphan PNG: {resources / name}')
             log.info('Dry-run: media download and remote frame decoding were not tested; HTTP/media errors may still occur.')
         elif updated.encode('utf-8') != original:
             conflict = write_markdown(markdown, original, updated.encode('utf-8'), original_mode)
@@ -755,15 +765,32 @@ def execute(args):
             else:
                 written = True
                 if removed:
-                    log.info('Removed references (other documents may still use these PNGs; commands are NOT executed):')
+                    log.info('Removed references (other documents may still use these PNGs):' if args.delete_orphans
+                             else 'Removed references (other documents may still use these PNGs; commands are NOT executed):')
                     for name in sorted(removed):
-                        log.info(f'rm -- {shlex.quote(str(resources / name))} # Reference removed from this Markdown')
+                        path = resources / name
+                        status = 'Reference removed from this Markdown'
+                        if args.delete_orphans:
+                            try:
+                                if path.resolve() in protected_sources:
+                                    log.info(f'# rm -- {shlex.quote(str(path))} # KEPT: local video input')
+                                    continue
+                                path.unlink()
+                                status = 'DELETED: reference removed from this Markdown'
+                            except FileNotFoundError:
+                                status = 'ALREADY ABSENT: reference removed from this Markdown'
+                            except OSError as exc:
+                                log.info(f'rm -- {shlex.quote(str(path))} # NOT DELETED: {exc}')
+                                report(f'Cannot delete orphan PNG {path}: {exc}')
+                                continue
+                        log.info(f'rm -- {shlex.quote(str(path))} # {status}')
         log.info(f'Done: {generated} generated; {cached} cached; {inserted} image links '
                  f'{"inserted" if written else "planned" if args.dry_run or failures else "added"}; '
                  f'{edited} image-line edits; errors: {failures}')
         finished = True
     except StopRun:
-        log.info('Stopped at the first error; Markdown was not written.')
+        log.info('Stopped at the first error; Markdown was already written.' if written
+                 else 'Stopped at the first error; Markdown was not written.')
     except (Problem, OSError, ValueError) as exc:
         failures += 1
         log.error(str(exc))
