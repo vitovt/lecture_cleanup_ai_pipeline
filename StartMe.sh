@@ -252,7 +252,7 @@ Utilities
     Example: $PROGRAM add-video-url -u "https://youtu.be/VIDEO_ID" ./notes.md --overwrite
 
   download-subtitles
-    Download auto-generated subtitles for one YouTube URL into the current directory.
+    Download native subtitles for one YouTube URL into the current directory.
     Example: $PROGRAM download-subtitles "https://youtu.be/VIDEO_ID"
 
   extract-audio
@@ -330,11 +330,17 @@ EOF
             ;;
         download-subtitles)
             cat <<EOF | colorize_help detail
-Usage: $PROGRAM download-subtitles <youtube_url>
+Usage: $PROGRAM download-subtitles [--lang CODE] [--subtitle-source SOURCE] <youtube_url>
 
-Detects the video's original auto-generated subtitle language, downloads SRT
+Detects the video's original audio language, downloads native SRT subtitles
 with yt-dlp, and converts it to the project's timestamped TXT format in the
 current working directory.
+
+Options:
+  --lang CODE              Explicit language/track; default: original audio language
+  --subtitle-source SOURCE auto (default), manual, or prefer-manual
+  --time-offset OFFSET     Shift subtitles by signed HH:MM:SS
+  --debug                  Show yt-dlp diagnostics
 
 Example:
   $PROGRAM download-subtitles "https://youtu.be/VIDEO_ID"

@@ -1,6 +1,12 @@
 # Global configuration for the lecture cleanup pipeline
 # You can override most of these via CLI flags in run_pipeline.py
 
+# Native YouTube subtitle selection (both subtitle download entry points).
+# CLI overrides these values; config.yaml overrides this default file.
+autoyoutube:
+  lang: auto                 # Original audio language; or an explicit code such as en/de-CH
+  subtitle_source: auto      # auto | manual | prefer-manual; never auto-translated tracks
+
 language: ru            # two-letter ISO-639-1 code; e.g. ru, uk, en, de, pl, es
 
 # LLM settings (provider-aware). Configure provider and per-provider settings here.

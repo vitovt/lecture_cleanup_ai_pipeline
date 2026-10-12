@@ -14,14 +14,26 @@ fi
 
 URL=""
 SUBTITLE_TIMING_FLAGS=()
+SUBTITLE_SELECTION_FLAGS=()
+DEBUG=0
+source "$SCRIPT_DIR/youtube_subtitle_selection.sh"
 while [[ $# -gt 0 ]]; do
     case "$1" in
+        --lang|--subtitle-source)
+            [[ -n "${2:-}" && "$2" != --* ]] || { echo "ERROR: $1 requires a value." >&2; exit 2; }
+            SUBTITLE_SELECTION_FLAGS+=("$1" "$2"); shift 2 ;;
+        --lang=*|--subtitle-source=*)
+            SUBTITLE_SELECTION_FLAGS+=("$1"); shift ;;
+        --debug) DEBUG=1; shift ;;
         --time-offset)
             [[ -n "${2:-}" ]] || { echo 'ERROR: --time-offset requires signed HH:MM:SS.' >&2; exit 2; }
             SUBTITLE_TIMING_FLAGS=("--time-offset=$2")
             shift 2 ;;
         -h|--help)
             echo "Usage: $0 [--time-offset +/-HH:MM:SS] <YouTube_URL>"
+            echo '  --lang CODE: original audio language by default; select an exact variant if ambiguous'
+            echo '  --subtitle-source auto|manual|prefer-manual: default auto (native ASR only)'
+            echo '  --debug: show yt-dlp diagnostics'
             echo 'Shift subtitle timestamps; example: --time-offset -00:15:33'
             exit 0 ;;
         --*) echo "ERROR: Unknown option: $1" >&2; exit 2 ;;
@@ -32,25 +44,15 @@ while [[ $# -gt 0 ]]; do
 done
 [[ -n "$URL" ]] || { echo "Usage: $0 [--time-offset +/-HH:MM:SS] <YouTube_URL>" >&2; exit 2; }
 
-# Step 1: List subtitles
-echo "[*] Detecting available subtitles..."
-SUB_INFO=$(yt-dlp --list-subs "$URL")
+echo "[INFO] Detecting available subtitles..."
+select_youtube_subtitles "$SCRIPT_DIR/.." "$URL" || exit $?
+YT_DLP_SILENT_FLAGS=()
+[[ "$DEBUG" -eq 1 ]] || YT_DLP_SILENT_FLAGS=(--quiet --no-warnings)
 
-# Step 2: Extract auto-generated subtitle language code
-AUTO_LANG=$(echo "$SUB_INFO" | grep '(Original)' | awk '{print $1}' | head -n 1)
-
-if [ -z "$AUTO_LANG" ]; then
-    echo "[!] No auto-generated subtitles found."
-    exit 2
-fi
-
-echo "[*] Detected auto-sub language: $AUTO_LANG"
-
-# Step 3: Download the auto-generated subtitles
-filename=$(yt-dlp --get-filename --no-download-archive "$URL")
+filename=$(yt-dlp "${YT_DLP_SILENT_FLAGS[@]}" --get-filename --no-download-archive "$URL") || exit $?
 base_raw="${filename%.*}"
 base="$(sanitize_filename "$base_raw")"
-yt-dlp --force-overwrites --write-auto-sub --sub-lang "$AUTO_LANG" --convert-subs srt --skip-download -o "${base}.%(ext)s" "$URL" || exit $?
+yt-dlp "${YT_DLP_SILENT_FLAGS[@]}" --no-download-archive --no-playlist --force-overwrites "${SUBTITLE_DOWNLOAD_FLAGS[@]}" --sub-lang "$AUTO_LANG" --convert-subs srt --skip-download -o "${base}.%(ext)s" --load-info-json "$SUBTITLE_METADATA" || exit $?
 
 SRT_FILE="${base}.${AUTO_LANG}.srt"
 TXT_FILE="${base}.${AUTO_LANG}.txt"

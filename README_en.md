@@ -119,7 +119,19 @@ The core pipeline is provider-agnostic and talks to a unified adapter interface.
 - Markdown output goes to `output/` by default; override with `--outdir DIR`. The resulting `.md` file gets front matter with `title`, `filename`, and `url`.
 - `--context-file FILE` passes additional context file(s) to `lecture_cleanup.sh` (can be repeated).
 - `--debug` shows `yt-dlp` output and forwards `--debug` to `lecture_cleanup.sh`.
-- Requires the video to have auto-generated subtitles enabled.
+- Native ASR subtitles are selected by default (`--subtitle-source auto`), using
+  the original audio language rather than the first `-orig` entry. Automatically
+  translated captions are excluded.
+- `--subtitle-source manual` requires author-provided subtitles;
+  `--subtitle-source prefer-manual` prefers them and falls back to native ASR.
+- `--lang en`, `--lang de-CH`, or an exact track code selects a language explicitly.
+  Without it, ambiguous original languages or regional/script variants stop the
+  run and list the available tracks. Exact variants take priority over generic
+  language codes; source preference applies after resolving the variant.
+- Both this workflow and `subtitle-utils/download_youtube_subtitles.sh` read
+  `autoyoutube.lang` and `autoyoutube.subtitle_source` from `config.default.yaml`,
+  overridden by `config.yaml`, then CLI flags. The global `language` setting does
+  not determine the subtitle language. `--lang auto` restores automatic detection.
 
 ### YouTube audio through Groq or Speechcore
 

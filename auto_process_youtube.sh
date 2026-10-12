@@ -14,6 +14,8 @@ fi
 DEBUG=0
 OVERWRITE=0
 SUBTITLE_TIMING_FLAGS=()
+SUBTITLE_SELECTION_FLAGS=()
+source "$SCRIPT_DIR/subtitle-utils/youtube_subtitle_selection.sh"
 YOUTUBE_UPLOAD_DATE=""
 
 # External helper for URL normalization
@@ -91,6 +93,8 @@ Options:
     default: $SRTOUTDIR; 
   --overwrite      Re-process even if destination .md already exists (default: error if Markdown exists)
   --debug          Show yt-dlp output and pass --debug to lecture_cleanup.sh
+  --lang CODE          Subtitle language/track (default: detect original audio)
+  --subtitle-source SOURCE  auto (default), manual, or prefer-manual
   --time-offset OFFSET  Shift subtitles by signed HH:MM:SS (e.g. -00:15:33)
   --context-file FILE  Additional context file(s) passed to lecture_cleanup.sh (can be repeated)
 
@@ -142,6 +146,15 @@ while [[ $# -gt 0 ]]; do
             ;;
         --overwrite)
             OVERWRITE=1
+            shift
+            ;;
+        --lang|--subtitle-source)
+            [[ -n "${2:-}" && "$2" != --* ]] || { echo "ERROR: $1 requires a value." >&2; exit 2; }
+            SUBTITLE_SELECTION_FLAGS+=("$1" "$2")
+            shift 2
+            ;;
+        --lang=*|--subtitle-source=*)
+            SUBTITLE_SELECTION_FLAGS+=("$1")
             shift
             ;;
         --time-offset)
@@ -210,30 +223,11 @@ if ! URL=$(normalize_youtube_url "$RAW_URL"); then
 fi
 echo "[INFO] Normalized URL: $URL"
 
-# Step 1: List subtitles
 echo "[INFO] Detecting available subtitles..."
-SUB_INFO=$(yt-dlp "${YT_DLP_SILENT_FLAGS[@]}" --print "%(upload_date)s" --list-subs "$URL")
+select_youtube_subtitles "$SCRIPT_DIR" "$URL" || exit $?
 
-# Step 2: Extract auto-generated subtitle language code
-AUTO_LANG=$(echo "$SUB_INFO" | grep '(Original)' | awk '{print $1}' | head -n 1)
-YOUTUBE_UPLOAD_DATE_RAW=$(printf '%s\n' "$SUB_INFO" | awk '/^[0-9]{8}$/ {print; exit}')
-if [[ "$YOUTUBE_UPLOAD_DATE_RAW" =~ ^([0-9]{4})([0-9]{2})([0-9]{2})$ ]]; then
-    YOUTUBE_UPLOAD_DATE="${BASH_REMATCH[1]}-${BASH_REMATCH[2]}-${BASH_REMATCH[3]}"
-elif [[ -n "$YOUTUBE_UPLOAD_DATE_RAW" ]]; then
-    YOUTUBE_UPLOAD_DATE="$YOUTUBE_UPLOAD_DATE_RAW"
-fi
-
-if [ -z "$AUTO_LANG" ]; then
-    echo "[WARN] No auto-generated subtitles found."
-    exit 2
-fi
-
-LANG="${AUTO_LANG%-orig}"
-
-echo "[INFO] Detected auto-sub language: $AUTO_LANG lang: $LANG"
-
-# Step 3: Download the auto-generated subtitles
-filename=$(yt-dlp "${YT_DLP_SILENT_FLAGS[@]}" --print filename --skip-download --extractor-args "youtube:player_client=default" "$URL")
+# Download the selected native subtitle track
+filename=$(yt-dlp "${YT_DLP_SILENT_FLAGS[@]}" --print filename --skip-download --extractor-args "youtube:player_client=default" "$URL") || exit $?
 base_raw="${filename%.*}"
 base="$(sanitize_filename "$base_raw")"
 workflow_prepare_job "$URL" "$base" || exit $?
@@ -248,7 +242,7 @@ fi
 
 mkdir -p "$SRTOUTDIR" "$OUTDIR"
 
-yt-dlp "${YT_DLP_SILENT_FLAGS[@]}" --force-overwrites --write-auto-sub --sub-lang "$AUTO_LANG" --convert-subs srt --skip-download --no-progress --extractor-args "youtube:player_client=default" -o "$SRTOUTDIR/${base}.%(ext)s" "$URL" || exit $?
+yt-dlp "${YT_DLP_SILENT_FLAGS[@]}" --no-download-archive --no-playlist --force-overwrites "${SUBTITLE_DOWNLOAD_FLAGS[@]}" --sub-lang "$AUTO_LANG" --convert-subs srt --skip-download --no-progress --extractor-args "youtube:player_client=default" -o "$SRTOUTDIR/${base}.%(ext)s" --load-info-json "$SUBTITLE_METADATA" || exit $?
 python3 "$SCRIPT_DIR/subtitle-utils/subtitle_timing.py" "$SRTOUTDIR/$SRT_FILE" "$URL" "${SUBTITLE_TIMING_FLAGS[@]}" || exit $?
 
 echo "Downloaded: $SRT_FILE"
@@ -297,7 +291,7 @@ if [[ -f "$OUT_MD" ]]; then
         printf 'filename: %s\n' "$TXT_FILE"
         printf 'url: %s\n' "$URL"
         printf 'youtube_upload_date: "%s"\n' "$YOUTUBE_UPLOAD_DATE"
-        printf 'transcription_source: %s\n' "youtube-auto"
+        printf 'transcription_source: %s\n' "youtube-$SELECTED_SUBTITLE_SOURCE"
         printf 'transcription_date: %s\n' "$TRANSCRIPTION_DATE"
         printf 'language: %s\n' "$LANG"
         printf '%s\n\n' '---'
