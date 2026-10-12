@@ -15,6 +15,15 @@ and a suggestion to use `--help`, then exits successfully without processing.
 
 ## Common commands
 
+The utility is also available through `StartMe.sh`. Arguments are passed unchanged,
+and relative paths are resolved from the directory where you run the command:
+
+```sh
+./StartMe.sh yt-md-screenshots ./notes.md --between-timecodes
+./StartMe.sh help yt-md-screenshots
+./StartMe.sh yt-md-screenshots --help
+```
+
 ```sh
 subtitle-utils/yt-md-screenshots '/path/to/lecture.md'
 subtitle-utils/yt-md-screenshots '/path/to/lecture.md' --dry-run

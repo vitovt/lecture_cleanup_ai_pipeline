@@ -251,6 +251,10 @@ Utilities
     Add a YouTube URL to local timestamps in Markdown headings and camera links.
     Example: $PROGRAM add-video-url -u "https://youtu.be/VIDEO_ID" ./notes.md --overwrite
 
+  yt-md-screenshots
+    Add cached video screenshots after timestamped YouTube links in Markdown.
+    Example: $PROGRAM yt-md-screenshots ./notes.md --between-timecodes
+
   download-subtitles
     Download native subtitles for one YouTube URL into the current directory.
     Example: $PROGRAM download-subtitles "https://youtu.be/VIDEO_ID"
@@ -309,6 +313,7 @@ resolve_mode() {
         add-summary) TARGET="$SCRIPT_DIR/subtitle-utils/add_summary.sh" ;;
         source-timecodes) TARGET="$SCRIPT_DIR/subtitle-utils/source_timecodes.py" ;;
         add-video-url) TARGET="$SCRIPT_DIR/subtitle-utils/add_video_url.py" ;;
+        yt-md-screenshots) TARGET="$SCRIPT_DIR/subtitle-utils/yt-md-screenshots" ;;
         download-subtitles) TARGET="$SCRIPT_DIR/subtitle-utils/download_youtube_subtitles.sh"; HELP_KIND="download-subtitles" ;;
         extract-audio) TARGET="$SCRIPT_DIR/subtitle-utils/extract-audio.sh"; HELP_KIND="extract-audio" ;;
         docx-to-markdown) TARGET="$SCRIPT_DIR/subtitle-utils/docx2md.sh"; HELP_KIND="docx-to-markdown" ;;
