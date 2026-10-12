@@ -540,7 +540,7 @@ class Parser(argparse.ArgumentParser):
 
 
 def parser():
-    p = Parser(description=__doc__)
+    p = Parser(description=__doc__, allow_abbrev=False)
     p.add_argument('markdown', type=Path, help='Markdown file to update')
     p.add_argument('--local-video', action='append', default=[], metavar='[VIDEO_ID=]PATH',
                    help='Use a local video; repeat with IDs for multiple sources (never modified)')

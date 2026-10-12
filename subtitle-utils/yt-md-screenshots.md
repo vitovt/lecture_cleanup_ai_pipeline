@@ -8,6 +8,8 @@
 
 Requirements: Python 3.9+, `ffmpeg`, `ffprobe`, and `yt-dlp` for YouTube access.
 All commands, diagnostics, and help are in English. Run `--help` for every option.
+Option names must be exact: unknown or abbreviated options (such as
+`--between-timeco`) and invalid values fail before processing, with exit status 2.
 
 ## Common commands
 

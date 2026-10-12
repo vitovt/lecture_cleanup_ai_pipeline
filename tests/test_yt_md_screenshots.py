@@ -152,6 +152,23 @@ class WorkflowTests(unittest.TestCase):
             code = m.main([str(self.md), *map(str, flags)])
         return code, out.getvalue(), err.getvalue()
 
+    def test_unknown_and_abbreviated_options_fail_before_processing(self):
+        source = link()
+        for flags in (('--between-timeco',), ('--off', '2'), ('--delete-orphan',),
+                      ('--unexisting-option',), ('--offset=wrong',)):
+            with self.subTest(flags=flags):
+                code, out, err = self.run_cli(source, *flags)
+                self.assertEqual(code, 2)
+                self.assertTrue(err)
+                self.assertEqual(out, '')
+                self.assertEqual(self.md.read_text(), source)
+                self.assertFalse((self.root/'_resources').exists())
+                self.assertFalse(self.workspaces)
+                self.metadata.assert_not_called()
+                self.probe.assert_not_called()
+                self.download.assert_not_called()
+                self.frame.assert_not_called()
+
 
     def test_grouped_download_idempotency_and_cleanup(self):
         code, out, err = self.run_cli(link()+link()+link(2))
