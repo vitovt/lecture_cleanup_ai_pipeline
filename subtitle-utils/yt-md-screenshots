@@ -248,6 +248,21 @@ def frame_name(video_id, seconds, offset, identity=None):
     return f'img-{video_id}{suffix}'
 
 
+def between_time(seconds, following, duration, offset):
+    """Plan an integer midpoint in document order, before touching the cache."""
+    if not 0 <= seconds < duration:
+        raise Problem(f'timestamp {seconds}s exceeds video duration {duration:g}s')
+    end = duration if following is None else following
+    if following is not None:
+        if not 0 <= following < duration:
+            raise Problem(f'next timestamp {following}s exceeds video duration {duration:g}s')
+        if following <= seconds:
+            raise Problem(f'next timestamp {following}s is earlier than current timestamp {seconds}s')
+    requested = seconds + (end - seconds) / 2 + offset
+    clamped = min(max(requested, 0), duration)
+    return math.floor(clamped), requested, clamped != requested
+
+
 def run_command(command, timeout, log, output_path=None):
     tool = Path(command[0]).name
     log.debug('$ ' + shlex.join(command))
@@ -535,6 +550,9 @@ def parser():
     group.add_argument('--deduplicate', action='store_true', help='Keep generated images only at the first occurrence')
     p.add_argument('--preserve-cache', action='store_true', help='Keep the temporary run directory even on success')
     p.add_argument('--offset', type=finite, default=0, metavar='SECONDS', help='Signed frame offset (default: 0)')
+    p.add_argument('--between-timecodes', action='store_true',
+                   help='Capture halfway to the next distinct same-video timecode in document order; '
+                        'last uses video end; add offset, clamp, then round down to whole seconds')
     p.add_argument('--attempts', type=int, default=2, help='Total attempts for transient failures, including the first (default: 2)')
     p.add_argument('--timeout', type=positive, default=120, metavar='SECONDS', help='Metadata/probe/frame timeout (default: 120)')
     p.add_argument('--download-timeout', type=positive, default=3600, metavar='SECONDS', help='Full download timeout (default: 3600)')
@@ -622,9 +640,12 @@ def execute(args):
             raise Problem(f'Resources path is not a writable directory: {resources}')
         outcomes = {}
         generated = cached = 0
+        completed_frames = set()
         identities = {}
         for video_id in dict.fromkeys(v for v, _ in targets):
             video_targets = [(target, line) for target, line in targets.items() if target[0] == video_id]
+            following = {target: video_targets[index + 1][0][1] if index + 1 < len(video_targets) else None
+                         for index, (target, _) in enumerate(video_targets)}
             try:
                 local = sources.get(video_id)
                 identity = None
@@ -634,13 +655,24 @@ def execute(args):
                         identities[local] = local_identity(local)
                     identity = identities[local]
                     duration = retry(lambda: probe(local, args.timeout, log), args.attempts, log)
+                elif args.between_timecodes:
+                    duration = metadata(video_id, args)
                 pending = []
                 for target, line in video_targets:
                     seconds = target[1]
                     try:
-                        name = frame_name(video_id, seconds, args.offset, identity)
+                        if args.between_timecodes:
+                            effective, _, _ = between_time(seconds, following[target], duration, args.offset)
+                            name = frame_name(video_id, effective, 0, identity)
+                            if args.dry_run:
+                                end = duration if following[target] is None else following[target]
+                                log.info(f'line {line}: {video_id}: interval {seconds:g}s–{end:g}s; '
+                                         f'midpoint {(seconds + end) / 2:g}s; offset {args.offset:g}s; '
+                                         f'frame time {effective}s; {name}')
+                        else:
+                            name = frame_name(video_id, seconds, args.offset, identity)
                     except Problem as exc:
-                        report(f'line {line}: {video_id}: {exc}')
+                        report(f'line {line}: {video_id} @ {seconds}s: {exc}')
                         continue
                     if duration is not None and not 0 <= seconds < duration:
                         report(f'line {line}: {video_id} @ {seconds}s exceeds video duration {duration:g}s')
@@ -652,7 +684,7 @@ def execute(args):
                         cached += 1
                     else:
                         pending.append((target, line, name))
-                if not local and (pending or args.dry_run):
+                if not local and duration is None and (pending or args.dry_run):
                     duration = metadata(video_id, args)
                 # Dry-run also checks timestamps of otherwise cached targets.
                 if args.dry_run and duration is not None:
@@ -683,8 +715,14 @@ def execute(args):
                     if not 0 <= seconds < duration:
                         report(f'{context} exceeds downloaded video duration {duration:g}s')
                         continue
-                    effective = min(max(seconds + args.offset, 0), duration)
-                    if effective != seconds + args.offset:
+                    if args.between_timecodes:
+                        effective, requested, clamped = between_time(seconds, following[target], duration, args.offset)
+                        name = frame_name(video_id, effective, 0, identity)
+                    else:
+                        requested = seconds + args.offset
+                        effective = min(max(requested, 0), duration)
+                        clamped = effective != requested
+                    if clamped:
                         log.info(f'WARNING: {context}: offset clamped to {effective:g}s (boundary frame)')
                     if args.dry_run:
                         log.info(f'Would generate {name} at {effective:g}s')
@@ -692,10 +730,12 @@ def execute(args):
                         continue
                     log.info(f'Extracting {context}, frame time {effective:g}s ...')
                     try:
-                        retry(lambda: create_frame(local, effective, duration, resources / name,
-                                                   work, args.timeout, log), args.attempts, log)
+                        if name not in completed_frames:
+                            retry(lambda: create_frame(local, effective, duration, resources / name,
+                                                       work, args.timeout, log), args.attempts, log)
+                            completed_frames.add(name)
+                            generated += 1
                         outcomes[target] = name
-                        generated += 1
                     except (Problem, OSError) as exc:
                         report(f'{context}: {exc}; existing PNG/link kept, if present; frame NOT updated')
             except (Problem, OSError) as exc:

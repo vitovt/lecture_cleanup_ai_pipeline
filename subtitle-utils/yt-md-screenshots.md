@@ -16,6 +16,8 @@ subtitle-utils/yt-md-screenshots '/path/to/lecture.md'
 subtitle-utils/yt-md-screenshots '/path/to/lecture.md' --dry-run
 subtitle-utils/yt-md-screenshots '/path/to/lecture.md' --offset 3
 subtitle-utils/yt-md-screenshots '/path/to/lecture.md' --offset -2
+subtitle-utils/yt-md-screenshots '/path/to/lecture.md' --between-timecodes
+subtitle-utils/yt-md-screenshots '/path/to/lecture.md' --between-timecodes --offset 2
 subtitle-utils/yt-md-screenshots '/path/to/lecture.md' --force
 subtitle-utils/yt-md-screenshots '/path/to/lecture.md' --all-occurrences
 subtitle-utils/yt-md-screenshots '/path/to/lecture.md' --deduplicate
@@ -70,13 +72,49 @@ YouTube names retain compatibility with the original script:
 a negative offset adds, for example, `-offset-m2`. Offsets do not change the
 source links. Generated Markdown uses angle-bracket URLs with percent encoding.
 
+### Capture between timecodes
+
+`--between-timecodes` captures halfway between the current timecode and the next
+distinct timecode for the **same video in document order**. Repeated timecodes
+share the plan from their first occurrence. Links to other videos and excluded
+code/comments do not affect the interval. For each video's final timecode, the
+interval ends at that video's duration. A next timecode earlier than the current
+one, or outside the video, produces an error for that interval and preserves its
+existing image. Timecodes are not sorted or silently skipped to find a later one.
+
+The calculation is `floor(clamp((current + next_or_end) / 2 + offset, 0, duration))`.
+Only whole seconds are used, including after a fractional offset or video end.
+Between-mode names contain the **final capture second**, with no mode or offset
+suffix. Local names retain their filename/hash identity. Ordinary runs retain
+their original timestamp/offset naming. Source links are never shifted.
+
+For timecodes `945`, `999`, `1046` and duration `4288.684` seconds:
+
+| Mode | PNG capture/name seconds |
+| --- | --- |
+| Ordinary | `945`, `999`, `1046` |
+| `--between-timecodes` | `972`, `1022`, `2667` |
+| `--between-timecodes --offset 2` | `974`, `1024`, `2669` |
+
+For example, `img-1ASzWklab2U-945.png` is replaced in Markdown by
+`img-1ASzWklab2U-972.png`, then by `img-1ASzWklab2U-974.png`. Successfully generated
+or cached images replace attachments; failures preserve the previous attachment.
+Rerunning a mode reuses its PNGs. Returning to ordinary capture reuses the original
+PNGs if retained. Editing a timecode can change both its own midpoint and that of
+the preceding distinct timecode. Unchanged final capture seconds share a cached
+PNG, including with ordinary zero-offset capture.
+
+Between-mode planning always probes local duration or requests YouTube metadata,
+even when all PNGs are cached. Only sources needing new frames are downloaded.
+Dry runs show interval, midpoint, offset, capture second, and filename.
+
 ## Downloads, cache, and cleanup
 
 A video needing new frames is downloaded in full once per run, using the best
 available video format at or below 1080p, prioritizing resolution. A selected
 format may also contain audio. No format above 1080p is selected. Frames are extracted locally.
 Valid existing PNGs avoid regeneration; each cache hit is printed at `info`.
-A fully cached YouTube source needs no metadata request in normal mode.
+A fully cached YouTube source needs no metadata request in ordinary capture mode.
 `--dry-run` does check remote metadata even for cached sources.
 
 Downloaded media and intermediate PNGs live in a unique

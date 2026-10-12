@@ -152,6 +152,7 @@ class WorkflowTests(unittest.TestCase):
             code = m.main([str(self.md), *map(str, flags)])
         return code, out.getvalue(), err.getvalue()
 
+
     def test_grouped_download_idempotency_and_cleanup(self):
         code, out, err = self.run_cli(link()+link()+link(2))
         self.assertEqual(code, 0, err)
@@ -172,6 +173,90 @@ class WorkflowTests(unittest.TestCase):
         self.run_cli(None, '--deduplicate')
         self.assertEqual(self.md.read_text().count('!['), 1)
         self.assertEqual(self.frame.call_count, 1)
+
+    def test_between_migration_offset_cache_and_return_to_original(self):
+        source = link(1)+link(4)+link(7)
+        self.assertEqual(self.run_cli(source)[0], 0)
+        code, out, err = self.run_cli(None, '--between-timecodes')
+        self.assertEqual(code, 0, err)
+        for t in (2, 5, 8):
+            self.assertIn(f'img-{VIDEO}-{t}.png', self.md.read_text())
+        for t in (1, 4, 7):
+            self.assertTrue((self.root/f'_resources/img-{VIDEO}-{t}.png').exists())
+            self.assertIn(f'img-{VIDEO}-{t}.png', out)
+        code, _, err = self.run_cli(None, '--between-timecodes', '--offset', '1')
+        self.assertEqual(code, 0, err)
+        for t in (3, 6, 9):
+            self.assertIn(f'img-{VIDEO}-{t}.png', self.md.read_text())
+        self.assertNotIn('offset', self.md.read_text())
+        snapshot = self.md.read_bytes()
+        self.frame.reset_mock()
+        self.download.reset_mock()
+        self.metadata.reset_mock()
+        code, out, err = self.run_cli(None, '--between-timecodes', '--offset', '1')
+        self.assertEqual(code, 0, err)
+        self.assertEqual(self.md.read_bytes(), snapshot)
+        self.frame.assert_not_called()
+        self.download.assert_not_called()
+        self.metadata.assert_called_once()
+        self.assertEqual(out.count('PNG already exists'), 3)
+        self.assertEqual(self.run_cli()[0], 0)
+        self.frame.assert_not_called()
+        for t in (1, 4, 7):
+            self.assertIn(f'img-{VIDEO}-{t}.png', self.md.read_text())
+
+    def test_between_document_order_same_video_and_duplicates(self):
+        source = link(1)+link(3, OTHER)+link(1)+link(4)+link(7, OTHER)+link(7)
+        code, _, err = self.run_cli(source, '--between-timecodes', '--all-occurrences')
+        self.assertEqual(code, 0, err)
+        self.assertEqual(self.frame.call_count, 5)
+        self.assertEqual(self.download.call_count, 2)
+        self.assertEqual(self.md.read_text().count(f'img-{VIDEO}-2.png'), 2)
+        for video, times in ((VIDEO, (2, 5, 8)), (OTHER, (5, 8))):
+            for t in times:
+                self.assertIn(f'img-{video}-{t}.png', self.md.read_text())
+
+    def test_between_rounding_offset_and_boundary_frame_sharing(self):
+        self.assertEqual(m.between_time(1, 4, 10, 0)[0], 2)
+        self.assertEqual(m.between_time(1, 4, 10, .75)[0], 3)
+        self.assertEqual(m.between_time(7, None, 10.9, 0)[0], 8)
+        self.assertEqual(m.between_time(7, None, 10, -20)[0], 0)
+        self.assertEqual(m.between_time(7, None, 10, 20)[0], 10)
+        code, out, err = self.run_cli(link(1)+link(4)+link(7), '--between-timecodes', '--offset', '-20')
+        self.assertEqual(code, 0, err)
+        self.assertEqual(self.frame.call_count, 1)
+        self.assertEqual(self.md.read_text().count(f'img-{VIDEO}-0.png'), 3)
+        self.assertIn('offset clamped', out)
+
+    def test_between_backward_and_invalid_next_keep_existing_images(self):
+        source = link(7)+image(7)+link(1)+link(4)
+        code, _, err = self.run_cli(source, '--between-timecodes')
+        self.assertEqual(code, 1)
+        self.assertIn('earlier than current', err)
+        self.assertIn(link(7)+image(7), self.md.read_text())
+        self.frame.reset_mock()
+        code, _, err = self.run_cli(link(1)+link(20)+link(4), '--between-timecodes', '--force')
+        self.assertEqual(code, 1)
+        self.assertIn('next timestamp 20s exceeds', err)
+        self.assertEqual(self.frame.call_count, 1)
+        code, _, err = self.run_cli(source, '--between-timecodes', '--fail-fast')
+        self.assertEqual(code, 1)
+        self.assertEqual(self.md.read_text(), source)
+
+    def test_between_edit_next_timecode_and_local_naming(self):
+        self.run_cli(link(1)+link(4)+link(7), '--between-timecodes')
+        self.md.write_text(self.md.read_text().replace('?t=4)', '?t=5)'))
+        self.frame.reset_mock()
+        code, _, err = self.run_cli(None, '--between-timecodes')
+        self.assertEqual(code, 0, err)
+        self.assertEqual([call.args[1] for call in self.frame.call_args_list], [3, 6])
+        local = self.root/'Lecture.mp4'
+        local.write_bytes(b'VIDEO')
+        code, _, err = self.run_cli(link(1), '--between-timecodes', '--offset', '1', '--local-video', local)
+        self.assertEqual(code, 0, err)
+        self.assertIn(f'img-local-Lecture-{hashlib.sha256(b"VIDEO").hexdigest()[:4]}-6.png', self.md.read_text())
+        self.assertEqual(local.read_bytes(), b'VIDEO')
+
 
     def test_cache_preserved_on_request(self):
         code, out, err = self.run_cli(link(), '--preserve-cache')
@@ -455,6 +540,7 @@ class CommandTests(unittest.TestCase):
 
 @unittest.skipUnless(shutil.which('ffmpeg') and shutil.which('ffprobe'), 'ffmpeg/ffprobe required')
 class RealVideoTests(unittest.TestCase):
+
     def test_remote_cli_downloads_once_and_cleans_video(self):
         with tempfile.TemporaryDirectory(prefix='yt-md-remote-') as directory:
             root = Path(directory)
