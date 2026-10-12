@@ -19,7 +19,6 @@ import time
 import traceback
 from contextlib import nullcontext
 from datetime import datetime
-from decimal import Decimal
 from pathlib import Path
 from urllib.parse import parse_qs, quote, unquote, urlparse
 
@@ -27,7 +26,7 @@ VIDEO_LINK = re.compile(r'^([ ]{0,3})\[🎥[^\]\r\n]*\]\(<?(https?://[^\s<>]+?)>
 VIDEO_ID = re.compile(r'^[A-Za-z0-9_-]{11}$')
 FENCE = re.compile(r'^ {0,3}(`{3,}|~{3,})(.*)$')
 IMAGE = re.compile(r'!\[(?:\\.|[^\]\\])*\]\(\s*(?:<([^>\n]+)>|((?:\\.|[^\s])+?))(?:\s+["\'].*["\'])?\s*\)')
-GENERATED = re.compile(r'^img-(?:[A-Za-z0-9_-]{11}|local-.+-[0-9a-f]{4})-\d+(?:-offset-[pm][\d.]+)?\.png$')
+GENERATED = re.compile(r'^img-(?:[A-Za-z0-9_-]{11}|local-.+-[0-9a-f]{4})-\d+\.png$')
 FORMAT = 'bv*[height<=1080]'
 
 
@@ -230,16 +229,11 @@ def local_identity(path):
     return name, digest.hexdigest()[:4]
 
 
-def frame_name(video_id, seconds, offset, identity=None):
+def frame_name(video_id, seconds, identity=None):
     suffix = f'-{seconds}'
-    if offset:
-        offset_text = format(Decimal(str(abs(offset))), 'f')
-        if '.' in offset_text:
-            offset_text = offset_text.rstrip('0').rstrip('.')
-        suffix += f'-offset-{"p" if offset > 0 else "m"}{offset_text}'
     suffix += '.png'
     if len(suffix) > 100:
-        raise Problem('Timestamp/offset is too large for a PNG filename')
+        raise Problem('Capture time is too large for a PNG filename')
     if identity:
         stem, digest = identity
         while len(f'img-local-{stem}-{digest}{suffix}'.encode('utf-8')) > 255:
@@ -260,6 +254,16 @@ def between_time(seconds, following, duration, offset):
             raise Problem(f'next timestamp {following}s is earlier than current timestamp {seconds}s')
     requested = seconds + (end - seconds) / 2 + offset
     clamped = min(max(requested, 0), duration)
+    return math.floor(clamped), requested, clamped != requested
+
+
+def capture_time(seconds, following, duration, offset, between=False):
+    if between:
+        return between_time(seconds, following, duration, offset)
+    if duration is not None and not 0 <= seconds < duration:
+        raise Problem(f'timestamp {seconds}s exceeds video duration {duration:g}s')
+    requested = seconds + offset if offset else seconds
+    clamped = min(max(requested, 0), duration) if duration is not None else max(requested, 0)
     return math.floor(clamped), requested, clamped != requested
 
 
@@ -660,22 +664,21 @@ def execute(args):
                         identities[local] = local_identity(local)
                     identity = identities[local]
                     duration = retry(lambda: probe(local, args.timeout, log), args.attempts, log)
-                elif args.between_timecodes:
+                elif args.between_timecodes or args.offset:
                     duration = metadata(video_id, args)
                 pending = []
                 for target, line in video_targets:
                     seconds = target[1]
                     try:
+                        effective, _, _ = capture_time(seconds, following[target], duration,
+                                                       args.offset, args.between_timecodes)
+                        name = frame_name(video_id, effective, identity)
                         if args.between_timecodes:
-                            effective, _, _ = between_time(seconds, following[target], duration, args.offset)
-                            name = frame_name(video_id, effective, 0, identity)
                             if args.dry_run:
                                 end = duration if following[target] is None else following[target]
                                 log.info(f'line {line}: {video_id}: interval {seconds:g}s–{end:g}s; '
                                          f'midpoint {(seconds + end) / 2:g}s; offset {args.offset:g}s; '
                                          f'frame time {effective}s; {name}')
-                        else:
-                            name = frame_name(video_id, seconds, args.offset, identity)
                     except Problem as exc:
                         report(f'line {line}: {video_id} @ {seconds}s: {exc}')
                         continue
@@ -720,13 +723,9 @@ def execute(args):
                     if not 0 <= seconds < duration:
                         report(f'{context} exceeds downloaded video duration {duration:g}s')
                         continue
-                    if args.between_timecodes:
-                        effective, requested, clamped = between_time(seconds, following[target], duration, args.offset)
-                        name = frame_name(video_id, effective, 0, identity)
-                    else:
-                        requested = seconds + args.offset
-                        effective = min(max(requested, 0), duration)
-                        clamped = effective != requested
+                    effective, requested, clamped = capture_time(seconds, following[target], duration,
+                                                                 args.offset, args.between_timecodes)
+                    name = frame_name(video_id, effective, identity)
                     if clamped:
                         log.info(f'WARNING: {context}: offset clamped to {effective:g}s (boundary frame)')
                     if args.dry_run:

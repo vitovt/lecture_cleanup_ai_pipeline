@@ -66,6 +66,8 @@ class ParsingTests(unittest.TestCase):
                      '![](%5Fresources/img-1ASzWklab2U-1.png)'):
             self.assertEqual(m.image_filename(text), f'img-{VIDEO}-1.png')
         self.assertIsNone(m.image_filename('![](_resources/photo.png)'))
+        self.assertIsNone(m.image_filename(f'![](_resources/img-{VIDEO}-1-offset-p5.png)'))
+        self.assertIsNone(m.image_filename(f'![](_resources/img-{VIDEO}-1-offset-m2.png)'))
 
     def test_reference_images_are_recognized(self):
         source = (link()+'\n![Slide][frame]\n\n'
@@ -108,10 +110,11 @@ class ParsingTests(unittest.TestCase):
             stem, digest = m.local_identity(video)
             self.assertEqual(stem, 'Лекція')
             self.assertEqual(digest, hashlib.sha256(b'video contents').hexdigest()[:4])
-            name = m.frame_name(VIDEO, 999, -0.000001, ('🙂'*64, digest))
+            name = m.frame_name(VIDEO, 999, ('🙂'*64, digest))
             self.assertLessEqual(len(name.encode()), 255)
             self.assertRegex(name, m.GENERATED)
-            self.assertIn('offset-m0.000001', name)
+            self.assertTrue(name.endswith('-999.png'))
+            self.assertNotIn('offset', name)
 
 
 class WorkflowTests(unittest.TestCase):
@@ -390,6 +393,45 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(self.frame.call_args.args[1], 0)
         self.run_cli(link(1), '--offset', '20')
         self.assertEqual(self.frame.call_args.args[1], 10)
+
+    def test_all_modes_share_cache_by_actual_capture_second(self):
+        code, _, err = self.run_cli(link(1), '--offset', '4')
+        self.assertEqual(code, 0, err)
+        self.assertIn(f'img-{VIDEO}-5.png', self.md.read_text())
+        self.assertNotIn('offset', self.md.read_text())
+        self.assertEqual(self.frame.call_args.args[1], 5)
+        self.frame.reset_mock()
+        self.download.reset_mock()
+        for source, flags in ((link(5), ()), (link(1), ('--between-timecodes',)),
+                              (link(3), ('--offset', '2'))):
+            code, out, err = self.run_cli(source, *flags)
+            self.assertEqual(code, 0, err)
+            self.assertIn(f'img-{VIDEO}-5.png', self.md.read_text())
+            self.assertIn('PNG already exists', out)
+            self.frame.assert_not_called()
+            self.download.assert_not_called()
+
+    def test_offset_rounds_clamps_and_validates_before_cache_lookup(self):
+        for offset, expected in (('1.75', 2), ('-1.1', 0), ('20', 10)):
+            code, _, err = self.run_cli(link(1), '--offset', offset)
+            self.assertEqual(code, 0, err)
+            self.assertIn(f'img-{VIDEO}-{expected}.png', self.md.read_text())
+            self.assertEqual(self.frame.call_args.args[1], expected)
+        self.assertEqual(m.capture_time(1, None, 10.9, 20)[0], 10)
+        code, _, err = self.run_cli(link(20), '--offset', '-18')
+        self.assertEqual(code, 1)
+        self.assertNotIn('![', self.md.read_text())
+        self.assertIn('exceeds video duration', err)
+
+    def test_offset_migration_deletes_only_previous_capture_png(self):
+        self.run_cli(link(1))
+        old = self.root/f'_resources/img-{VIDEO}-1.png'
+        code, out, err = self.run_cli(None, '--offset', '5', '--delete-orphans')
+        self.assertEqual(code, 0, err)
+        self.assertIn(f'img-{VIDEO}-6.png', self.md.read_text())
+        self.assertTrue((self.root/f'_resources/img-{VIDEO}-6.png').exists())
+        self.assertFalse(old.exists())
+        self.assertIn(f'rm -- {old} # DELETED:', out)
 
     def test_force_failure_keeps_old_file_and_reference(self):
         self.run_cli(link())
@@ -755,7 +797,7 @@ else:
             result = run('--offset','20')
             self.assertIn('offset clamped', result.stdout)
             self.assertEqual(md.read_text().count('!['), 1)
-            self.assertIn('offset-p20', md.read_text())
+            self.assertRegex(md.read_text(), r'img-local-Video_one-[0-9a-f]{4}-2\.png')
             run('--force','--offset','20')
             result = run('--offset','-20')
             self.assertIn('rm --', result.stdout)

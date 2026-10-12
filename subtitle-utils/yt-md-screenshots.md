@@ -61,8 +61,8 @@ replaces that ID's media source and needs no YouTube connection. Local input
 videos are **never modified or deleted**, including with `--force`.
 
 Local PNG names include the sanitized input stem, the first **four hexadecimal
-characters (two bytes) of SHA-256 of the complete video contents**, the original
-timestamp, and a nonzero offset. Hashing reads each distinct local file once per
+characters (two bytes) of SHA-256 of the complete video contents**, and the final
+whole-second capture time. Hashing reads each distinct local file once per
 run. The sanitizer follows `sanitize_filename.sh`: controls are removed,
 Windows-forbidden characters become spaces, trailing dots/spaces are trimmed,
 and reserved device names are prefixed. Spaces then become underscores. The
@@ -72,10 +72,12 @@ necessary to keep the complete name within 255 UTF-8 bytes.
 Example: `img-local-Local_lecture-a81f-999.png`. The short hash can collide;
 it is an identifier convenience, not a guarantee of content uniqueness.
 
-YouTube names retain compatibility with the original script:
-`img-1ASzWklab2U-999.png`. A positive offset adds `-offset-p3` before `.png`;
-a negative offset adds, for example, `-offset-m2`. Offsets do not change the
-source links. Generated Markdown uses angle-bracket URLs with percent encoding.
+Every mode names PNGs using the final whole-second capture time:
+`img-1ASzWklab2U-999.png`. For a link at `999`, `--offset 3` captures at `1002`
+and produces `img-1ASzWklab2U-1002.png`; `--offset -2` produces
+`img-1ASzWklab2U-997.png`. There are no mode or offset suffixes, and legacy offset
+suffix names are not recognized or migrated. Offsets do not change source links.
+Generated Markdown uses angle-bracket URLs with percent encoding.
 
 ### Capture between timecodes
 
@@ -90,8 +92,8 @@ existing image. Timecodes are not sorted or silently skipped to find a later one
 The calculation is `floor(clamp((current + next_or_end) / 2 + offset, 0, duration))`.
 Only whole seconds are used, including after a fractional offset or video end.
 Between-mode names contain the **final capture second**, with no mode or offset
-suffix. Local names retain their filename/hash identity. Ordinary runs retain
-their original timestamp/offset naming. Source links are never shifted.
+suffix, just like ordinary capture. Local names retain their filename/hash
+identity. Source links are never shifted.
 
 For timecodes `945`, `999`, `1046` and duration `4288.684` seconds:
 
@@ -107,7 +109,7 @@ or cached images replace attachments; failures preserve the previous attachment.
 Rerunning a mode reuses its PNGs. Returning to ordinary capture reuses the original
 PNGs if retained. Editing a timecode can change both its own midpoint and that of
 the preceding distinct timecode. Unchanged final capture seconds share a cached
-PNG, including with ordinary zero-offset capture.
+PNG across all modes and offsets.
 
 Between-mode planning always probes local duration or requests YouTube metadata,
 even when all PNGs are cached. Only sources needing new frames are downloaded.
@@ -119,7 +121,9 @@ A video needing new frames is downloaded in full once per run, using the best
 available video format at or below 1080p, prioritizing resolution. A selected
 format may also contain audio. No format above 1080p is selected. Frames are extracted locally.
 Valid existing PNGs avoid regeneration; each cache hit is printed at `info`.
-A fully cached YouTube source needs no metadata request in ordinary capture mode.
+A fully cached YouTube source needs no metadata request for ordinary capture
+without an offset. Offsets and between-mode capture request duration metadata
+before cache lookup to calculate and validate the final capture second.
 `--dry-run` does check remote metadata even for cached sources.
 
 Downloaded media and intermediate PNGs live in a unique
@@ -205,9 +209,11 @@ There is no `--strict-refresh` option.
 
 An original timestamp must be within `[0, duration)`. Invalid positions are
 reported and skipped. Offsets are applied only after this check. If an offset
-moves a valid position outside the recording, the first or last available frame
-is used and the adjustment is reported. A position at the end uses the final
-decoded frame, not a nonexistent frame at exactly `duration`.
+moves a valid position outside the recording, it is clamped to the video bounds
+and the adjustment is reported. In all modes the final position is rounded down
+to whole seconds and used for both extraction and naming. Fractional video ends
+therefore use the final whole-second position. A capture at an integer video end
+uses the final decoded frame, not a nonexistent frame at exactly `duration`.
 
 The default is **two total attempts** (one initial attempt plus one retry) for
 transient network failures/timeouts. Deterministic errors are not retried.
