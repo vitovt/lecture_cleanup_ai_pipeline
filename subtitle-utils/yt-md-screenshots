@@ -815,6 +815,12 @@ def execute(args):
 
 def main(argv=None):
     argv = sys.argv[1:] if argv is None else argv
+    if not argv:
+        print('Add video screenshots to a Markdown document after standalone timestamped YouTube links.')
+        print('Images are saved in _resources beside the Markdown file; existing PNGs are reused.')
+        print('\nExample: subtitle-utils/yt-md-screenshots notes.md')
+        print('\nRun subtitle-utils/yt-md-screenshots --help for more information.')
+        return 0
     # Honor quiet even for argument parsing errors.
     level = 'info'
     for index, value in enumerate(argv):

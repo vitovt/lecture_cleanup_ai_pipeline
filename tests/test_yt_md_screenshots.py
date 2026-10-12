@@ -169,6 +169,20 @@ class WorkflowTests(unittest.TestCase):
                 self.download.assert_not_called()
                 self.frame.assert_not_called()
 
+    def test_no_arguments_prints_introduction_without_processing(self):
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            code = m.main([])
+        self.assertEqual(code, 0)
+        self.assertEqual(err.getvalue(), '')
+        self.assertIn('Add video screenshots to a Markdown document', out.getvalue())
+        self.assertIn('Example: subtitle-utils/yt-md-screenshots notes.md', out.getvalue())
+        self.assertIn('--help for more information', out.getvalue())
+        self.assertFalse(self.workspaces)
+        self.metadata.assert_not_called()
+        self.probe.assert_not_called()
+        self.download.assert_not_called()
+        self.frame.assert_not_called()
 
     def test_grouped_download_idempotency_and_cleanup(self):
         code, out, err = self.run_cli(link()+link()+link(2))
