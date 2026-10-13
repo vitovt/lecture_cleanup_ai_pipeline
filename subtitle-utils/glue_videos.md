@@ -3,6 +3,23 @@
 `glue_videos.py` requires Python 3, FFmpeg and ffprobe on `PATH`. It has no
 third-party Python dependencies.
 
+## Project launcher
+
+From any working directory, use the project's `StartMe.sh` launcher. It preserves
+input order and passes paths and options unchanged; relative paths refer to your
+current working directory:
+
+```bash
+./StartMe.sh glue-videos part1.mkv part2.mkv -o joined.mkv
+./StartMe.sh help glue-videos
+./StartMe.sh glue-videos --help
+```
+
+Calling `./StartMe.sh glue-videos` without arguments shows the utility's short
+introduction. Detailed help is delegated to the utility itself.
+
+## Standalone usage
+
 ```bash
 python3 subtitle-utils/glue_videos.py \
   2026-10-13_15-23-46-Record1.mkv \

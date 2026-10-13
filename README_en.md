@@ -227,6 +227,18 @@ Output files are stored in `./output`:
 * `lecture_qc_report.csv` — QC report
 * `lecture-summary.md` / `lecture-longsummary.md` — optional separate summaries
 
+### Join recording segments without re-encoding
+
+```bash
+./StartMe.sh glue-videos part1.mkv part2.mkv -o joined.mkv
+./StartMe.sh help glue-videos
+```
+
+Inputs are joined in the order supplied, with audio tracks kept separate. Their
+containers and stream properties must match. Existing output requires confirmation
+unless `--overwrite` is supplied. See [the video joining guide](subtitle-utils/glue_videos.md)
+for compatibility checks, argument files, output protection, and tests.
+
 ## CLI Flags (Main)
 
 These flags are passed to `scripts/run_pipeline.py` via the `.sh` wrappers.
