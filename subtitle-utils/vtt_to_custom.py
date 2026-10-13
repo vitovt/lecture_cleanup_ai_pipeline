@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import argparse
 import re
 import sys
 from pathlib import Path
@@ -110,11 +111,24 @@ def dedupe_entries(entries: List[Tuple[str, str]]) -> List[Tuple[str, str]]:
 
 
 def main() -> None:
-    if len(sys.argv) != 2:
-        print("Usage: python vtt_to_custom.py path/to/file.vtt", file=sys.stderr)
-        sys.exit(1)
+    if len(sys.argv) == 1:
+        print('Convert WebVTT subtitles to timestamped plain text, removing repeated and overlapping caption text.')
+        print('\nExample: python3 subtitle-utils/vtt_to_custom.py subtitles.vtt > subtitles.txt')
+        print('\nRun python3 subtitle-utils/vtt_to_custom.py --help for more information.')
+        return
 
-    path = Path(sys.argv[1])
+    parser = argparse.ArgumentParser(
+        description='Convert WebVTT subtitles to timestamped plain text. '
+                    'Normalize whitespace and remove repeated or overlapping caption text.',
+        epilog='Output is written to stdout as [HH:MM:SS,mmm] text. Redirect it to save a file.\n\n'
+               'Example:\n'
+               '  python3 subtitle-utils/vtt_to_custom.py subtitles.vtt > subtitles.txt',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        allow_abbrev=False,
+    )
+    parser.add_argument('vtt', type=Path, metavar='FILE.vtt', help='Input WebVTT subtitle file')
+    args = parser.parse_args()
+    path = args.vtt
     if not path.is_file():
         print(f"File not found: {path}", file=sys.stderr)
         sys.exit(1)
