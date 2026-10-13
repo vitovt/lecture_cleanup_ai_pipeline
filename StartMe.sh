@@ -259,6 +259,10 @@ Utilities
     Download native subtitles for one YouTube URL into the current directory.
     Example: $PROGRAM download-subtitles "https://youtu.be/VIDEO_ID"
 
+  vtt-to-custom
+    Convert WebVTT subtitles to timestamped plain text, removing repeated text.
+    Example: $PROGRAM vtt-to-custom ./subtitles.vtt > ./subtitles.txt
+
   extract-audio
     Extract audio streams from all MP4 files in the current working directory.
     Example: $PROGRAM extract-audio --debug
@@ -314,6 +318,7 @@ resolve_mode() {
         source-timecodes) TARGET="$SCRIPT_DIR/subtitle-utils/source_timecodes.py" ;;
         add-video-url) TARGET="$SCRIPT_DIR/subtitle-utils/add_video_url.py" ;;
         yt-md-screenshots) TARGET="$SCRIPT_DIR/subtitle-utils/yt-md-screenshots" ;;
+        vtt-to-custom) TARGET="$SCRIPT_DIR/subtitle-utils/vtt_to_custom.py" ;;
         download-subtitles) TARGET="$SCRIPT_DIR/subtitle-utils/download_youtube_subtitles.sh"; HELP_KIND="download-subtitles" ;;
         extract-audio) TARGET="$SCRIPT_DIR/subtitle-utils/extract-audio.sh"; HELP_KIND="extract-audio" ;;
         docx-to-markdown) TARGET="$SCRIPT_DIR/subtitle-utils/docx2md.sh"; HELP_KIND="docx-to-markdown" ;;
