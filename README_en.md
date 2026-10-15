@@ -238,6 +238,8 @@ Inputs are joined in the order supplied, with audio tracks kept separate. Their
 containers and stream properties must match. Existing output requires confirmation
 unless `--overwrite` is supplied. See [the video joining guide](subtitle-utils/glue_videos.md)
 for compatibility checks, argument files, output protection, and tests.
+Add `--dry-run` or omit `-o/--output` to inspect input stream properties and
+preview the output path and estimated duration without creating files.
 
 ## CLI Flags (Main)
 

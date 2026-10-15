@@ -259,7 +259,7 @@ def segment_durations(inputs, infos, ffprobe):
     return durations
 
 
-def glue(inputs, output, infos, muxer, ffmpeg, ffprobe, initial_output, snapshots):
+def check_space(inputs, output):
     required = sum(path.stat().st_size for path in inputs)
     required += max(required // 20, 16 * 1024 * 1024)
     free = shutil.disk_usage(output.parent).free
@@ -269,6 +269,68 @@ def glue(inputs, output, infos, muxer, ffmpeg, ffprobe, initial_output, snapshot
             f"{free / 1024**3:.2f} GiB available, approximately {required / 1024**3:.2f} GiB needed.\n"
             "The old output is retained until the new file is complete."
         )
+    return required, free
+
+
+def describe_input(index, path, info):
+    print(f"\nInput {index}: {str(path)!r}")
+    print(f"  Container: {info['format']['format_name']}; extension: {path.suffix}")
+    print(f"  Size: {path.stat().st_size:,} bytes")
+    print(f"  Duration: {float(info['format']['duration']):.6f} seconds; "
+          f"start time: {info['format'].get('start_time', 'unknown')}")
+    brand = info['format'].get('tags', {}).get('major_brand')
+    if brand:
+        print(f"  Major brand: {brand!r}")
+    for index, stream in enumerate(info['streams']):
+        print(f"  Stream {index}: {stream['codec_type']}")
+        fields = COMMON_FIELDS
+        if stream['codec_type'] == 'video':
+            fields += VIDEO_FIELDS
+        elif stream['codec_type'] == 'audio':
+            fields += AUDIO_FIELDS
+        for field in fields + ('duration', 'bit_rate', 'disposition', 'side_data_list'):
+            if field in stream:
+                print(f"    {field}: {json.dumps(stream[field], ensure_ascii=False)}")
+        for key, value in stream.get('tags', {}).items():
+            if key.upper().startswith(('DURATION', 'NUMBER_OF_', '_STATISTICS')):
+                continue
+            print(f"    tag {key}: {json.dumps(value, ensure_ascii=False)}")
+
+
+def describe_plan(inputs, output, infos, muxer, ffprobe, snapshots, initial_output):
+    durations = segment_durations(inputs, infos, ffprobe)
+    for path, snapshot in zip(inputs, snapshots):
+        if fingerprint(path) != snapshot:
+            raise GlueError(f"Input {str(path)!r} changed during inspection; run again.")
+    total = sum(durations)
+    hours, remainder = divmod(round(total * 1000), 3_600_000)
+    minutes, remainder = divmod(remainder, 60_000)
+    seconds = remainder / 1000
+    print("\nJoin plan:")
+    print(f"  Inputs: {len(inputs)}, in the order listed above")
+    print(f"  Output: {str(output)!r}" if output is not None else "  Output: not specified")
+    print(f"  Container/muxer: {muxer}")
+    print("  Method: stream copy; no re-encoding; audio tracks remain separate")
+    print(f"  Streams: {len(infos[0]['streams'])}; "
+          f"audio tracks: {sum(s['codec_type'] == 'audio' for s in infos[0]['streams'])}")
+    print(f"  Input durations total: {sum(float(i['format']['duration']) for i in infos):.6f} seconds")
+    print(f"  Estimated output duration: {total:.6f} seconds ({hours:02d}:{minutes:02d}:{seconds:06.3f})")
+    for index, duration in enumerate(durations, 1):
+        print(f"  Segment {index} concat duration: {duration:.6f} seconds")
+    if output is not None:
+        if not os.access(output.parent, os.W_OK):
+            raise GlueError(f"Output directory {str(output.parent)!r} is not writable.")
+        required, free = check_space(inputs, output)
+        print(f"  Space: approximately {required:,} bytes required; {free:,} bytes available")
+        print("  Existing output: would require replacement; not modified and no prompt in dry-run"
+              if initial_output is not None else "  Existing output: absent; a new file would be created")
+        if output_state(output) != initial_output:
+            raise GlueError("Output changed during inspection; run again.")
+    print("Dry-run: no files were created or changed.")
+
+
+def glue(inputs, output, infos, muxer, ffmpeg, ffprobe, initial_output, snapshots):
+    check_space(inputs, output)
     durations = segment_durations(inputs, infos, ffprobe)
     with tempfile.TemporaryDirectory(prefix=".glue-videos-", dir=output.parent) as work:
         directory = Path(work)
@@ -360,6 +422,7 @@ def main(argv=None):
     arguments = sys.argv[1:] if argv is None else argv
     if not arguments:
         print('Join compatible videos in the supplied order without re-encoding, keeping audio tracks separate.')
+        print('Omit --output or use --dry-run to inspect videos and preview the join without writing files.')
         print('\nExample: python3 subtitle-utils/glue_videos.py part1.mkv part2.mkv -o joined.mkv')
         print('\nRun python3 subtitle-utils/glue_videos.py --help for more information.')
         return 0
@@ -373,17 +436,22 @@ def main(argv=None):
                "Requires Python 3, ffmpeg and ffprobe. Existing chapters are omitted.\n"
                "Existing output requires confirmation unless --overwrite is supplied.\n"
                "Sources cannot be overwritten; the output directory must already exist.\n\n"
+               "Omitting --output implies --dry-run: inspect inputs and show the join plan.\n\n"
                "Examples:\n"
                "  python3 subtitle-utils/glue_videos.py part1.mkv part2.mkv -o joined.mkv\n"
                "  python3 subtitle-utils/glue_videos.py part1.mp4 part2.mp4 -o joined.mp4 --overwrite\n"
-               "  python3 subtitle-utils/glue_videos.py @arguments.txt",
+               "  python3 subtitle-utils/glue_videos.py @arguments.txt\n"
+               "  python3 subtitle-utils/glue_videos.py part1.mkv part2.mkv -o joined.mkv --dry-run\n"
+               "  python3 subtitle-utils/glue_videos.py part1.mkv part2.mkv",
     )
     parser.add_argument("videos", nargs="+", help="Input videos, in playback order")
-    parser.add_argument("-o", "--output", required=True, help="Output file; same extension/container as inputs")
+    parser.add_argument("-o", "--output", help="Output file; same extension/container as inputs; omission implies --dry-run")
+    parser.add_argument("--dry-run", action="store_true", help="Validate inputs and print their properties and join plan without writing files")
     parser.add_argument("--overwrite", action="store_true", help="Replace existing output without prompting")
     # Intermixed parsing accepts options between inputs; ordinary parsing keeps
     # the explicit '--' separator useful for filenames beginning with '-'.
     args = parser.parse_args(arguments) if "--" in arguments else parser.parse_intermixed_args(arguments)
+    dry_run = args.dry_run or args.output is None
     ffmpeg, ffprobe = shutil.which("ffmpeg"), shutil.which("ffprobe")
     if not ffmpeg or not ffprobe:
         raise GlueError("Both ffmpeg and ffprobe must be installed and available on PATH.")
@@ -402,25 +470,30 @@ def main(argv=None):
         inputs.append(path)
     snapshots = [fingerprint(path) for path in inputs]
     # Resolve only the parent, so an existing output symlink cannot disguise itself.
-    requested = Path(args.output).expanduser().absolute()
-    try:
-        output = requested.parent.resolve(strict=True) / requested.name
-    except RuntimeError as exc:
-        raise GlueError(f"Cannot resolve output directory {str(requested.parent)!r}: {exc}") from exc
-    if not output.parent.is_dir():
-        raise GlueError(f"Output parent {str(output.parent)!r} is not a directory.")
-    check_output_is_not_input(output, inputs)
-    initial_output = output_state(output)
-    if output.suffix.lower() != inputs[0].suffix.lower():
-        raise GlueError(
-            f"Output extension must be {inputs[0].suffix!r} to preserve the original container; "
-            f"got {output.suffix or '<none>'!r}."
-        )
+    output = None
+    initial_output = None
+    if args.output is not None:
+        requested = Path(args.output).expanduser().absolute()
+        try:
+            output = requested.parent.resolve(strict=True) / requested.name
+        except RuntimeError as exc:
+            raise GlueError(f"Cannot resolve output directory {str(requested.parent)!r}: {exc}") from exc
+        if not output.parent.is_dir():
+            raise GlueError(f"Output parent {str(output.parent)!r} is not a directory.")
+        check_output_is_not_input(output, inputs)
+        initial_output = output_state(output)
+        if output.suffix.lower() != inputs[0].suffix.lower():
+            raise GlueError(
+                f"Output extension must be {inputs[0].suffix!r} to preserve the original container; "
+                f"got {output.suffix or '<none>'!r}."
+            )
     infos = []
     failures = []
     for index, path in enumerate(inputs):
         print(f"Checking {index + 1}/{len(inputs)}: {path.name}", flush=True)
         info = probe(path, ffprobe)
+        if dry_run:
+            describe_input(index + 1, path, info)
         if infos:
             differences = compatibility_errors(inputs[0], infos[0], path, info)
             if differences:
@@ -433,6 +506,9 @@ def main(argv=None):
               "audio tracks are joined by position, never mixed."
         )
     muxer = choose_muxer(inputs[0], infos[0], ffmpeg)
+    if dry_run:
+        describe_plan(inputs, output, infos, muxer, ffprobe, snapshots, initial_output)
+        return 0
     if initial_output is not None:
         confirm_overwrite(output, args.overwrite)
     tracks = sum(s["codec_type"] == "audio" for s in infos[0]["streams"])

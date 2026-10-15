@@ -265,6 +265,7 @@ Utilities
 
   glue-videos
     Join compatible videos in playback order without re-encoding; keep audio tracks separate.
+    Omit -o or use --dry-run to inspect inputs and preview the join without writing files.
     Example: $PROGRAM glue-videos part1.mkv part2.mkv -o joined.mkv
 
   extract-audio

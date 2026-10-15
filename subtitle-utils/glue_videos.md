@@ -29,7 +29,8 @@ python3 subtitle-utils/glue_videos.py \
 
 Supply any number of inputs in **playback order**. The script never sorts them;
 shell wildcards use your shell's expansion order. One input is also accepted.
-`--output` / `-o` is mandatory. Inputs and output must have the same container
+`--output` / `-o` selects the final file. Omitting it implies `--dry-run` and
+reports that output is not specified. Inputs and output must have the same container
 extension (case insensitive), consistent with their detected container.
 Common containers include MKV, MP4, MOV, WebM, AVI, TS, MPEG, OGV and FLV;
 the corresponding FFmpeg muxer must be installed.
@@ -39,6 +40,35 @@ python3 subtitle-utils/glue_videos.py part1.mp4 part2.mp4 part3.mp4 -o complete.
 python3 subtitle-utils/glue_videos.py part1.mkv part2.mkv -o complete.mkv --overwrite
 python3 subtitle-utils/glue_videos.py -o complete.mkv -- -filename-starting-with-dash.mkv part2.mkv
 ```
+
+## Preview without creating files
+
+Use `--dry-run` with an output path to validate the planned result, or omit
+`-o/--output` to inspect the inputs without choosing a destination:
+
+```bash
+./StartMe.sh glue-videos part1.mkv part2.mkv -o complete.mkv --dry-run
+./StartMe.sh glue-videos part1.mkv part2.mkv
+```
+
+Both forms use the normal input checks: missing, unreadable, empty, damaged, or
+incompatible videos fail with the same error mechanism and nonzero exit status.
+The report lists each absolute input path, size, container, duration, video
+properties (codec, resolution, frame rates, pixel/color formats), audio properties
+(codec, sample rate, channels), stream order, codec initialization hashes, and
+track metadata. It then shows the output path (or `Output: not specified`), muxer,
+stream/audio-track counts, segment concat durations, and estimated total duration
+in seconds and `HH:MM:SS.mmm`. The estimate includes packet-timing corrections;
+container rounding and actual FFmpeg processing can slightly change the result.
+
+When supplied, the output path undergoes the normal container, directory, symlink,
+and input-alias checks, plus directory writability and available-space checks.
+An existing output is reported without prompting or replacing it, even with
+`--overwrite`. Without an output path, destination-specific checks cannot run.
+Dry-run creates neither the final file nor temporary manifests/media and does
+not run the FFmpeg concatenation; metadata, muxer, and packet-timing inspection
+still require FFmpeg/ffprobe. Normal no-argument usage continues to print only
+the short introduction.
 
 Existing outputs require a `y`/`n` response unless `--overwrite` is supplied.
 An unanswered prompt fails in unattended runs. Source files, including aliases

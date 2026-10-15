@@ -3,12 +3,14 @@
 import hashlib
 import importlib.util
 import os
+import re
 from pathlib import Path
 import shutil
 import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 SCRIPT = Path(__file__).resolve().parents[1] / "subtitle-utils/glue_videos.py"
 spec = importlib.util.spec_from_file_location("glue_videos", SCRIPT)
@@ -36,6 +38,21 @@ def packets(paths):
 
 
 class GlueCliTests(unittest.TestCase):
+    def test_unreadable_input_uses_same_error_in_all_modes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / 'unreadable.mkv'
+            source.write_bytes(b'video')
+            output = str(Path(directory) / 'joined.mkv')
+            for flags in ([], ['-o', output], ['-o', output, '--dry-run']):
+                with self.subTest(flags=flags), \
+                        patch.object(glue_videos.shutil, 'which', return_value='/fake/tool'), \
+                        patch.object(Path, 'open', side_effect=PermissionError('input access denied')), \
+                        patch.object(glue_videos, 'probe') as probe:
+                    with self.assertRaisesRegex(PermissionError, 'input access denied'):
+                        glue_videos.main([str(source), *flags])
+                    probe.assert_not_called()
+                    self.assertFalse(Path(output).exists())
+
     def test_help_and_empty_invocation_need_no_media_tools(self):
         for flags in ([], ["--help"], ["-h"]):
             with self.subTest(flags=flags):
@@ -172,7 +189,7 @@ class GlueIntegrationTests(unittest.TestCase):
         empty.touch()
         corrupt = self.root / "corrupt.mkv"
         corrupt.write_bytes(b"not a video")
-        cases = [(self.first,), ("-o", self.root / "none.mkv"),
+        cases = [("-o", self.root / "none.mkv"),
                  (self.root / "missing.mkv", "-o", self.root / "bad.mkv"),
                  (empty, "-o", self.root / "bad.mkv"),
                  (corrupt, "-o", self.root / "bad.mkv"),
@@ -184,6 +201,64 @@ class GlueIntegrationTests(unittest.TestCase):
                 result = self.invoke(*args)
                 self.assertNotEqual(result.returncode, 0)
                 self.assertNotIn("Traceback", result.stderr)
+
+    def test_explicit_and_implicit_dry_run_report_without_writing(self):
+        output = self.root / 'dry-run.mkv'
+        before = sorted(p.name for p in self.root.iterdir())
+        for flags in ([], ['--dry-run'], ['--dry-run', '-o', output]):
+            with self.subTest(flags=flags):
+                result = self.invoke(self.first, self.second, *flags, answer='')
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertIn('Input 1:', result.stdout)
+                self.assertIn('Input 2:', result.stdout)
+                for field in ('Container:', 'Duration:', 'codec_name: "h264"', 'width:',
+                              'height:', 'sample_rate:', 'channel_layout:', 'audio tracks: 2'):
+                    self.assertIn(field, result.stdout)
+                self.assertIn(str(output) if flags and '-o' in flags else 'Output: not specified', result.stdout)
+                self.assertIn('Estimated output duration:', result.stdout)
+                self.assertIn('Dry-run: no files were created or changed.', result.stdout)
+                self.assertNotIn('Created:', result.stdout)
+                self.assertEqual(sorted(p.name for p in self.root.iterdir()), before)
+        single = self.invoke(self.first)
+        self.assertEqual(single.returncode, 0, single.stderr)
+        self.assertIn('Output: not specified', single.stdout)
+
+    def test_dry_run_existing_output_never_prompts_or_overwrites(self):
+        output = self.root / 'dry-existing.mkv'
+        output.write_bytes(b'original output')
+        result = self.invoke(self.first, self.second, '-o', output, '--dry-run', answer='')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(output.read_bytes(), b'original output')
+        self.assertNotIn('Overwrite?', result.stdout)
+        self.assertIn('would require replacement', result.stdout)
+
+    def test_dry_run_retains_input_and_output_validation(self):
+        empty = self.root / 'dry-empty.mkv'
+        empty.touch()
+        for source in (self.root / 'missing.mkv', empty, self.root):
+            for flags in ([], ['--dry-run'], ['-o', self.root / 'dry-invalid.mkv', '--dry-run']):
+                result = self.invoke(source, *flags)
+                self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+                self.assertIn('Error:', result.stderr)
+                self.assertNotIn('Traceback', result.stderr)
+        for flags in ([], ['--dry-run']):
+            result = self.invoke(self.first, self.large, *flags)
+            self.assertEqual(result.returncode, 1)
+            self.assertIn('Videos are incompatible', result.stderr)
+        for output in (self.first, self.root / 'dry-invalid.mp4', self.root / 'missing' / 'dry.mkv'):
+            result = self.invoke(self.first, '--dry-run', '-o', output)
+            self.assertEqual(result.returncode, 1)
+
+    def test_dry_run_duration_accounts_for_mp4_packet_timing(self):
+        result = self.invoke(self.mp4first, self.mp4second)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        match = re.search(r'Estimated output duration: ([\d.]+) seconds', result.stdout)
+        self.assertIsNotNone(match)
+        expected = sum(glue_videos.segment_durations(
+            [self.mp4first, self.mp4second],
+            [glue_videos.probe(p, shutil.which('ffprobe')) for p in (self.mp4first, self.mp4second)],
+            shutil.which('ffprobe')))
+        self.assertAlmostEqual(float(match[1]), expected, places=6)
 
     def test_container_extension_must_match_actual_format(self):
         for original, extension in ((self.first, ".mp4"), (self.mp4first, ".mov")):
