@@ -44,6 +44,24 @@ class ResolutionTests(unittest.TestCase):
             with self.subTest(args=args), self.assertRaises(ValueError):
                 resolve(args)
 
+    def test_misspelled_option_without_dashes_names_token_and_suggests_option(self):
+        args = ['--no-long-summary', '--no-short-summary', '--provider', 'elevenlabs',
+                '--lang', 'uk', '--additional-lang', 'de', 'dirization', 'off',
+                '--source', 'Nazar', '--track', '2', '--source', 'Vitalii', '--track', '5',
+                'recording.mkv']
+        with self.assertRaisesRegex(ValueError, "unexpected positional argument 'dirization'.*Did you mean --diarization"):
+            resolve(args)
+        corrected = [*args[:8], '--diarization', *args[9:]]
+        plan = resolve(corrected)
+        self.assertEqual([s['diarization'] for s in plan['sources']], ['off', 'off'])
+
+    def test_nonfinal_recording_error_names_path_without_spelling_guess(self):
+        with self.assertRaises(ValueError) as raised:
+            resolve(['--source', 'a', '--track', '2', 'recording with spaces.mkv', '--lang', 'uk'])
+        self.assertIn("unexpected positional argument 'recording with spaces.mkv'", str(raised.exception))
+        self.assertIn('recording must be the single final positional argument', str(raised.exception))
+        self.assertNotIn('Did you mean', str(raised.exception))
+
     def test_preset_cli_precedence_and_source_replacement(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp)/'preset.yaml'

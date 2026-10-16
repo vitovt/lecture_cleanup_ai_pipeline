@@ -1,6 +1,7 @@
 """Resolve scoped CLI/YAML sources without performing media or provider work."""
 from __future__ import annotations
 
+from difflib import get_close_matches
 import math
 import re
 import subprocess
@@ -158,7 +159,14 @@ def resolve(argv: list[str], *, standalone: bool = False) -> dict:
         token = argv[i]
         if not token.startswith('--'):
             if i != len(argv) - 1 or recording is not None:
-                raise ValueError('recording must be the single final positional argument')
+                options = SHARED.keys() | SOURCE_ONLY | GLOBALS | FLAGS | {
+                    'source', 'no_additional_langs', 'no_multilingual',
+                }
+                matches = get_close_matches('--' + token,
+                    ['--' + key.replace('_', '-') for key in sorted(options)], n=1, cutoff=0.8)
+                hint = f' Did you mean {matches[0]}?' if matches else ''
+                raise ValueError(f'unexpected positional argument {token!r}: '
+                                 'recording must be the single final positional argument.' + hint)
             recording = str(Path(token).expanduser().resolve())
             break
         key = token[2:].replace('-', '_')
