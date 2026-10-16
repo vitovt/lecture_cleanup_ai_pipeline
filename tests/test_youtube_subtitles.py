@@ -123,3 +123,11 @@ else:
                                             flags=("--lang", "en-US", "--subtitle-source", "auto"))
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             self.assertIn("Selected auto subtitles:", result.stdout + result.stderr)
+
+    def test_translation_is_forwarded_without_changing_subtitle_language(self):
+        result, args, txts = self.run_workflow('success', 'fr-orig', flags=('--translate-to', 'uk'))
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn('--lang=fr\n', args)
+        self.assertIn('--translate-to\nuk\n', args)
+        self.assertIn('Selected auto subtitles: fr-orig', result.stdout)
+        self.assertEqual(txts, ['[00:00:00,000] Hello\n'])

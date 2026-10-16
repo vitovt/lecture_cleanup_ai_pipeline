@@ -105,6 +105,12 @@ sources:
             '--long-summary','--long-summary-lang','de',
         ])
 
+    def test_translation_is_cleanup_only_and_preserves_transcription_language(self):
+        plan = resolve(['--lang', 'fr', '--translate-to', 'uk', '--source', 'a', '--file', 'a.wav'])
+        self.assertEqual(plan['cleanup_args'], ['--translate-to', 'uk'])
+        self.assertEqual(plan['sources'][0]['lang'], 'fr')
+        self.assertNotIn('translate_to', plan['sources'][0])
+
 
 class TxtTests(unittest.TestCase):
     def test_names_and_merge_offsets_preserve_overlap(self):

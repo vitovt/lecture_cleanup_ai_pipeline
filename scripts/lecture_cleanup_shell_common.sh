@@ -17,6 +17,10 @@ lecture_cleanup_add_value_option() {
         echo "Error: $option requires a value." >&2
         return 2
     fi
+    if [[ "$option" == --translate-to && ! "$value" =~ ^[[:space:]]*[a-zA-Z]{2}[[:space:]]*$ ]]; then
+        echo "Error: --translate-to requires a two-letter ISO-639-1 code." >&2
+        return 2
+    fi
     LECTURE_CLEANUP_FLAGS+=("$option" "$value")
 }
 
@@ -29,7 +33,7 @@ lecture_cleanup_add_flag_option() {
 lecture_cleanup_parse_option() {
     LECTURE_CLEANUP_OPTION_SHIFT=0
     case "$1" in
-        --qc-report|--glossary|--txt-chunk-chars|--txt-overlap-chars|--llm-provider|--request-delay|--retry-attempts|--short-summary-output|--long-summary-output|--short-summary-file-suffix|--long-summary-file-suffix|--short-summary-lang|--long-summary-lang|--chunks|--use-context-overlap|--log-level)
+        --translate-to|--qc-report|--glossary|--txt-chunk-chars|--txt-overlap-chars|--llm-provider|--request-delay|--retry-attempts|--short-summary-output|--long-summary-output|--short-summary-file-suffix|--long-summary-file-suffix|--short-summary-lang|--long-summary-lang|--chunks|--use-context-overlap|--log-level)
             lecture_cleanup_add_value_option "$1" "${2:-}" || return $?
             LECTURE_CLEANUP_OPTION_SHIFT=2
             ;;
@@ -54,6 +58,7 @@ lecture_cleanup_print_forwarded_help() {
 
 Forwarded lecture cleanup options:
   --overwrite                   Replace existing Markdown explicitly
+  --translate-to LANG           Translate cleaned text; source/transcription language stays unchanged
   --qc-report MODE              QC report: outdir|default_outdir|off
   --glossary FILE               Glossary terms, one per line
   --txt-chunk-chars N           Override TXT chunk size

@@ -204,6 +204,7 @@ def call_llm(
     context_text: str = "",
     term_hints_text: str = "",
     source_context_text: str = "",
+    translate_to: Optional[str] = None,
 ) -> str:
     # fill template
     template = build_user_prompt(lang, parasites, aside_style, timecodes_policy)
@@ -229,8 +230,21 @@ def call_llm(
     else:
         source_block = ""
 
+    translation_instructions = ""
+    if translate_to:
+        translation_instructions = (
+            f"After cleanup, translate the complete cleaned fragment into the language identified "
+            f"by ISO-639-1 code {translate_to}. Preserve meaning, timestamps, links, block IDs, "
+            "code, math, filenames, commands, citations, and technical identifiers.\n"
+        )
+        system_prompt += (
+            f"\n\nException: after cleanup, translate the final output into the language identified "
+            f"by ISO-639-1 code {translate_to}. This overrides instructions to preserve the "
+            "original output language; source-language normalization rules still apply during cleanup."
+        )
     prompt = template.format(
         LANG=lang,
+        TRANSLATION_INSTRUCTIONS=translation_instructions,
         PARASITES=parasites_str,
         GLOSSARY_OR_DASH=glossary_str,   # << matches EN template
         ASIDE_STYLE=aside_style_en,
@@ -270,6 +284,13 @@ def call_llm(
     return out_text
 
 
+def _translation_language(value: str) -> str:
+    value = value.strip().lower()
+    if not re.fullmatch(r"[a-z]{2}", value):
+        raise argparse.ArgumentTypeError("must be a two-letter ISO-639-1 code")
+    return value
+
+
 def build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(
         description=(
@@ -296,6 +317,8 @@ def build_parser() -> argparse.ArgumentParser:
         help="Two-letter ISO-639-1 language code for the lecture",
     )
     ap.add_argument("--glossary", default=None, help="Path to glossary terms (one per line)")
+    ap.add_argument("--translate-to", type=_translation_language, default=None,
+                    help="Translate cleaned text to this ISO-639-1 language; --lang remains the source language")
     # effective chunking params
     ap.add_argument("--txt-chunk-chars", type=int, default=None)
     ap.add_argument("--txt-overlap-chars", type=int, default=None)
@@ -544,7 +567,7 @@ def main() -> int:
     try:
         summary_settings = _resolve_summary_settings(
             cfg,
-            lang,
+            args.translate_to or lang,
             cli_short_enabled=args.short_summary_enabled,
             cli_long_enabled=args.long_summary_enabled,
             cli_short_output=args.short_summary_output,
@@ -892,6 +915,7 @@ def main() -> int:
                     context_text=context_text,
                     term_hints_text=term_hints_text,
                     source_context_text=source_file_context,
+                    translate_to=args.translate_to,
                 )
                 # consider empty response as failure deserving a retry
                 if not (cleaned or "").strip():

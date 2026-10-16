@@ -1,7 +1,7 @@
 Context: This is a lecture fragment (ASR-recognized, may contain audio-specific errors) to be read in a knowledge base (Obsidian) and searched later. Follow the active System-mode rules (STRICT/NORMAL/CREATIVE) exactly.
 
 {SOURCE_CONTEXT_BLOCK}Language of this fragment: {LANG}
-Filler words for this language (remove only if safe): [{PARASITES}]
+{TRANSLATION_INSTRUCTIONS}Filler words for this language (remove only if safe): [{PARASITES}]
 Glossary (verbatim, may be empty): {GLOSSARY_OR_DASH}
 Asides style: {ASIDE_STYLE}
 

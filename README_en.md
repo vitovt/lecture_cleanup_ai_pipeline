@@ -133,6 +133,34 @@ The core pipeline is provider-agnostic and talks to a unified adapter interface.
   overridden by `config.yaml`, then CLI flags. The global `language` setting does
   not determine the subtitle language. `--lang auto` restores automatic detection.
 
+### Translate cleaned text
+
+Use `--translate-to CODE` to translate the cleaned Markdown after source-language
+cleanup. `--lang` retains its existing meaning: it selects source subtitles,
+transcription language, or cleanup source language, depending on the workflow.
+
+```bash
+./StartMe.sh cleanup --input french-transcript.txt --lang fr --translate-to uk --outdir ./output-uk
+./StartMe.sh youtube-subtitles --lang fr --translate-to uk --outdir ./output-uk 'https://www.youtube.com/watch?v=CwpUD6IIhRM'
+```
+
+The option accepts a two-letter ISO-639-1 code and is forwarded through the
+YouTube, local-media, batch, and multitrack cleanup workflows. For multitrack,
+place it before the first `--source`, with the other global cleanup options.
+It does not request translated YouTube subtitles or change transcription settings.
+The model is instructed to preserve meaning, timestamps, source links, block IDs,
+code, math, filenames, commands, citations, and technical identifiers. Every chunk
+receives the translation instruction and a runtime system-prompt exception;
+system prompt files are not modified.
+
+Without the option, cleanup prompts and language behavior remain unchanged.
+Output filenames and overwrite rules also remain unchanged; use a separate
+`--outdir` when retaining multiple language versions. Summary generation stays a
+separate stage: explicitly configured summary languages remain authoritative.
+Only `summary.short.lang: default` / `summary.long.lang: default` (or their CLI
+equivalents) fall back to the translation language when supplied, otherwise to
+`--lang`. Standalone summary regeneration is unchanged.
+
 ### YouTube audio through Groq or Speechcore
 
 The public `.sh` workflows use one language option name:

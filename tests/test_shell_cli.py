@@ -37,6 +37,7 @@ PUBLIC_SHELL_SCRIPTS = (
 )
 
 FORWARDED_CLEANUP_OPTIONS = {
+    "--translate-to",
     "--qc-report",
     "--glossary",
     "--txt-chunk-chars",
@@ -160,6 +161,8 @@ class ShellHelpTests(unittest.TestCase):
                     [
                         str(PROJECT / relative_path),
                         "--short-summary",
+                        "--translate-to",
+                        "uk",
                         "--long-summary",
                         "--short-summary-output",
                         "append",
