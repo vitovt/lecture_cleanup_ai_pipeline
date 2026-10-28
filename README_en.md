@@ -102,6 +102,19 @@ It’s recommended to run via provided `.sh` wrappers — they activate `.venv` 
 
 The core pipeline is provider-agnostic and talks to a unified adapter interface. To add a new provider, copy `aiadapters/dummy_adapter.py` as a template, implement `LLMAdapter.generate`, and register it in `aiadapters/factory.py`.
 
+### LLM token usage and account balance
+
+DeepSeek prints token usage for each cleanup chunk and summary request, plus
+balance before and after processing. Other LLM providers report `unsupported`.
+
+```bash
+./StartMe.sh balance                      # Effective cleanup provider
+./StartMe.sh balance --provider deepseek
+```
+
+See [LLM accounting](Docs/LLM_ACCOUNTING.md) for output fields, `grep`/`awk`
+examples, limitations, and adapter extension points.
+
 ### Logging verbosity
 
 - Config: set `logging.level` in `config.yaml` (local overrides) to `info`, `debug`, or `trace`.

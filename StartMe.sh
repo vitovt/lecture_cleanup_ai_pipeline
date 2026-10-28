@@ -239,6 +239,10 @@ Setup and maintenance
     Example: $PROGRAM update-main --check
 
 Utilities
+  balance [--provider PROVIDER]
+    Show the configured cleanup LLM balance (DeepSeek supported).
+    Example: $PROGRAM balance --provider deepseek
+
   add-summary
     Add or regenerate short/long summaries from an existing Markdown source.
     Example: $PROGRAM add-summary ./notes.md --type both --lang uk --dry-run
@@ -325,6 +329,7 @@ resolve_mode() {
         yt-md-screenshots) TARGET="$SCRIPT_DIR/subtitle-utils/yt-md-screenshots" ;;
         vtt-to-custom) TARGET="$SCRIPT_DIR/subtitle-utils/vtt_to_custom.py" ;;
         glue-videos) TARGET="$SCRIPT_DIR/subtitle-utils/glue_videos.py" ;;
+        balance) TARGET="$SCRIPT_DIR/balance.sh" ;;
         download-subtitles) TARGET="$SCRIPT_DIR/subtitle-utils/download_youtube_subtitles.sh"; HELP_KIND="download-subtitles" ;;
         extract-audio) TARGET="$SCRIPT_DIR/subtitle-utils/extract-audio.sh"; HELP_KIND="extract-audio" ;;
         docx-to-markdown) TARGET="$SCRIPT_DIR/subtitle-utils/docx2md.sh"; HELP_KIND="docx-to-markdown" ;;

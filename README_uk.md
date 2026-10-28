@@ -92,6 +92,19 @@
 
 Ядро пайплайну не залежить від конкретного провайдера і спілкується через уніфікований адаптер. Щоб додати нового провайдера — скопіюйте `aiadapters/dummy_adapter.py`, реалізуйте `LLMAdapter.generate` і зареєструйте в `aiadapters/factory.py`.
 
+### Токени LLM і баланс
+
+DeepSeek виводить кількість токенів для кожної частини тексту та запиту summary,
+а також баланс до й після обробки. Для інших LLM-провайдерів — `unsupported`.
+
+```bash
+./StartMe.sh balance                      # Effective cleanup provider
+./StartMe.sh balance --provider deepseek
+```
+
+Поля виводу, приклади `grep`/`awk`, обмеження й розширення адаптерів описані
+в [LLM accounting](Docs/LLM_ACCOUNTING.md) (англійською).
+
 ### Рівні логування
 
 - Конфіг: встановіть `logging.level` у `config.yaml` (локальні перевизначення) на `info`, `debug` або `trace`.

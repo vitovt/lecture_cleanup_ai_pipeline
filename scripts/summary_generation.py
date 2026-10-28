@@ -126,6 +126,7 @@ def _call_summary_request(
     debug: bool = False,
     trace: bool = False,
     label: str = None,
+    usage_context: Optional[Dict] = None,
 ) -> str:
     messages = [
         {"role": "system", "content": system_content},
@@ -139,8 +140,13 @@ def _call_summary_request(
         log_trace_block("User prompt (summary)", user_content)
         log_trace_block("Document (full markdown)", full_markdown)
         log_trace(f"Summary request END{trace_label}")
-    out_text = adapter.generate(
+    from scripts.llm_accounting import generate_with_usage
+
+    out_text = generate_with_usage(
+        adapter,
         messages,
+        stage="summary",
+        usage_context=usage_context,
         model=model,
         temperature=temperature,
         top_p=top_p,
@@ -166,6 +172,7 @@ def call_llm_summary(
     summary_type: str = "short",
     summary_lang: str = "",
     source_link_prefix: Optional[str] = None,
+    usage_context: Optional[Dict] = None,
 ) -> str:
     system_content, user_content = _load_summary_prompt(
         summary_type,
@@ -183,6 +190,7 @@ def call_llm_summary(
         debug=debug,
         trace=trace,
         label=label,
+        usage_context=usage_context,
     )
 
 
@@ -226,6 +234,7 @@ def call_llm_combined_summaries(
     label: str = None,
     source_link_prefix: Optional[str] = None,
     short_summary_lang: str = "default",
+    usage_context: Optional[Dict] = None,
 ) -> Dict[str, str]:
     long_system, long_user = _load_summary_prompt(
         "long",
@@ -271,6 +280,7 @@ Return the long summary first and the short summary second. Output exactly these
         debug=debug,
         trace=trace,
         label=label,
+        usage_context=usage_context,
     )
     return _parse_combined_summaries(response)
 
@@ -381,6 +391,8 @@ def generate_summaries(
             options = dict(
                 temperature=temperature, top_p=top_p, debug=debug, trace=trace,
                 label=f"{description} (attempt {attempt}/{attempts})",
+                usage_context=dict(summary="both" if len(kinds) == 2 else kinds[0],
+                                   attempt=attempt, attempts=attempts),
             )
             started = time.monotonic()
             if len(kinds) == 2:

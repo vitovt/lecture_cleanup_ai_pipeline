@@ -326,6 +326,7 @@ class OpenAICompatibleChatAdapter(LLMAdapter):
         debug: bool = False,
         label: Optional[str] = None,
     ) -> str:
+        self.last_usage = None
         payload = self._build_payload(messages, model=model, temperature=temperature, top_p=top_p)
         endpoint = self._endpoint()
 
@@ -356,6 +357,7 @@ class OpenAICompatibleChatAdapter(LLMAdapter):
                 log_trace(f"{self._provider_label} response body: {raw.decode('utf-8', errors='replace')}")
                 if not parsed:
                     raise LLMUnknownError(f"{self._provider_label} response is not valid JSON")
+                self._record_response(parsed)
                 return self._extract_text(parsed) or ""
         except urllib_error.HTTPError as e:
             status = getattr(e, "code", None)

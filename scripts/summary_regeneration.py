@@ -13,6 +13,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from aiadapters.factory import create_llm_adapter
+from scripts.llm_accounting import balance_session
 from scripts.heading_references import HeadingReferenceOptions, render_heading_references
 from scripts.source_timecode_core import HEADING_RE, protected_line_mask, strip_trailing_block_ids
 from scripts.summary_document import SummaryBlock, SummaryError, inventory, prepare_source, read_markdown
@@ -232,40 +233,41 @@ def generate_actions(actions, document, settings, cfg, args):
     provider, model = options["provider"], options["model"]
     cfg = {**cfg, "llm": {**cfg["llm"], provider: {**cfg["llm"][provider], "model": model}}}
     adapter = create_llm_adapter(cfg, provider_override=provider, project_root=Path(__file__).resolve().parents[1])
-    pending = [action for action in actions if action.operation != "skip"]
-    while pending:
-        group = [pending.pop(0)]
-        partner = next((action for action in pending if action.kind != group[0].kind), None)
-        if partner is not None:
-            pending.remove(partner)
-            group.append(partner)
-        enabled = {action.kind: action for action in group}
-        requested = replace(
-            settings,
-            short=replace(settings.short, enabled="short" in enabled, lang=enabled["short"].language if "short" in enabled else settings.short.lang),
-            long=replace(settings.long, enabled="long" in enabled, lang=enabled["long"].language if "long" in enabled else settings.long.lang),
-        )
-        long = enabled.get("long")
-        note = "SOURCE" if long and long.path != document.path else ""
-        target = os.path.relpath(document.path, long.path.parent).replace(os.sep, "/") if note else None
-        summaries = generate_summaries(
-            adapter, model, document.source, requested,
-            temperature=options["temperature"], top_p=options["top_p"],
-            attempts=options["attempts"], pause_seconds=options["pause_seconds"],
-            request_delay=options["request_delay"], source_note=note, reference_target=target,
-            debug=args.debug, trace=args.trace,
-        )
-        for action in group:
-            prompt = _load_summary_prompt(action.kind, action.language, note + "#" if action.kind == "long" and settings.long.references.enabled else None)
-            metadata = {
-                "version": 1, "id": action.target.metadata.get("id") if action.target else None,
-                "lang": action.language, "source": str(document.path),
-                "source_hash": digest(document.source), "prompt_hash": digest("\n".join(prompt)),
-                "provider": provider, "model": model,
-                "created_at": datetime.now(timezone.utc).isoformat(),
-            }
-            metadata["id"] = metadata["id"] or uuid.uuid4().hex
-            action.body = _summary_block(action.kind, summaries[action.kind], getattr(settings, action.kind).heading, metadata=metadata)
+    with balance_session(adapter):
+        pending = [action for action in actions if action.operation != "skip"]
+        while pending:
+            group = [pending.pop(0)]
+            partner = next((action for action in pending if action.kind != group[0].kind), None)
+            if partner is not None:
+                pending.remove(partner)
+                group.append(partner)
+            enabled = {action.kind: action for action in group}
+            requested = replace(
+                settings,
+                short=replace(settings.short, enabled="short" in enabled, lang=enabled["short"].language if "short" in enabled else settings.short.lang),
+                long=replace(settings.long, enabled="long" in enabled, lang=enabled["long"].language if "long" in enabled else settings.long.lang),
+            )
+            long = enabled.get("long")
+            note = "SOURCE" if long and long.path != document.path else ""
+            target = os.path.relpath(document.path, long.path.parent).replace(os.sep, "/") if note else None
+            summaries = generate_summaries(
+                adapter, model, document.source, requested,
+                temperature=options["temperature"], top_p=options["top_p"],
+                attempts=options["attempts"], pause_seconds=options["pause_seconds"],
+                request_delay=options["request_delay"], source_note=note, reference_target=target,
+                debug=args.debug, trace=args.trace,
+            )
+            for action in group:
+                prompt = _load_summary_prompt(action.kind, action.language, note + "#" if action.kind == "long" and settings.long.references.enabled else None)
+                metadata = {
+                    "version": 1, "id": action.target.metadata.get("id") if action.target else None,
+                    "lang": action.language, "source": str(document.path),
+                    "source_hash": digest(document.source), "prompt_hash": digest("\n".join(prompt)),
+                    "provider": provider, "model": model,
+                    "created_at": datetime.now(timezone.utc).isoformat(),
+                }
+                metadata["id"] = metadata["id"] or uuid.uuid4().hex
+                action.body = _summary_block(action.kind, summaries[action.kind], getattr(settings, action.kind).heading, metadata=metadata)
 
 
 def render_updates(actions, document, texts, args):

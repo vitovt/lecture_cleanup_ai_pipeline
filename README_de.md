@@ -103,6 +103,20 @@ Es wird empfohlen, die `.sh`-Wrapper zu verwenden, da sie `.venv` aktivieren und
 
 Die Pipeline ist anbieterunabhängig und verwendet eine einheitliche Adapter-Schnittstelle. Um einen neuen Provider hinzuzufügen, `aiadapters/dummy_adapter.py` kopieren, `LLMAdapter.generate` implementieren und in `aiadapters/factory.py` registrieren.
 
+### LLM-Tokenverbrauch und Kontostand
+
+DeepSeek zeigt den Tokenverbrauch pro Textabschnitt und Zusammenfassungsanfrage
+sowie den Kontostand vor und nach der Verarbeitung. Andere LLM-Provider melden
+`unsupported`.
+
+```bash
+./StartMe.sh balance                      # Effective cleanup provider
+./StartMe.sh balance --provider deepseek
+```
+
+Ausgabefelder, `grep`/`awk`-Beispiele, Einschränkungen und Adapter-Erweiterungen
+stehen unter [LLM accounting](Docs/LLM_ACCOUNTING.md) (auf Englisch).
+
 ### Protokollierungsstufe
 
 - Konfiguration: `logging.level` in `config.yaml` (lokale Overrides) auf `info`, `debug` oder `trace` setzen.

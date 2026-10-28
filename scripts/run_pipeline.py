@@ -10,6 +10,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from aiadapters.factory import create_llm_adapter
 from aiadapters.base import LLMAdapter
+from scripts.llm_accounting import balance_session, generate_with_usage
 from scripts.config_loader import load_effective_config
 from scripts.heading_references import (
     HeadingReferenceOptions,
@@ -205,6 +206,7 @@ def call_llm(
     term_hints_text: str = "",
     source_context_text: str = "",
     translate_to: Optional[str] = None,
+    usage_context: Optional[Dict] = None,
 ) -> str:
     # fill template
     template = build_user_prompt(lang, parasites, aside_style, timecodes_policy)
@@ -268,8 +270,11 @@ def call_llm(
         log_trace_block("User prompt", prompt)
         log_trace(f"LLM request END{trace_label}")
     started = time.monotonic()
-    out_text = adapter.generate(
+    out_text = generate_with_usage(
+        adapter,
         messages,
+        stage="cleanup",
+        usage_context=usage_context,
         model=model,
         temperature=temperature,
         top_p=top_p,
@@ -829,321 +834,324 @@ def main() -> int:
         log_error(f"Failed to initialize LLM adapter: {e}")
         sys.exit(1)
 
-    # Process chunks
-    cleaned_blocks = []
-    qc_rows = []
-    ok_count = 0
-    fail_count = 0
-    # Accumulate normalized term variants across chunks
-    from scripts.utils import coalesce_term_map, build_alias_index, remap_keys_to_canonical
-    known_terms = {}
-    prev_raw_fragment = ""
-    last_cleaned_fragment = ""
-    # Keep previous plain cleaned text for dedup window (avoid wrapper comments interference)
-    prev_for_dedup: Optional[str] = None
-    effective_chunk_chars = int(cfg.get("txt_chunk_chars", 6500) or 6500)
+    with balance_session(adapter):
+        # Process chunks
+        cleaned_blocks = []
+        qc_rows = []
+        ok_count = 0
+        fail_count = 0
+        # Accumulate normalized term variants across chunks
+        from scripts.utils import coalesce_term_map, build_alias_index, remap_keys_to_canonical
+        known_terms = {}
+        prev_raw_fragment = ""
+        last_cleaned_fragment = ""
+        # Keep previous plain cleaned text for dedup window (avoid wrapper comments interference)
+        prev_for_dedup: Optional[str] = None
+        effective_chunk_chars = int(cfg.get("txt_chunk_chars", 6500) or 6500)
 
-    for idx, ch in enumerate(chunks, 1):
-        # Prepare raw fragment for this chunk and compute context from previous chunk based on configured source
-        units = ch.get("_units", [])
-        overlap_n = int(ch.get("_overlap_units", 0))
-        fragment_text = "\n".join(u["text"] for u in units[overlap_n:])
+        for idx, ch in enumerate(chunks, 1):
+            # Prepare raw fragment for this chunk and compute context from previous chunk based on configured source
+            units = ch.get("_units", [])
+            overlap_n = int(ch.get("_overlap_units", 0))
+            fragment_text = "\n".join(u["text"] for u in units[overlap_n:])
 
-        # Skip chunks not in selection (if provided). Maintain prev_raw_fragment for better context continuity.
-        if selected_chunks is not None and idx not in selected_chunks:
-            log_info(f"[{idx}/{total_chunks}] Skipping…")
-            # Advance raw fragment for potential future context even if not processed
-            prev_raw_fragment = fragment_text
-            continue
+            # Skip chunks not in selection (if provided). Maintain prev_raw_fragment for better context continuity.
+            if selected_chunks is not None and idx not in selected_chunks:
+                log_info(f"[{idx}/{total_chunks}] Skipping…")
+                # Advance raw fragment for potential future context even if not processed
+                prev_raw_fragment = fragment_text
+                continue
 
-        log_info(f"[{idx}/{total_chunks}] Processing…")
-        # Build context from tail of previous fragment/output
-        if idx == 1:
-            context_text = ""
-            used_source = "none" if overlap_source == "none" else overlap_source
-        else:
-            used_source = overlap_source
-            cleaned_available = bool((last_cleaned_fragment or "").strip())
-            # If previous chunk wasn't processed and user asked for cleaned overlap,
-            # we fallback to raw to keep continuity with immediately preceding text.
-            prev_chunk_processed = (selected_chunks is None or (idx - 1) in (selected_chunks or set()))
-            if used_source == "cleaned" and not prev_chunk_processed:
-                log_warn("Cleaned overlap requested but previous chunk was skipped; using raw overlap instead")
-                used_source = "raw"
-            elif used_source == "cleaned" and not cleaned_available:
-                # Check after stripping comments too
-                if not (strip_all_html_comments(last_cleaned_fragment or "").strip()):
-                    log_warn("Cleaned overlap requested but empty; falling back to raw")
+            log_info(f"[{idx}/{total_chunks}] Processing…")
+            # Build context from tail of previous fragment/output
+            if idx == 1:
+                context_text = ""
+                used_source = "none" if overlap_source == "none" else overlap_source
+            else:
+                used_source = overlap_source
+                cleaned_available = bool((last_cleaned_fragment or "").strip())
+                # If previous chunk wasn't processed and user asked for cleaned overlap,
+                # we fallback to raw to keep continuity with immediately preceding text.
+                prev_chunk_processed = (selected_chunks is None or (idx - 1) in (selected_chunks or set()))
+                if used_source == "cleaned" and not prev_chunk_processed:
+                    log_warn("Cleaned overlap requested but previous chunk was skipped; using raw overlap instead")
                     used_source = "raw"
-            context_text = build_context_overlap(
-                prev_raw_text=prev_raw_fragment or "",
-                prev_cleaned_text=last_cleaned_fragment or "",
-                source=used_source,
-                max_chars=int(cfg.get("txt_overlap_chars", 500) or 0),
-                sentence_delimiters=sentence_delimiters,
-            )
-        if debug and idx > 1:
-            log_debug(f"Chunk {idx}: overlap_source={used_source}; prev_raw_len={len(prev_raw_fragment)}; prev_cleaned_len={len(last_cleaned_fragment)}; CONTEXT chars={len(context_text)}; FRAGMENT chars={len(fragment_text)}")
-        # Build term-hints block from previously observed merges
-        # Present coalesced, single-canonical-per-cluster hints to the model
-        coalesced_for_hints = coalesce_term_map(known_terms)
-        term_hints_text = serialize_term_hints_json(coalesced_for_hints)
-        original_text = fragment_text
-        cleaned = ""
-        attempt_i = 1
-        while attempt_i <= attempts:
-            try:
-                # Optional delay before the first attempt on this chunk (inter-request pacing)
-                if attempt_i == 1 and request_delay > 0 and idx > 1:
-                    log_info(f"Waiting {request_delay:g}s before chunk {idx} (configured request delay)")
-                    time.sleep(request_delay)
-                cleaned = call_llm(
-                    adapter=adapter,
-                    model=model,
-                    system_prompt=system_prompt,
-                    chunk_text=original_text,
-                    lang=lang,
-                    parasites=parasites,
-                    aside_style=aside_style,
-                    glossary=glossary,
-                    timecodes_policy=timecodes_policy_text,
-                    temperature=temperature,
-                    top_p=top_p,
-                    debug=debug,
-                    trace=trace,
-                    label=f"chunk {idx}/{total_chunks} (attempt {attempt_i}/{attempts})",
-                    context_text=context_text,
-                    term_hints_text=term_hints_text,
-                    source_context_text=source_file_context,
-                    translate_to=args.translate_to,
+                elif used_source == "cleaned" and not cleaned_available:
+                    # Check after stripping comments too
+                    if not (strip_all_html_comments(last_cleaned_fragment or "").strip()):
+                        log_warn("Cleaned overlap requested but empty; falling back to raw")
+                        used_source = "raw"
+                context_text = build_context_overlap(
+                    prev_raw_text=prev_raw_fragment or "",
+                    prev_cleaned_text=last_cleaned_fragment or "",
+                    source=used_source,
+                    max_chars=int(cfg.get("txt_overlap_chars", 500) or 0),
+                    sentence_delimiters=sentence_delimiters,
                 )
-                # consider empty response as failure deserving a retry
-                if not (cleaned or "").strip():
-                    raise RuntimeError("Empty response text")
-                break
-            except Exception as e:
-                provider_name = adapter.name()
-                is_last = (attempt_i >= attempts)
+            if debug and idx > 1:
+                log_debug(f"Chunk {idx}: overlap_source={used_source}; prev_raw_len={len(prev_raw_fragment)}; prev_cleaned_len={len(last_cleaned_fragment)}; CONTEXT chars={len(context_text)}; FRAGMENT chars={len(fragment_text)}")
+            # Build term-hints block from previously observed merges
+            # Present coalesced, single-canonical-per-cluster hints to the model
+            coalesced_for_hints = coalesce_term_map(known_terms)
+            term_hints_text = serialize_term_hints_json(coalesced_for_hints)
+            original_text = fragment_text
+            cleaned = ""
+            attempt_i = 1
+            while attempt_i <= attempts:
+                try:
+                    # Optional delay before the first attempt on this chunk (inter-request pacing)
+                    if attempt_i == 1 and request_delay > 0 and idx > 1:
+                        log_info(f"Waiting {request_delay:g}s before chunk {idx} (configured request delay)")
+                        time.sleep(request_delay)
+                    cleaned = call_llm(
+                        adapter=adapter,
+                        model=model,
+                        system_prompt=system_prompt,
+                        chunk_text=original_text,
+                        lang=lang,
+                        parasites=parasites,
+                        aside_style=aside_style,
+                        glossary=glossary,
+                        timecodes_policy=timecodes_policy_text,
+                        temperature=temperature,
+                        top_p=top_p,
+                        debug=debug,
+                        trace=trace,
+                        label=f"chunk {idx}/{total_chunks} (attempt {attempt_i}/{attempts})",
+                        context_text=context_text,
+                        term_hints_text=term_hints_text,
+                        source_context_text=source_file_context,
+                        translate_to=args.translate_to,
+                        usage_context=dict(part=idx, parts=total_chunks,
+                                           attempt=attempt_i, attempts=attempts),
+                    )
+                    # consider empty response as failure deserving a retry
+                    if not (cleaned or "").strip():
+                        raise RuntimeError("Empty response text")
+                    break
+                except Exception as e:
+                    provider_name = adapter.name()
+                    is_last = (attempt_i >= attempts)
+                    if debug:
+                        log_debug(traceback.format_exc().rstrip())
+                    # Determine if retriable based on exception type
+                    retriable = isinstance(e, (Exception,))  # placeholder, refined below
+                    from aiadapters.base import LLMAuthError, LLMRateLimitError, LLMConnectionError, LLMUnknownError
+                    if isinstance(e, (LLMAuthError, LLMUnknownError)):
+                        retriable = False
+                    elif isinstance(e, (LLMRateLimitError, LLMConnectionError)):
+                        retriable = True
+                    else:
+                        # other exceptions (including RuntimeError for empty text) -> retryable
+                        retriable = True
+                    if not retriable or is_last:
+                        log_error(f"{provider_name} failed on chunk {idx}/{total_chunks} (attempt {attempt_i}/{attempts}): {e}")
+                        cleaned = ""
+                        break
+                    else:
+                        suggested = _extract_retry_after_seconds(str(e)) if isinstance(e, (LLMRateLimitError,)) else None
+                        if suggested and suggested > 0:
+                            wait_for = suggested + (pause_between_attempts or 0.0)
+                        else:
+                            wait_for = pause_between_attempts
+                        log_warn(f"{provider_name} error on chunk {idx}/{total_chunks} (attempt {attempt_i}/{attempts}): {e}. Retrying after {wait_for or 0}s…")
+                        if wait_for and wait_for > 0:
+                            time.sleep(wait_for)
+                        attempt_i += 1
+            status = "OK" if cleaned and cleaned.strip() else "FAILED"
+            if status == "OK":
+                ok_count += 1
+            else:
+                fail_count += 1
+            # Extract term merges; keep only per-chunk new ones in comments; accumulate for next chunks
+            if cleaned:
+                current_map = extract_merged_terms_map(cleaned)
+                if current_map:
+                    # Compute only-new variants vs known_terms (before merging)
+                    only_new = diff_term_maps(current_map, known_terms)
+                    # Build combined map and coalesce to determine canonical keys
+                    combined = {}
+                    merge_term_maps(combined, known_terms)
+                    merge_term_maps(combined, current_map)
+                    combined = coalesce_term_map(combined)
+                    alias_index = build_alias_index(combined)
+                    # Remap per-chunk new items to canonical keys
+                    only_new_rekeyed = remap_keys_to_canonical(only_new, alias_index)
+                    # Rewrite comments to include only the per-chunk new items (canonicalized)
+                    cleaned = rewrite_merged_terms_comments(cleaned, only_new_rekeyed, prefer_style="auto")
+                    # Accumulate into known_terms and keep coalesced keys for future hints
+                    merge_term_maps(known_terms, current_map)
+                    known_terms = coalesce_term_map(known_terms)
+            # For TXT inputs that had per-line timestamps, add link-style stamp (unless AI handled timecodes itself)
+            if (
+                reference_processing_requested
+                and not timecodes_handled_by_ai
+                and fmt == "txt"
+                and has_line_timestamps
+                and ch.get("start") is not None
+            ):
+                if debug:
+                    log_debug(f"Adding timecodes to chunk`s headings; start: {ch['start']}")
+                cleaned = add_timecodes_to_headings(cleaned, ch["start"], as_link=True)
+            # Stitch-time deduplication against previous output (use plain previous text)
+            if prev_for_dedup and stitch_dedup_window > 0:
+                prev = prev_for_dedup
+                deduped, removed, mode = dedup_overlapping_boundary(prev, cleaned, stitch_dedup_window)
+                if removed > 0 and debug:
+                    log_debug(f"Dedup removed {removed} {('lines' if mode=='lines' else mode)} from start of chunk {idx} before stitching")
+                cleaned = deduped
+            # Optionally strip edit comments in the final output
+            if suppress_edit_comments:
+                cleaned = strip_edit_comments(cleaned)
+            # Wrap each part with start/end comments
+            start_comment = f"<!-- STARTING: processing; Chunk size: {effective_chunk_chars}; Part [{idx}/{total_chunks}] -->"
+            end_comment = f"<!-- END: of part [{idx}/{total_chunks}] -->"
+            wrapped = f"{start_comment}\n{cleaned}\n{end_comment}"
+            cleaned_blocks.append(wrapped)
+            # Update previous-plain text for next dedup window
+            prev_for_dedup = cleaned
+            sim = similarity_ratio(original_text, cleaned)
+            qc_rows.append({
+                "chunk_id": idx,
+                "start": ch["start"] if ch["start"] is not None else "",
+                "end": ch["end"] if ch["end"] is not None else "",
+                "orig_len": len(original_text),
+                "cleaned_len": len(cleaned),
+                "similarity": round(sim, 4),
+                "change_ratio": round(1.0 - sim, 4),
+            })
+            remaining = total_chunks - idx
+            log_info(f"{status} | done: {ok_count}, failed: {fail_count}, left: {remaining}")
+            # Update previous fragments for next-iteration overlap
+            prev_raw_fragment = fragment_text
+            if status == "OK":
+                last_cleaned_fragment = cleaned
+
+        # Merge
+        full_markdown = "\n\n".join(cleaned_blocks)
+        reference_result = render_heading_references(
+            full_markdown,
+            reference_options,
+        )
+        full_markdown = reference_result.markdown
+        if debug:
+            assignment = (
+                "ai"
+                if timecodes_handled_by_ai
+                else "chunk-start"
+                if reference_processing_requested and timecodes_available
+                else "none"
+            )
+            log_debug(
+                "Reference rendering -> "
+                f"assignment={assignment}, headings={reference_result.headings}, "
+                f"timed={reference_result.timed_headings}, "
+                f"src={reference_result.src_ids}, txt={reference_result.txt_ids}"
+            )
+
+        # Generate summaries only when all chunks succeeded.
+        summaries: Dict[str, str] = {}
+        enabled_summary_types = summary_settings.enabled_types()
+        if enabled_summary_types and fail_count == 0:
+            summary_label = (
+                "both summaries"
+                if len(enabled_summary_types) == 2
+                else f"{enabled_summary_types[0]} summary"
+            )
+            log_info(f"Generating {summary_label}…")
+            summary_source = strip_edit_comments(full_markdown)
+            source_note = "" if summary_settings.long.output == "append" else in_path.stem
+            try:
+                summaries = generate_summaries(
+                    adapter, model, summary_source, summary_settings,
+                    temperature=temperature, top_p=top_p,
+                    attempts=attempts, pause_seconds=pause_between_attempts,
+                    request_delay=request_delay, source_note=source_note,
+                    debug=debug, trace=trace,
+                )
+            except Exception as exc:
                 if debug:
                     log_debug(traceback.format_exc().rstrip())
-                # Determine if retriable based on exception type
-                retriable = isinstance(e, (Exception,))  # placeholder, refined below
-                from aiadapters.base import LLMAuthError, LLMRateLimitError, LLMConnectionError, LLMUnknownError
-                if isinstance(e, (LLMAuthError, LLMUnknownError)):
-                    retriable = False
-                elif isinstance(e, (LLMRateLimitError, LLMConnectionError)):
-                    retriable = True
-                else:
-                    # other exceptions (including RuntimeError for empty text) -> retryable
-                    retriable = True
-                if not retriable or is_last:
-                    log_error(f"{provider_name} failed on chunk {idx}/{total_chunks} (attempt {attempt_i}/{attempts}): {e}")
-                    cleaned = ""
-                    break
-                else:
-                    suggested = _extract_retry_after_seconds(str(e)) if isinstance(e, (LLMRateLimitError,)) else None
-                    if suggested and suggested > 0:
-                        wait_for = suggested + (pause_between_attempts or 0.0)
-                    else:
-                        wait_for = pause_between_attempts
-                    log_warn(f"{provider_name} error on chunk {idx}/{total_chunks} (attempt {attempt_i}/{attempts}): {e}. Retrying after {wait_for or 0}s…")
-                    if wait_for and wait_for > 0:
-                        time.sleep(wait_for)
-                    attempt_i += 1
-        status = "OK" if cleaned and cleaned.strip() else "FAILED"
-        if status == "OK":
-            ok_count += 1
-        else:
-            fail_count += 1
-        # Extract term merges; keep only per-chunk new ones in comments; accumulate for next chunks
-        if cleaned:
-            current_map = extract_merged_terms_map(cleaned)
-            if current_map:
-                # Compute only-new variants vs known_terms (before merging)
-                only_new = diff_term_maps(current_map, known_terms)
-                # Build combined map and coalesce to determine canonical keys
-                combined = {}
-                merge_term_maps(combined, known_terms)
-                merge_term_maps(combined, current_map)
-                combined = coalesce_term_map(combined)
-                alias_index = build_alias_index(combined)
-                # Remap per-chunk new items to canonical keys
-                only_new_rekeyed = remap_keys_to_canonical(only_new, alias_index)
-                # Rewrite comments to include only the per-chunk new items (canonicalized)
-                cleaned = rewrite_merged_terms_comments(cleaned, only_new_rekeyed, prefer_style="auto")
-                # Accumulate into known_terms and keep coalesced keys for future hints
-                merge_term_maps(known_terms, current_map)
-                known_terms = coalesce_term_map(known_terms)
-        # For TXT inputs that had per-line timestamps, add link-style stamp (unless AI handled timecodes itself)
-        if (
-            reference_processing_requested
-            and not timecodes_handled_by_ai
-            and fmt == "txt"
-            and has_line_timestamps
-            and ch.get("start") is not None
-        ):
-            if debug:
-                log_debug(f"Adding timecodes to chunk`s headings; start: {ch['start']}")
-            cleaned = add_timecodes_to_headings(cleaned, ch["start"], as_link=True)
-        # Stitch-time deduplication against previous output (use plain previous text)
-        if prev_for_dedup and stitch_dedup_window > 0:
-            prev = prev_for_dedup
-            deduped, removed, mode = dedup_overlapping_boundary(prev, cleaned, stitch_dedup_window)
-            if removed > 0 and debug:
-                log_debug(f"Dedup removed {removed} {('lines' if mode=='lines' else mode)} from start of chunk {idx} before stitching")
-            cleaned = deduped
-        # Optionally strip edit comments in the final output
-        if suppress_edit_comments:
-            cleaned = strip_edit_comments(cleaned)
-        # Wrap each part with start/end comments
-        start_comment = f"<!-- STARTING: processing; Chunk size: {effective_chunk_chars}; Part [{idx}/{total_chunks}] -->"
-        end_comment = f"<!-- END: of part [{idx}/{total_chunks}] -->"
-        wrapped = f"{start_comment}\n{cleaned}\n{end_comment}"
-        cleaned_blocks.append(wrapped)
-        # Update previous-plain text for next dedup window
-        prev_for_dedup = cleaned
-        sim = similarity_ratio(original_text, cleaned)
-        qc_rows.append({
-            "chunk_id": idx,
-            "start": ch["start"] if ch["start"] is not None else "",
-            "end": ch["end"] if ch["end"] is not None else "",
-            "orig_len": len(original_text),
-            "cleaned_len": len(cleaned),
-            "similarity": round(sim, 4),
-            "change_ratio": round(1.0 - sim, 4),
-        })
-        remaining = total_chunks - idx
-        log_info(f"{status} | done: {ok_count}, failed: {fail_count}, left: {remaining}")
-        # Update previous fragments for next-iteration overlap
-        prev_raw_fragment = fragment_text
-        if status == "OK":
-            last_cleaned_fragment = cleaned
+                log_error(f"{adapter.name()} summary generation failed: {exc}")
+            if summaries:
+                full_markdown = _append_summaries(
+                    full_markdown,
+                    summaries,
+                    summary_settings,
+                )
+                if any(
+                    getattr(summary_settings, summary_type).output == "separate"
+                    for summary_type in summaries
+                ):
+                    log_info("Separate summaries will be written to Markdown files.")
+            else:
+                log_warn("Summary generation returned empty output.")
+        elif enabled_summary_types and fail_count > 0:
+            log_warn(f"Skipping summaries because {fail_count} chunk(s) failed.")
 
-    # Merge
-    full_markdown = "\n\n".join(cleaned_blocks)
-    reference_result = render_heading_references(
-        full_markdown,
-        reference_options,
-    )
-    full_markdown = reference_result.markdown
-    if debug:
-        assignment = (
-            "ai"
-            if timecodes_handled_by_ai
-            else "chunk-start"
-            if reference_processing_requested and timecodes_available
-            else "none"
-        )
-        log_debug(
-            "Reference rendering -> "
-            f"assignment={assignment}, headings={reference_result.headings}, "
-            f"timed={reference_result.timed_headings}, "
-            f"src={reference_result.src_ids}, txt={reference_result.txt_ids}"
-        )
-
-    # Generate summaries only when all chunks succeeded.
-    summaries: Dict[str, str] = {}
-    enabled_summary_types = summary_settings.enabled_types()
-    if enabled_summary_types and fail_count == 0:
-        summary_label = (
-            "both summaries"
-            if len(enabled_summary_types) == 2
-            else f"{enabled_summary_types[0]} summary"
-        )
-        log_info(f"Generating {summary_label}…")
-        summary_source = strip_edit_comments(full_markdown)
-        source_note = "" if summary_settings.long.output == "append" else in_path.stem
-        try:
-            summaries = generate_summaries(
-                adapter, model, summary_source, summary_settings,
-                temperature=temperature, top_p=top_p,
-                attempts=attempts, pause_seconds=pause_between_attempts,
-                request_delay=request_delay, source_note=source_note,
-                debug=debug, trace=trace,
+        # Append info comments if not suppressed
+        if not suppress_edit_comments:
+            now_str = datetime.now().strftime("%Y-%m-%d_%H-%M")
+            eff_overlap = int(cfg.get("txt_overlap_chars", 500) or 0)
+            info_block = (
+                f"\n<!-- llm_provider: {_llm['provider']} -->\n"
+                f"<!-- model: {model} -->\n"
+                f"<!-- content_mode: {content_mode} -->\n"
+                f"<!-- txt_overlap_chars: {eff_overlap} -->\n"
+                f"<!-- processsing_time: {now_str} -->\n"
             )
-        except Exception as exc:
-            if debug:
-                log_debug(traceback.format_exc().rstrip())
-            log_error(f"{adapter.name()} summary generation failed: {exc}")
-        if summaries:
-            full_markdown = _append_summaries(
-                full_markdown,
+            full_markdown += info_block
+
+        # Write outputs
+        outfile_md = outdir / f"{in_path.stem}.md"
+        write_markdown = (fail_count == 0)
+        if write_markdown:
+            # Exclusive creation also prevents a second concurrent job replacing this run.
+            with outfile_md.open('w' if args.overwrite else 'x', encoding='utf-8') as handle:
+                handle.write(full_markdown)
+        summary_paths: List[Path] = []
+        if write_markdown and summaries:
+            summary_paths = _write_separate_summaries(
+                outdir,
+                in_path.stem,
                 summaries,
                 summary_settings,
             )
-            if any(
-                getattr(summary_settings, summary_type).output == "separate"
-                for summary_type in summaries
-            ):
-                log_info("Separate summaries will be written to Markdown files.")
+        # QC report
+        qc_path = None
+        if qc_report_mode != "off":
+            if qc_report_mode == "default_outdir":
+                qc_dir = base / "output"
+                try:
+                    same_dir = qc_dir.resolve() == outdir.resolve()
+                except Exception:
+                    same_dir = (qc_dir == outdir)
+                if not same_dir:
+                    _ensure_writable_dir(qc_dir, "QC report directory")
+            else:
+                qc_dir = outdir
+            qc_path = qc_dir / f"{in_path.stem}_qc_report.csv"
+            with open(qc_path, "w", newline="", encoding="utf-8") as f:
+                w = csv.DictWriter(f, fieldnames=["chunk_id","start","end","orig_len","cleaned_len","similarity","change_ratio"])
+                w.writeheader()
+                for r in qc_rows:
+                    w.writerow(r)
+
+        if fail_count == 0:
+            log_info("All chunks processed successfully.")
         else:
-            log_warn("Summary generation returned empty output.")
-    elif enabled_summary_types and fail_count > 0:
-        log_warn(f"Skipping summaries because {fail_count} chunk(s) failed.")
-
-    # Append info comments if not suppressed
-    if not suppress_edit_comments:
-        now_str = datetime.now().strftime("%Y-%m-%d_%H-%M")
-        eff_overlap = int(cfg.get("txt_overlap_chars", 500) or 0)
-        info_block = (
-            f"\n<!-- llm_provider: {_llm['provider']} -->\n"
-            f"<!-- model: {model} -->\n"
-            f"<!-- content_mode: {content_mode} -->\n"
-            f"<!-- txt_overlap_chars: {eff_overlap} -->\n"
-            f"<!-- processsing_time: {now_str} -->\n"
-        )
-        full_markdown += info_block
-
-    # Write outputs
-    outfile_md = outdir / f"{in_path.stem}.md"
-    write_markdown = (fail_count == 0)
-    if write_markdown:
-        # Exclusive creation also prevents a second concurrent job replacing this run.
-        with outfile_md.open('w' if args.overwrite else 'x', encoding='utf-8') as handle:
-            handle.write(full_markdown)
-    summary_paths: List[Path] = []
-    if write_markdown and summaries:
-        summary_paths = _write_separate_summaries(
-            outdir,
-            in_path.stem,
-            summaries,
-            summary_settings,
-        )
-    # QC report
-    qc_path = None
-    if qc_report_mode != "off":
-        if qc_report_mode == "default_outdir":
-            qc_dir = base / "output"
-            try:
-                same_dir = qc_dir.resolve() == outdir.resolve()
-            except Exception:
-                same_dir = (qc_dir == outdir)
-            if not same_dir:
-                _ensure_writable_dir(qc_dir, "QC report directory")
+            log_warn(f"Completed with {fail_count} failure(s) out of {total_chunks} chunk(s).")
+        if write_markdown:
+            log_info(f"Done. Markdown: {outfile_md}")
         else:
-            qc_dir = outdir
-        qc_path = qc_dir / f"{in_path.stem}_qc_report.csv"
-        with open(qc_path, "w", newline="", encoding="utf-8") as f:
-            w = csv.DictWriter(f, fieldnames=["chunk_id","start","end","orig_len","cleaned_len","similarity","change_ratio"])
-            w.writeheader()
-            for r in qc_rows:
-                w.writerow(r)
-
-    if fail_count == 0:
-        log_info("All chunks processed successfully.")
-    else:
-        log_warn(f"Completed with {fail_count} failure(s) out of {total_chunks} chunk(s).")
-    if write_markdown:
-        log_info(f"Done. Markdown: {outfile_md}")
-    else:
-        log_warn(f"Markdown output skipped due to processing failures (target would be: {outfile_md})")
-    if qc_path:
-        log_info(f"QC report: {qc_path}")
-    else:
-        log_info("QC report: skipped (qc_report_mode=off)")
-    for summary_path in summary_paths:
-        log_info(f"Summary: {summary_path}")
-    return 0 if fail_count == 0 else 1
+            log_warn(f"Markdown output skipped due to processing failures (target would be: {outfile_md})")
+        if qc_path:
+            log_info(f"QC report: {qc_path}")
+        else:
+            log_info("QC report: skipped (qc_report_mode=off)")
+        for summary_path in summary_paths:
+            log_info(f"Summary: {summary_path}")
+        return 0 if fail_count == 0 else 1
 
 if __name__ == "__main__":
     sys.exit(main())

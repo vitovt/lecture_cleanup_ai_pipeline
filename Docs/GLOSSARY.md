@@ -3,6 +3,7 @@
 This file is the entry point for project documentation.
 
 - [LOGGING.md](LOGGING.md) — shared verbosity levels, progress messages, and command-output boundaries.
+- [LLM_ACCOUNTING.md](LLM_ACCOUNTING.md) — cleanup LLM token usage, account balances, filtering, and adapter extension points.
 
 - [ARCHITECTURE.md](ARCHITECTURE.md) — short module and dependency map.
 - [FORMATS.md](FORMATS.md) — configuration, manifest, transcript, event, report,

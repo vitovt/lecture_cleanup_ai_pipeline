@@ -23,6 +23,17 @@ operations where direct access is useful.
 Use `--color`, `--no-color`, or `--color=auto|always|never` before the mode.
 Detailed, current options come from `./StartMe.sh help MODE`.
 
+Use `balance` to query the effective cleanup LLM provider, or select one explicitly:
+
+```bash
+./StartMe.sh balance
+./StartMe.sh balance --provider deepseek
+./StartMe.sh help balance
+```
+
+DeepSeek is supported; other cleanup LLM providers report `unsupported`.
+See [LLM_ACCOUNTING.md](LLM_ACCOUNTING.md) for the output format and filtering examples.
+
 Use `add-summary` to add or regenerate short/long summaries of existing Markdown:
 
 ```bash
