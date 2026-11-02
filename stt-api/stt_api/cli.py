@@ -41,6 +41,7 @@ def _add_provider_options(parser: argparse.ArgumentParser) -> None:
         "--provider", choices=("gemini", "elevenlabs"), help="STT provider override."
     )
     parser.add_argument("--config", help="YAML override; defaults to stt-api/config.yaml.")
+    parser.add_argument("--profile", help="Select profiles.NAME from STT config for this run.")
     parser.add_argument("--model", help="Provider model override.")
     parser.add_argument(
         "--language-code", action="append", default=[], metavar="BCP47",
@@ -443,11 +444,13 @@ def main(argv: list[str] | None = None) -> int:
     try:
         load_env_file(PROJECT_DIR / ".env")
         override = Path(args.config).expanduser().resolve() if args.config else None
-        config = load_config(PROJECT_DIR, override)
+        config = load_config(PROJECT_DIR, override, profile=args.profile, provider_override=args.provider)
         _apply_overrides(config, args)
         config_base = override.parent if override else PROJECT_DIR
         level = str(get_path(config, 'logging.level', 'info')).lower()
         configure_logging(level)
+        if config.get("active_profile"):
+            LOG.info("STT profile: %s", config["active_profile"])
         settings = _effective_settings(config, args, config_base)
         if args.command == "validate":
             _validate_credentials(config, settings["provider"])

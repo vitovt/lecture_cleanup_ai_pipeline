@@ -213,6 +213,10 @@ Multitrack transcription and cleanup
     Example: $PROGRAM multitrack --preset ./webinar.yaml ./recording.mkv
 
 Provider-level tools
+  stt-api
+    Run provider-neutral STT validation, preflight, or transcription with profiles.
+    Example: $PROGRAM stt-api transcribe --profile lecture --input-file audio.mp3
+
   groq-api
     Run the standalone Groq transcribe/preflight or batch-check CLI.
     Example: $PROGRAM groq-api transcribe --input-file audio.mp3 --lang uk
@@ -305,6 +309,7 @@ resolve_mode() {
     HELP_KIND="delegate"
     case "$mode" in
         profiles) TARGET="$SCRIPT_DIR/profiles.sh" ;;
+        stt-api) TARGET="$SCRIPT_DIR/stt-api/stt_api.sh" ;;
         cleanup) TARGET="$SCRIPT_DIR/lecture_cleanup.sh" ;;
         cleanup-list) TARGET="$SCRIPT_DIR/bulk_cleanup.sh" ;;
         youtube-subtitles) TARGET="$SCRIPT_DIR/auto_process_youtube.sh" ;;

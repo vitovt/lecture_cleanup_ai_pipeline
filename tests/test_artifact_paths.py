@@ -109,6 +109,7 @@ workflow_publish_transcript "$SRTOUTDIR/raw.txt" lesson || exit $?
             for name in ('artifact_paths.py', 'artifact_paths.sh', 'config_loader.py'):
                 shutil.copy2(ROOT / 'scripts' / name, root / 'scripts' / name)
             shutil.copy2(ROOT / 'config.default.yaml', root / 'config.default.yaml')
+            shutil.copy2(ROOT / 'provider_profiles.py', root / 'provider_profiles.py')
             shutil.copy2(ROOT / 'subtitle-utils/audio_streams.py', root / 'subtitle-utils/audio_streams.py')
             (root / 'subtitle-utils/sanitize_filename.sh').write_text('sanitize_filename() { printf "%s" "$1"; }\n')
             for package in ('stt-api', 'groq-api'):

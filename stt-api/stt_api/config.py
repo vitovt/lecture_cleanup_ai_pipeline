@@ -1,12 +1,19 @@
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
 from typing import Any
 
 import yaml
 
 from .errors import ConfigError
+
+# Both in-repository CLIs share the same preset rules; no provider SDK is loaded.
+_ROOT = Path(__file__).resolve().parents[2]
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
+from provider_profiles import deep_merge, resolve_provider_profile
 
 
 def read_yaml(path: Path) -> dict[str, Any]:
@@ -23,16 +30,8 @@ def read_yaml(path: Path) -> dict[str, Any]:
     return data
 
 
-def deep_merge(base: Any, override: Any) -> Any:
-    if isinstance(base, dict) and isinstance(override, dict):
-        result = dict(base)
-        for key, value in override.items():
-            result[key] = deep_merge(result[key], value) if key in result else value
-        return result
-    return override
-
-
-def load_config(project_dir: Path, override: Path | None = None) -> dict[str, Any]:
+def load_config(project_dir: Path, override: Path | None = None, *,
+                profile: str | None = None, provider_override: str | None = None) -> dict[str, Any]:
     default_path = project_dir / "config.default.yaml"
     if not default_path.is_file():
         raise ConfigError(f"missing default config: {default_path}")
@@ -42,7 +41,17 @@ def load_config(project_dir: Path, override: Path | None = None) -> dict[str, An
         result = deep_merge(result, read_yaml(local_path))
     elif override is not None:
         raise ConfigError(f"config override not found: {local_path}")
-    return result
+    return resolve_profile(result, profile, provider_override)
+
+
+def resolve_profile(config: dict[str, Any], profile: str | None = None,
+                    provider_override: str | None = None) -> dict[str, Any]:
+    """Use the cleanup profile precedence with this component's own YAML/env."""
+    try:
+        return resolve_provider_profile(config, profile, provider_override,
+            providers_key="providers", label="STT", provider_flag="--provider")
+    except ValueError as exc:
+        raise ConfigError(str(exc)) from exc
 
 
 def get_path(config: dict[str, Any], dotted: str, default: Any = None) -> Any:

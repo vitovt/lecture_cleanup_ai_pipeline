@@ -77,6 +77,17 @@ class AccountTests(unittest.TestCase):
         self.assertEqual(dict(os.environ), before)
         self.assertNotIn('secret', output)
 
+    def test_stt_default_profile_selects_account_and_credential_override(self):
+        local = {'provider': 'gemini', 'default_profile': 'lecture', 'profiles': {
+            'lecture': {'provider': 'elevenlabs', 'api_key_env': 'PROFILE_KEY'}}}
+        (self.root / 'stt-api/config.yaml').write_text(yaml.safe_dump(local))
+        with patch.dict(os.environ, {'PROFILE_KEY': 'profile-secret'}), patch(
+                'accounting.http.urllib_request.urlopen', return_value=response(ELEVEN)) as call:
+            code, output = self.cli(['--scope', 'stt', '--format', 'json'])
+        self.assertEqual(code, 0)
+        self.assertEqual(json.loads(output)[0]['provider'], 'elevenlabs')
+        self.assertEqual(call.call_args.args[0].get_header('Xi-api-key'), 'profile-secret')
+
     def test_deepseek_legacy_records_and_json_precision(self):
         for args in ([], ['--provider', 'deepseek', '--format', 'json']):
             with self.subTest(args=args), patch('accounting.http.urllib_request.urlopen',

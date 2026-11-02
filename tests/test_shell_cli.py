@@ -410,6 +410,7 @@ class YoutubeLanguageDefaultTests(unittest.TestCase):
                 "scripts/artifact_paths.sh",
                 "scripts/artifact_paths.py",
                 "scripts/config_loader.py",
+                "provider_profiles.py",
                 "scripts/source_timecode_core.py",
                 "subtitle-utils/normalize_youtube_url.py",
                 "subtitle-utils/sanitize_filename.sh",

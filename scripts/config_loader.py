@@ -1,10 +1,17 @@
 from __future__ import annotations
 
 from pathlib import Path
+import sys
 from copy import deepcopy
 from typing import Any, Dict, Tuple
 
 import yaml
+
+# Also support utilities that import this module via the scripts directory.
+_ROOT = Path(__file__).resolve().parents[1]
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
+from provider_profiles import deep_merge, resolve_provider_profile
 
 
 def _read_yaml_dict(path: Path) -> Dict[str, Any]:
@@ -15,27 +22,6 @@ def _read_yaml_dict(path: Path) -> Dict[str, Any]:
     if not isinstance(data, dict):
         raise ValueError(f"YAML root must be a mapping: {path}")
     return data
-
-
-def deep_merge(base: Any, override: Any) -> Any:
-    """Merge override onto base.
-
-    - dicts merge recursively
-    - lists are replaced whole
-    - scalars override
-    """
-    if isinstance(base, dict) and isinstance(override, dict):
-        merged: Dict[str, Any] = {}
-        for key in base.keys():
-            if key in override:
-                merged[key] = deep_merge(base[key], override[key])
-            else:
-                merged[key] = base[key]
-        for key in override.keys():
-            if key not in base:
-                merged[key] = override[key]
-        return merged
-    return override
 
 
 def load_default_and_local(
@@ -82,29 +68,9 @@ def resolve_llm_profile(cfg: Dict[str, Any], profile: str | None = None,
     Never modify the input mapping or persist a selection to disk.
     """
     result = deepcopy(cfg)
-    llm = result.get("llm", {})
-    selected = profile if profile is not None else (
-        None if provider_override else llm.get("default_profile")
-    )
-    if selected is None:
-        return result
-    profiles = llm.get("profiles", {})
-    if not isinstance(profiles, dict):
-        raise ValueError("llm.profiles must be a mapping")
-    if not isinstance(selected, str) or selected not in profiles:
-        raise ValueError(f"Unknown LLM profile {selected!r}; available: {', '.join(map(str, profiles)) or 'none'}")
-    preset = profiles[selected]
-    if not isinstance(preset, dict):
-        raise ValueError(f"llm.profiles.{selected} must be a mapping")
-    provider = preset.get("provider")
-    if not isinstance(provider, str) or not provider.strip():
-        raise ValueError(f"llm.profiles.{selected}.provider is required")
-    provider = provider.strip().lower()
-    if provider_override and provider_override.strip().lower() != provider:
-        raise ValueError(f"LLM profile {selected!r} uses {provider}, conflicting with --llm-provider {provider_override}")
-    if not isinstance(llm.get(provider), dict):
-        raise ValueError(f"No LLM configuration for profile provider {provider}")
-    llm[provider] = deep_merge(llm[provider], {k: v for k, v in preset.items() if k != "provider"})
-    llm["provider"] = provider
-    llm["active_profile"] = selected
+    if "llm" in result:
+        result["llm"] = resolve_provider_profile(result["llm"], profile, provider_override)
+    elif "providers" in result:
+        result = resolve_provider_profile(result, profile, provider_override,
+            providers_key="providers", label="STT", provider_flag="--provider")
     return result

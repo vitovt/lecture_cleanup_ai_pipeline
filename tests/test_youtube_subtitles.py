@@ -17,6 +17,7 @@ class YoutubeSubtitleTests(unittest.TestCase):
                 "auto_process_youtube.sh",
                 "config.default.yaml",
                 "scripts/config_loader.py",
+                "provider_profiles.py",
                 "subtitle-utils/download_youtube_subtitles.sh",
                 "subtitle-utils/select_youtube_subtitles.py",
                 "subtitle-utils/youtube_subtitle_selection.sh",

@@ -242,3 +242,15 @@ The root account service reads this directory's config and `.env`, including
 allowance and reset time, not a USD or Scribe-specific remaining balance;
 `status=partial` makes that distinction explicit. The command needs the main
 virtualenv, not the ElevenLabs SDK. See [accounting documentation](../Docs/LLM_ACCOUNTING.md).
+
+### Named model profiles
+
+Save presets in `stt-api/config.yaml` under `profiles`, choose `default_profile`,
+and override one invocation with `--profile NAME`. A profile names its provider
+and model, plus optional provider settings and a `transcription` mapping.
+Explicit CLI options win. `--provider` bypasses the default profile.
+
+From the project entry point, run `./StartMe.sh profiles --scope stt`,
+`./StartMe.sh stt-api validate --profile NAME`, or
+`./StartMe.sh stt-api transcribe --profile NAME --input-file audio.mp3`.
+See [examples and precedence](../Docs/PROFILES.md#stt-profiles).

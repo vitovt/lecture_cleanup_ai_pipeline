@@ -105,7 +105,7 @@ def execute(payload: dict) -> dict:
     directory = ROOT / 'stt-api'
     args = cli.build_parser().parse_args(['transcribe', '--input-file', source['input'], *stt_args(source)])
     override = Path(source['provider_config']) if source['provider_config'] else None
-    config = load_config(directory, override)
+    config = load_config(directory, override, provider_override=args.provider)
     cli._apply_overrides(config, args)
     settings = cli._effective_settings(config, args, override.parent if override else directory)
     if payload.get('credentials'):

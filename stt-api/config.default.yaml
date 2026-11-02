@@ -12,6 +12,28 @@
 # provider explicitly; this value mainly affects direct stt_api.sh calls.
 provider: gemini
 
+# Same preset convention as cleanup's llm.profiles, scoped to STT only.
+# List: ./StartMe.sh profiles --scope stt
+# Select: ./StartMe.sh stt-api transcribe --profile NAME --input-file audio.mp3
+# CLI > selected profile > local config > defaults; explicit --provider bypasses
+# default_profile, while a conflicting explicit --profile + --provider fails.
+default_profile: null
+profiles: {}
+# Example stt-api/config.yaml:
+# default_profile: scribe-lecture
+# profiles:
+#   scribe-lecture:
+#     provider: elevenlabs
+#     model: scribe_v2
+#     request: {timeout_seconds: 900}
+#     transcription:
+#       diarization: {enabled: true}
+#   gemini-text:
+#     provider: gemini
+#     model: gemini-3.5-transcribe
+#     transcription:
+#       timestamps: {enabled: false}
+
 providers:
   gemini:
     # Official Gemini model slug for uploaded audio transcription.

@@ -82,3 +82,41 @@ Input/output/total and optional cached/reasoning tokens come from each response;
 no separate usage requests or estimated prices are introduced. `balance` lists
 OpenRouter as unsupported for account snapshots; this integration adds text
 requests and per-request usage only.
+
+## STT profiles
+
+STT follows the same selection rules, using `default_profile` and `profiles` in
+`stt-api/config.yaml`. Provider/model/request/chunking settings merge over
+`providers.<provider>`. An optional `transcription` mapping merges over the
+shared transcription settings, so each model can choose compatible timestamp
+or diarization options.
+
+```yaml
+# stt-api/config.yaml
+# Credentials are loaded from stt-api/.env.
+default_profile: scribe-lecture
+profiles:
+  scribe-lecture:
+    provider: elevenlabs
+    model: scribe_v2
+    transcription:
+      diarization: {enabled: true}
+  gemini-plain:
+    provider: gemini
+    model: gemini-3.5-transcribe
+    transcription:
+      timestamps: {enabled: false}
+```
+
+```bash
+./StartMe.sh profiles --scope stt
+./StartMe.sh stt-api validate --profile gemini-plain
+./StartMe.sh stt-api transcribe --input-file audio.mp3 --output-dir input/transcripts
+./StartMe.sh stt-api transcribe --profile gemini-plain --input-file audio.mp3 --output-dir input/transcripts
+```
+
+`--model`, `--timestamps`, `--diarization` and other explicit STT flags override
+the selected profile. `--provider` alone bypasses the default STT profile. STT
+presets do not affect existing provider-specific workflow scripts, which select
+their provider explicitly; use the provider-neutral `stt-api` entry for profiles.
+The resulting TXT can be passed to `StartMe.sh cleanup --llm-profile NAME`.
