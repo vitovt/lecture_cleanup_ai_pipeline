@@ -583,6 +583,21 @@ if [[ "$MODE" == "setup-stt" && ( "${1:-}" == "--help" || "${1:-}" == "-h" ) ]];
     exit 0
 fi
 
+# A single owner collects available request metrics across child processes.
+# Helpers/setup keep their original execution path; absent accounting is silent.
+run_target() {
+    local python="$SCRIPT_DIR/.venv/bin/python"
+    [[ -x "$python" ]] || python="$SCRIPT_DIR/stt-api/.venv/bin/python"
+    case "$MODE" in
+        cleanup|cleanup-list|youtube-*|local-*|multitrack|add-summary|stt-api|groq-api)
+            if [[ -x "$python" && -f "$SCRIPT_DIR/scripts/usage_runner.py" ]]; then
+                exec "$python" "$SCRIPT_DIR/scripts/usage_runner.py" "$MODE" "$TARGET" "$@"
+            fi
+            ;;
+    esac
+    exec "$TARGET" "$@"
+}
+
 if [[ "$MODE" == "cleanup" ]]; then
     for argument in "$@"; do
         if [[ "$argument" == "-h" || "$argument" == "--help" ]]; then
@@ -591,7 +606,7 @@ if [[ "$MODE" == "cleanup" ]]; then
         fi
     done
     prepare_cleanup_args "$@"
-    exec "$TARGET" "${CLEANUP_ARGS[@]}"
+    run_target "${CLEANUP_ARGS[@]}"
 fi
 
-exec "$TARGET" "$@"
+run_target "$@"

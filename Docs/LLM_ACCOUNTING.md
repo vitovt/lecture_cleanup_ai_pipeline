@@ -273,3 +273,20 @@ transcription response's `usage` object. Its raw/checkpoint JSON retains cost
 as a decimal string. See [OpenRouter transcription usage](https://openrouter.ai/docs/api/api-reference/stt/create-transcription).
 Gemini metadata is normalized using the documented input, candidate, thinking,
 and tool-use counts; see [Gemini usage metadata](https://ai.google.dev/api/generate-content).
+
+## Whole-workflow totals
+
+Processing modes launched through `StartMe.sh` own one temporary usage journal
+for the command and its child processes. STT, cleanup, summaries, batch items
+and multitrack workers that emit shared usage events contribute to the same
+final `USAGE_TOTAL` records. Nested sessions do not print duplicate totals.
+Components without request statistics contribute no invented metrics.
+
+The journal contains only provider/model/scope identifiers, returned numerical
+metrics and output visibility. It contains no prompts, transcripts or API keys,
+is created with private permissions, and is removed when the command exits.
+The child command's arguments, working directory, streams and exit status are
+preserved. Direct standalone LLM/STT processing still reports its own session
+total without a workflow journal. Standalone STT keeps JSON on stdout and
+accounting on stderr. Quiet/error modes suppress the totals as well as request
+records. SIGKILL or a machine crash cannot guarantee final reporting or cleanup.

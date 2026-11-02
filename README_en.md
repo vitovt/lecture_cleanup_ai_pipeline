@@ -503,3 +503,8 @@ reasoning settings in each profile. Add `OPENROUTER_API_KEY` to the root `.env`.
 For speech-to-text, configure the key and profiles in `stt-api/` and use
 `./StartMe.sh stt-api transcribe --profile NAME --input-file audio.mp3`.
 See [OpenRouter text and STT examples](Docs/PROFILES.md).
+
+Processing through `StartMe.sh` combines available usage across STT and cleanup
+subprocesses into one final workflow total. Direct processing commands report
+local session totals. Temporary accounting journals are removed on exit;
+unsupported fields stay absent and cached STT parts are not charged again.
