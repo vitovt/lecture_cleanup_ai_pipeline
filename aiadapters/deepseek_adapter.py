@@ -1,11 +1,9 @@
 from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
-from decimal import Decimal
-from urllib import request as urllib_request
 
 from .base import Message, LLMConnectionError, LLMUnknownError
-from .accounting import Balance, BalanceSnapshot, TokenUsage
+from .accounting import BalanceSnapshot, TokenUsage
 from .openai_compatible_adapter import OpenAICompatibleChatAdapter
 
 
@@ -40,39 +38,14 @@ class DeepSeekAdapter(OpenAICompatibleChatAdapter):
         self.last_usage = TokenUsage(*required, hit, miss, reasoning)
 
     def get_balance(self) -> BalanceSnapshot:
-        request = urllib_request.Request(
-            f"{self._api_base}/user/balance",
-            headers={"Accept": "application/json", "Authorization": f"Bearer {self._api_key}",
-                     "User-Agent": self._user_agent},
-        )
+        from accounting.http import AccountError
+        from accounting.providers.deepseek import fetch_balance
         try:
-            # Monitoring must not add a generation-length timeout to each run.
-            with urllib_request.urlopen(request, timeout=min(self._timeout_seconds, 10.0)) as response:
-                parsed = self._json_loads_bytes(response.read())
-        except Exception as exc:
-            # Do not expose response bodies, signed URLs or credentials in monitoring output.
+            return fetch_balance(self._api_key, self._api_base, min(self._timeout_seconds, 10.0))
+        except AccountError as exc:
+            if exc.reason == "invalid_response":
+                raise LLMUnknownError("Invalid balance response") from exc
             raise LLMConnectionError("Balance request failed") from exc
-        try:
-            if not isinstance(parsed, dict) or type(parsed.get("is_available")) is not bool:
-                raise ValueError("Invalid availability")
-            entries = parsed["balance_infos"]
-            if not isinstance(entries, list) or not entries:
-                raise ValueError("Missing balances")
-            balances = []
-            currencies = set()
-            for entry in entries:
-                currency = entry["currency"]
-                if currency not in ("USD", "CNY") or currency in currencies:
-                    raise ValueError("Invalid currency")
-                currencies.add(currency)
-                amounts = [Decimal(entry[key]) for key in
-                           ("total_balance", "granted_balance", "topped_up_balance")]
-                if any(not value.is_finite() for value in amounts):
-                    raise ValueError("Invalid balance")
-                balances.append(Balance(currency, *amounts))
-            return BalanceSnapshot(parsed["is_available"], tuple(balances))
-        except Exception as exc:
-            raise LLMUnknownError("Invalid balance response") from exc
 
     def __init__(
         self,

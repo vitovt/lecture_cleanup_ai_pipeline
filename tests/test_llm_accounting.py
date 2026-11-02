@@ -118,7 +118,7 @@ class AccountingTests(unittest.TestCase):
                      total_balance="1.234567890", granted_balance="0.234567890", topped_up_balance="1.0")
                      for currency in ("USD", "CNY")])
         self.adapter._api_base = "https://example.invalid/v1"
-        with patch("aiadapters.deepseek_adapter.urllib_request.urlopen", return_value=response(value)) as call:
+        with patch("accounting.http.urllib_request.urlopen", return_value=response(value)) as call:
             result = self.adapter.get_balance()
         self.assertEqual(call.call_args.args[0].full_url, "https://example.invalid/v1/user/balance")
         self.assertEqual(call.call_args.kwargs["timeout"], 10)
@@ -129,7 +129,7 @@ class AccountingTests(unittest.TestCase):
         for value in ({}, dict(is_available=True, balance_infos=[]),
                       dict(is_available=True, balance_infos=[dict(currency="USD", total_balance="NaN",
                            granted_balance="0", topped_up_balance="0")])):
-            with self.subTest(value=value), patch("aiadapters.deepseek_adapter.urllib_request.urlopen",
+            with self.subTest(value=value), patch("accounting.http.urllib_request.urlopen",
                                                  return_value=response(value)):
                 with self.assertRaises(LLMUnknownError):
                     self.adapter.get_balance()
