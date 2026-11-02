@@ -31,7 +31,8 @@ for provider, key in (
     ('deepseek', 'DEEPSEEK_API_KEY'), ('openai', 'OPENAI_API_KEY'),
     ('gemini', 'GOOGLE_API_KEY'), ('groq', 'GROQ_API_KEY'),
     ('kie', 'KIE_API_KEY'), ('evolink', 'EVOLINK_API_KEY'),
-    ('openai_compatible', 'OPENAI_COMPATIBLE_API_KEY'), ('dummy', None),
+    ('openai_compatible', 'OPENAI_COMPATIBLE_API_KEY'),
+    ('openrouter', 'OPENROUTER_API_KEY'), ('dummy', None),
 ):
     register(AccountSpec('cleanup', provider, '.', f'llm.{provider}', key,
                          default_api_base_url='https://api.deepseek.com' if provider == 'deepseek' else '',

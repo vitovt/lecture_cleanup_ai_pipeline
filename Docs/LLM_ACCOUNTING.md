@@ -220,3 +220,9 @@ records. The legacy `Balance` and `BalanceSnapshot` imports from
 `aiadapters.accounting` remain compatibility exports. Usage-token reporting is
 unchanged. Future automatic STT monitoring can call the same account service;
 no separate STT balance command is necessary.
+
+OpenRouter Chat Completions also emits `LLM_USAGE` from the response `usage`
+object: `prompt_tokens`, `completion_tokens`, `total_tokens`, and optional cached
+and reasoning details. Reasoning is included in output tokens and cache hits in
+input tokens. Missing or malformed statistics remain unknown. No extra usage
+requests are made. See [OpenRouter usage accounting](https://openrouter.ai/docs/cookbook/administration/usage-accounting).

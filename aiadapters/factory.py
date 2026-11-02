@@ -112,6 +112,15 @@ def create_llm_adapter(cfg: Dict, *, provider_override: Optional[str], project_r
             api_base_url=p_cfg.get("api_base_url"),
             timeout_seconds=p_cfg.get("timeout_seconds"),
         )
+    elif provider == "openrouter":
+        from .openrouter_adapter import OpenRouterAdapter
+        adapter = OpenRouterAdapter(
+            model=model, temperature=temperature, top_p=top_p,
+            api_base_url=p_cfg.get("api_base_url"),
+            timeout_seconds=p_cfg.get("timeout_seconds"),
+            provider_routing=p_cfg.get("provider_routing"),
+            reasoning=p_cfg.get("reasoning"), max_tokens=p_cfg.get("max_tokens"),
+        )
     elif provider == "openai_compatible":
         from .openai_compatible_adapter import ConfigurableOpenAICompatibleAdapter
         adapter = ConfigurableOpenAICompatibleAdapter(

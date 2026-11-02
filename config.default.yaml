@@ -31,7 +31,7 @@ llm:
   #       provider: dummy
   #       model: dummy
   dummy: {model: dummy}
-  provider: gemini      # openai | gemini | kie | evolink | groq | deepseek | openai_compatible | dummy | ...
+  provider: gemini      # openai | gemini | kie | evolink | groq | deepseek | openai_compatible | openrouter | dummy | ...
   # Kie.ai usage example:
   # - set `provider: kie`
   # - put `KIE_API_KEY=...` into `.env`
@@ -90,6 +90,43 @@ llm:
     retry:
       attempts: 3        # 1 = no retry, 2..N = number of attempts per request
       pause_seconds: 60.0 # extra pause added to provider-suggested retry delay; if none, used alone
+  openrouter:
+    # Separate OpenRouter account/key; put OPENROUTER_API_KEY in the root .env.
+    # Exact model IDs: https://openrouter.ai/models (vendor/model, not a provider).
+    # Uses the existing Chat Completions transport; usage feeds LLM_USAGE logs.
+    model: google/gemini-2.5-flash
+    api_base_url: null     # OPENROUTER_API_BASE_URL or https://openrouter.ai/api/v1
+    temperature: null     # omit to use this model's defaults
+    top_p: null
+    timeout_seconds: 300
+    max_tokens: null       # optional positive output-token budget
+    # OpenRouter provider routing object, distinct from pipeline provider.
+    # null uses OpenRouter routing defaults. only restricts the endpoint pool;
+    # order prefers providers, but allow_fallbacks must be false to forbid others.
+    # Docs: https://openrouter.ai/docs/guides/routing/provider-selection
+    provider_routing: null
+    # provider_routing:
+    #   order: [Google]
+    #   allow_fallbacks: false
+    #   require_parameters: true
+    # OpenRouter's native reasoning object (support depends on the model).
+    reasoning: null
+    # reasoning: {effort: high, exclude: true}
+    retry:
+      attempts: 3
+      pause_seconds: 60.0
+    # Profiles in local config.yaml can select different models/routing:
+    # llm:
+    #   default_profile: router-fast
+    #   profiles:
+    #     router-fast:
+    #       provider: openrouter
+    #       model: google/gemini-2.5-flash
+    #     router-quality:
+    #       provider: openrouter
+    #       model: anthropic/claude-sonnet-4
+    #       reasoning: {effort: high, exclude: true}
+    #       provider_routing: {order: [Anthropic], allow_fallbacks: false}
   openai_compatible:
     # Generic OpenAI-compatible Chat Completions endpoint (not Responses API).
     # In config.yaml set llm.provider: openai_compatible and the exact model ID
