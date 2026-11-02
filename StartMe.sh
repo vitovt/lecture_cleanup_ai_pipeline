@@ -226,6 +226,10 @@ Setup and maintenance
     Create or repair the main cleanup virtualenv and local config files.
     Example: $PROGRAM setup-main
 
+  setup-stt
+    Create/update stt-api/.venv for Gemini and ElevenLabs transcription.
+    Example: $PROGRAM setup-stt
+
   setup-groq
     Create/update groq-api/.venv and install Groq dependencies.
     Example: $PROGRAM setup-groq --dev
@@ -320,6 +324,7 @@ resolve_mode() {
         groq-api) TARGET="$SCRIPT_DIR/groq-api/groq_api.sh" ;;
         diarize) TARGET="$SCRIPT_DIR/pyannote-diarization/pyannote_diarization.sh" ;;
         setup-main) TARGET="$SCRIPT_DIR/init_once.sh"; HELP_KIND="setup-main" ;;
+        setup-stt) TARGET="$SCRIPT_DIR/stt-api/setup_venv.sh"; HELP_KIND="setup-stt" ;;
         setup-groq) TARGET="$SCRIPT_DIR/groq-api/setup_venv.sh" ;;
         setup-diarization) TARGET="$SCRIPT_DIR/pyannote-diarization/setup_venv.sh" ;;
         update-main) TARGET="$SCRIPT_DIR/update_venv_packages.sh" ;;
@@ -339,6 +344,16 @@ resolve_mode() {
 
 print_custom_help() {
     case "$HELP_KIND" in
+        setup-stt)
+            cat <<EOF | colorize_help detail
+Usage: $PROGRAM setup-stt
+
+Runs stt-api/setup_venv.sh. Creates or reuses stt-api/.venv with Python >=3.10,
+upgrades pip, and installs Gemini/ElevenLabs transcription dependencies.
+Creates missing stt-api/.env and stt-api/config.yaml from templates; existing
+local settings are preserved. Add transcription API keys to stt-api/.env.
+EOF
+            ;;
         setup-main)
             cat <<EOF | colorize_help detail
 Usage: $PROGRAM setup-main
@@ -550,6 +565,11 @@ fi
 if [[ ! -x "$TARGET" ]]; then
     print_error "mode script is missing or not executable: $TARGET"
     exit 2
+fi
+
+if [[ "$MODE" == "setup-stt" && ( "${1:-}" == "--help" || "${1:-}" == "-h" ) ]]; then
+    show_mode_help "$MODE"
+    exit 0
 fi
 
 if [[ "$MODE" == "cleanup" ]]; then

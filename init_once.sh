@@ -41,6 +41,9 @@ safe_copy "config.yaml.example" "config.yaml"
 
 echo
 echo 'Root .venv is ready. Optional components have their own venvs; run as needed:'
-echo '  (cd stt-api && ./setup_venv.sh)               # Gemini / ElevenLabs STT'
-echo '  (cd groq-api && ./setup_venv.sh)              # Groq Whisper (separate repo, not included)'
-echo '  (cd pyannote-diarization && ./setup_venv.sh)  # local diarization (separate repo, not included)'
+echo '  ./StartMe.sh setup-stt          # Gemini / ElevenLabs STT'
+echo '    or: (cd stt-api && ./setup_venv.sh)'
+echo '  ./StartMe.sh setup-groq         # Groq Whisper (separate repo, not included)'
+echo '    or: (cd groq-api && ./setup_venv.sh)'
+echo '  ./StartMe.sh setup-diarization  # local diarization (separate repo, not included)'
+echo '    or: (cd pyannote-diarization && ./setup_venv.sh)'

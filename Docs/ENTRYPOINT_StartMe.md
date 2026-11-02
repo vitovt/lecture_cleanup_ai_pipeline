@@ -97,3 +97,15 @@ Low-level multitrack transcription and merging are intentionally not StartMe
 modes. They remain standalone modules documented in
 [TOOL_TranscribeTracks.md](TOOL_TranscribeTracks.md) and
 [TOOL_MergeTranscripts.md](TOOL_MergeTranscripts.md).
+
+Setup modes expose the main and optional environments through the same entry point:
+
+```bash
+./StartMe.sh setup-main
+./StartMe.sh setup-stt          # Gemini / ElevenLabs transcription
+./StartMe.sh setup-groq
+./StartMe.sh setup-diarization
+```
+
+`setup-stt` delegates to `stt-api/setup_venv.sh`; transcription keys belong in
+`stt-api/.env`. You can also run `(cd stt-api && ./setup_venv.sh)` directly.
