@@ -1,4 +1,9 @@
-#!/bin/bash
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
+cd "$SCRIPT_DIR"
+
 
 safe_copy() {
   local src="$1"
@@ -15,25 +20,24 @@ safe_copy() {
   echo "created $dst"
 }
 
+DIRECTORY="$SCRIPT_DIR/.venv"
+PYTHON="$DIRECTORY/bin/python"
+
+# Reuse a working interpreter even when a previous dependency install failed.
+if [[ ! -x "$PYTHON" ]] || ! "$PYTHON" -c 'import sys; sys.exit(sys.version_info < (3, 10))'; then
+  if ! python3 -c 'import sys; sys.exit(sys.version_info < (3, 10))'; then
+    echo "Error: Python 3.10 or newer is required." >&2
+    exit 1
+  fi
+  echo 'Creating .venv python3 environment...'
+  python3 -m venv "$DIRECTORY"
+fi
+
 safe_copy ".env_default" ".env"
 safe_copy "config.yaml.example" "config.yaml"
 
-DIRECTORY=.venv
-
-if [ -d "$DIRECTORY" ]; then
-  echo "$DIRECTORY directory does exist. This script should be run only once."
-  echo "Exiting"
-  exit 1
-fi
-
-
-echo 'Creating .venv python3 environment...'
-python3 -m venv "$DIRECTORY"
-
-# Activate venv
-#shellcheck disable=SC1091
-source "$DIRECTORY/bin/activate"
-pip install pyyaml openai google-generativeai
+"$PYTHON" -m pip install --upgrade pip
+"$PYTHON" -m pip install -r "$SCRIPT_DIR/requirements.txt"
 
 echo
 echo 'Root .venv is ready. Optional components have their own venvs; run as needed:'

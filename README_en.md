@@ -75,7 +75,7 @@ It preserves the content without loss, corrects punctuation, capitalization, and
    ./init_once.sh
    ```
 
-   This creates `.env` from `.env_default`, `config.yaml` from `config.yaml.example`, and sets up `.venv` with dependencies.
+   This creates missing `.env` and `config.yaml` files from their templates, reuses a working Python >=3.10 `.venv`, upgrades pip, and installs dependencies from the version ranges in `requirements.txt`. Rerun it after an interrupted installation; existing local configuration is preserved. These ranges bound compatible versions; they are not an exact dependency lock.
 3. Set your keys in `.env`:
 
    ```env

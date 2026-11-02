@@ -223,7 +223,7 @@ Provider-level tools
 
 Setup and maintenance
   setup-main
-    Create the main cleanup virtualenv and initial local config files once.
+    Create or repair the main cleanup virtualenv and local config files.
     Example: $PROGRAM setup-main
 
   setup-groq
@@ -345,8 +345,8 @@ Usage: $PROGRAM setup-main
 
 Runs init_once.sh. It creates the main .venv, installs the cleanup pipeline's
 Python dependencies, and copies .env_default/config.yaml.example when their
-local counterparts do not exist. This mode is intended for first-time setup;
-it exits when .venv already exists.
+local counterparts do not exist. Reuses a working Python >=3.10 environment
+and retries dependency installation safely after an interrupted setup.
 EOF
             ;;
         download-subtitles)

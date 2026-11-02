@@ -4,7 +4,14 @@ set -euo pipefail
 SCRIPT_PATH="$(readlink -f "$0")"
 SCRIPT_DIR="$(dirname "$SCRIPT_PATH")"
 
-python3 -m venv "$SCRIPT_DIR/.venv"
+PYTHON="$SCRIPT_DIR/.venv/bin/python"
+if [[ ! -x "$PYTHON" ]] || ! "$PYTHON" -c 'import sys; sys.exit(sys.version_info < (3, 10))'; then
+    if ! python3 -c 'import sys; sys.exit(sys.version_info < (3, 10))'; then
+        echo "Error: Python 3.10 or newer is required." >&2
+        exit 1
+    fi
+    python3 -m venv "$SCRIPT_DIR/.venv"
+fi
 "$SCRIPT_DIR/.venv/bin/python" -m pip install --upgrade pip
 "$SCRIPT_DIR/.venv/bin/python" -m pip install -r "$SCRIPT_DIR/requirements.txt"
 
