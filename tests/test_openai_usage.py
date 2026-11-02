@@ -37,7 +37,7 @@ class OpenAIUsageTests(unittest.TestCase):
         with patch('scripts.llm_accounting.record', side_effect=lambda event, **fields: records.append(fields)):
             result = generate_with_usage(self.adapter, [{'role': 'user', 'content': 'Transcript'}],
                                          stage='cleanup', model='test-model')
-        return result, records[0]
+        return result, records[0] if records else None
 
     def test_sdk_usage_reaches_per_request_records_without_changing_request(self):
         result, record = self.generate(usage())
@@ -54,13 +54,13 @@ class OpenAIUsageTests(unittest.TestCase):
             model='test-model', temperature=1, top_p=1,
             input=[{'role': 'user', 'content': 'Transcript'}])
 
-    def test_zero_usage_is_valid_and_optional_breakdowns_remain_unknown(self):
+    def test_zero_usage_is_valid_and_missing_breakdowns_are_omitted(self):
         _, record = self.generate(SimpleNamespace(input_tokens=0, output_tokens=0, total_tokens=0))
         self.assertEqual(record['status'], 'ok')
         self.assertEqual(record['total_tokens'], 0)
-        self.assertEqual(record['cache_hit_tokens'], 'unknown')
-        self.assertEqual(record['cache_miss_tokens'], 'unknown')
-        self.assertEqual(record['reasoning_tokens'], 'unknown')
+        self.assertNotIn('cache_hit_tokens', record)
+        self.assertNotIn('cache_miss_tokens', record)
+        self.assertNotIn('reasoning_tokens', record)
 
     def test_missing_or_invalid_usage_never_reuses_previous_counts(self):
         for tokens in (None, {}, usage(input_tokens=True), usage(input_tokens=-1),
@@ -69,16 +69,15 @@ class OpenAIUsageTests(unittest.TestCase):
                 self.generate(usage())
                 result, record = self.generate(tokens)
                 self.assertEqual(result, 'Cleaned text')
-                self.assertEqual(record['status'], 'unknown')
-                self.assertEqual(record['total_tokens'], 'unknown')
+                self.assertIsNone(record)
                 self.assertIsNone(self.adapter.last_usage)
 
     def test_invalid_optional_counts_do_not_destroy_valid_core_counts(self):
         _, record = self.generate(usage(cached=101, reasoning=31))
         self.assertEqual(record['status'], 'ok')
-        self.assertEqual(record['cache_hit_tokens'], 'unknown')
-        self.assertEqual(record['cache_miss_tokens'], 'unknown')
-        self.assertEqual(record['reasoning_tokens'], 'unknown')
+        self.assertNotIn('cache_hit_tokens', record)
+        self.assertNotIn('cache_miss_tokens', record)
+        self.assertNotIn('reasoning_tokens', record)
         self.assertEqual(record['total_tokens'], 130)
 
     def test_error_resets_usage_even_for_direct_adapter_calls(self):
@@ -88,16 +87,15 @@ class OpenAIUsageTests(unittest.TestCase):
             self.adapter.generate([])
         self.assertIsNone(self.adapter.last_usage)
 
-    def test_failed_request_records_unknown_counts_and_error_outcome(self):
+    def test_failed_request_omits_missing_counts(self):
         self.generate(usage())
         self.client.responses.create.side_effect = RuntimeError('connection failed')
         records = []
         with patch('scripts.llm_accounting.record', side_effect=lambda event, **fields: records.append(fields)):
             with self.assertRaises(LLMConnectionError):
                 generate_with_usage(self.adapter, [], stage='summary', model='test-model')
-        self.assertEqual(records[0]['outcome'], 'error')
-        self.assertEqual(records[0]['status'], 'unknown')
-        self.assertEqual(records[0]['total_tokens'], 'unknown')
+        self.assertEqual(records, [])
+        self.assertIsNone(self.adapter.last_usage)
 
     def test_cleanup_and_each_summary_retry_report_their_own_usage(self):
         good = f'{LONG_SUMMARY_START}\nLong\n{LONG_SUMMARY_END}\n{SHORT_SUMMARY_START}\nShort\n{SHORT_SUMMARY_END}'

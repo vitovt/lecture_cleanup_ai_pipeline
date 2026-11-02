@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import os
-import sys
 from pathlib import Path
 from typing import Any
 
@@ -9,10 +8,6 @@ import yaml
 
 from .errors import ConfigError
 
-# Both in-repository CLIs share the same preset rules; no provider SDK is loaded.
-_ROOT = Path(__file__).resolve().parents[2]
-if str(_ROOT) not in sys.path:
-    sys.path.insert(0, str(_ROOT))
 from provider_profiles import deep_merge, resolve_provider_profile
 
 

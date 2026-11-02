@@ -6,6 +6,8 @@ import time
 from pathlib import Path
 from typing import Any, Callable
 
+from accounting.usage import request_with_usage
+
 from ..errors import ProviderError, ProviderRequestError, RetryExhaustedError
 from ..formatter import normalize_words
 
@@ -71,7 +73,7 @@ class GeminiProvider:
             try:
                 logging.getLogger("stt-api").info("Uploading audio to Gemini (attempt %d/%d)", attempt + 1, self.attempts)
                 uploaded = self.client.files.upload(file=str(path))
-                interaction = self.client.interactions.create(
+                interaction = request_with_usage(lambda: self.client.interactions.create(
                     model=model,
                     input=[
                         {
@@ -82,7 +84,10 @@ class GeminiProvider:
                     ],
                     generation_config={"transcription_config": transcription_config},
                     timeout=self.request_timeout,
-                )
+                ), scope='stt', provider='gemini', model=model,
+                    attempt=attempt + 1, attempts=self.attempts,
+                    emit=logging.getLogger('stt-api').info,
+                    visible=logging.getLogger('stt-api').isEnabledFor(logging.INFO))
                 return {
                     "text": str(getattr(interaction, "output_text", "") or "").strip(),
                     "words": normalize_words(interaction),

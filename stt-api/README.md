@@ -271,3 +271,11 @@ checkpoints and TXT/events/raw/metadata outputs. Raw output preserves API usage.
 Word timestamps, diarization and keyterms depend on the chosen model; missing
 requested timestamps fail explicitly. Generic smart mode and speaker counts
 are unavailable. Text generation and STT use their respective `.env` files.
+
+
+Request accounting is shared with cleanup. API attempts print `STT_USAGE` only
+for returned metrics (tokens and reported cost/currency), followed by
+`USAGE_TOTAL` for the processing session. Unknown/unsupported fields are omitted;
+no token prices are maintained. Retries are separate attempts, while reused
+checkpoints do not emit new usage or add charges. Quiet/error logging suppresses
+these records. See [accounting contracts](../Docs/LLM_ACCOUNTING.md).

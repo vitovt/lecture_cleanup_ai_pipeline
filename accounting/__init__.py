@@ -1,1 +1,1 @@
-"""Read-only provider account checks shared by CLI and processing adapters."""
+"""Shared provider account checks and per-request usage accounting."""

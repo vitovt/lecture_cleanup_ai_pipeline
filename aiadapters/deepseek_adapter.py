@@ -3,39 +3,14 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional
 
 from .base import Message, LLMConnectionError, LLMUnknownError
-from .accounting import BalanceSnapshot, TokenUsage
+from .accounting import BalanceSnapshot
 from .openai_compatible_adapter import OpenAICompatibleChatAdapter
 
 
 class DeepSeekAdapter(OpenAICompatibleChatAdapter):
     """DeepSeek adapter using its OpenAI-compatible chat completions endpoint."""
 
-    supports_usage = True
     supports_balance = True
-
-    def _record_response(self, response: Dict) -> None:
-        self.last_usage = None
-        usage = response.get("usage")
-        if not isinstance(usage, dict):
-            return
-
-        def count(key, source=usage):
-            value = source.get(key)
-            return value if type(value) is int and value >= 0 else None
-
-        required = [count(key) for key in ("prompt_tokens", "completion_tokens", "total_tokens")]
-        if any(value is None for value in required):
-            return
-        if required[2] != required[0] + required[1]:
-            return
-        details = usage.get("completion_tokens_details")
-        reasoning = count("reasoning_tokens", details) if isinstance(details, dict) else None
-        hit, miss = count("prompt_cache_hit_tokens"), count("prompt_cache_miss_tokens")
-        if hit is not None and miss is not None and hit + miss != required[0]:
-            hit = miss = None
-        if reasoning is not None and reasoning > required[1]:
-            reasoning = None
-        self.last_usage = TokenUsage(*required, hit, miss, reasoning)
 
     def get_balance(self) -> BalanceSnapshot:
         from accounting.http import AccountError

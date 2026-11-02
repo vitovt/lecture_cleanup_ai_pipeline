@@ -3,8 +3,6 @@ from __future__ import annotations
 import os
 from typing import List, Optional, Dict
 
-from .accounting import TokenUsage
-
 from .base import (
     LLMAdapter,
     LLMError,
@@ -22,31 +20,6 @@ class OpenAIAdapter(LLMAdapter):
     Expects OPENAI_API_KEY to be present in environment (or configured via the SDK).
     """
 
-    supports_usage = True
-
-    def _record_response(self, response) -> None:
-        """Normalize Responses API usage without changing generated content."""
-        self.last_usage = None
-
-        def field(value, key):
-            return value.get(key) if isinstance(value, dict) else getattr(value, key, None)
-
-        def count(value, key):
-            result = field(value, key)
-            return result if type(result) is int and result >= 0 else None
-
-        usage = field(response, "usage")
-        counts = [count(usage, key) for key in ("input_tokens", "output_tokens", "total_tokens")]
-        if any(value is None for value in counts) or counts[2] != counts[0] + counts[1]:
-            return
-        cached = count(field(usage, "input_tokens_details"), "cached_tokens")
-        reasoning = count(field(usage, "output_tokens_details"), "reasoning_tokens")
-        if cached is not None and cached > counts[0]:
-            cached = None
-        if reasoning is not None and reasoning > counts[1]:
-            reasoning = None
-        uncached = counts[0] - cached if cached is not None else None
-        self.last_usage = TokenUsage(*counts, cached, uncached, reasoning)
 
     def __init__(self, *, model: Optional[str] = None, temperature: Optional[float] = None, top_p: Optional[float] = None) -> None:
         super().__init__(model=model, temperature=temperature, top_p=top_p)
@@ -94,6 +67,7 @@ class OpenAIAdapter(LLMAdapter):
         label: Optional[str] = None,
     ) -> str:
         self.last_usage = None
+        self._request_usages = []
         params = self._build_params(messages, model, temperature, top_p)
         if debug:
             print(f"[DEBUG] OpenAI request [{label or 'generation'}]")

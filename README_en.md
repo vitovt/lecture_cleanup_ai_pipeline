@@ -118,10 +118,12 @@ See the commented local-server and optional reasoning examples in
 
 ### LLM token usage and account balance
 
-OpenAI and DeepSeek print token usage for each cleanup chunk and summary request,
-including retries. OpenAI reads the response's `usage` using the normal API key;
-no Admin key or extra request is needed. DeepSeek also reports balance before
-and after processing. OpenAI account balance remains `unsupported`.
+Cleanup LLMs and STT share request usage/cost reporting. Available token fields
+and provider-reported monetary charges are printed after requests, with session
+totals; missing metrics are omitted. OpenRouter reports USD charges directly,
+without price tables, management keys or extra requests. Reused STT checkpoints
+add no new usage. DeepSeek's before/after account balance checks remain separate.
+See [request accounting and coverage rules](Docs/LLM_ACCOUNTING.md).
 The same balance command can query STT account allowance: ElevenLabs reports
 subscription characters as a partial result, rather than a monetary or
 Scribe-specific balance.

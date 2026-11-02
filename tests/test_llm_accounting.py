@@ -93,16 +93,15 @@ class AccountingTests(unittest.TestCase):
         self.assertEqual([line["summary"] for line in lines], ["both", "both"])
         self.assertEqual(sum(line["total_tokens"] for line in lines), 260)
 
-    def test_transport_failure_reports_unknown_instead_of_zero_or_stale_usage(self):
+    def test_transport_failure_omits_missing_usage_instead_of_zero_or_stale_usage(self):
         self.adapter._record_response(dict(usage=USAGE))
         lines = []
         with patch("aiadapters.openai_compatible_adapter.urllib_request.urlopen", side_effect=URLError("secret")), \
              patch("scripts.llm_accounting.record", side_effect=lambda event, **kw: lines.append(kw)):
             with self.assertRaises(LLMConnectionError):
                 generate_with_usage(self.adapter, [], stage="summary")
-        self.assertEqual(lines[0]["status"], "unknown")
-        self.assertEqual(lines[0]["outcome"], "error")
-        self.assertEqual(lines[0]["total_tokens"], "unknown")
+        self.assertEqual(lines, [])
+        self.assertIsNone(self.adapter.last_usage)
 
     def test_invalid_usage_is_unknown_and_reasoning_is_not_added_twice(self):
         for value in (-1, True, "100"):
@@ -172,7 +171,8 @@ class AccountingTests(unittest.TestCase):
         self.assertEqual(report_balance(stub, "before", emit=lines.append), "unsupported")
         with patch("scripts.llm_accounting.record") as record:
             self.assertEqual(generate_with_usage(stub, [], stage="cleanup"), "result")
-        self.assertEqual(record.call_args.kwargs["status"], "unsupported")
+        record.assert_not_called()
+        self.assertEqual(lines, [])
 
     def test_balance_cli_default_override_and_failure_exit_codes(self):
         from accounting.models import AccountSnapshot

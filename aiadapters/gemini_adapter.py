@@ -68,6 +68,8 @@ class GeminiAdapter(LLMAdapter):
         debug: bool = False,
         label: Optional[str] = None,
     ) -> str:
+        self.last_usage = None
+        self._request_usages = []
         from typing import Any
         split = self._split_messages(messages)
         system_instruction = split["system_instruction"] or None
@@ -99,6 +101,7 @@ class GeminiAdapter(LLMAdapter):
                 prompt,
                 generation_config=generation_config or None,
             )
+            self._record_response(resp)
             # google-generativeai returns .text for aggregated text
             return getattr(resp, "text", "") or ""
         except Exception as e:

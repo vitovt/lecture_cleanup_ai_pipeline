@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from accounting.usage import response_json
+
 from scripts.logging_helper import log_trace
 
 import json
@@ -102,7 +104,7 @@ class KieAdapter(LLMAdapter):
     def _json_loads_bytes(data: bytes) -> Optional[Dict[str, Any]]:
         try:
             decoded = data.decode("utf-8", errors="replace")
-            parsed = json.loads(decoded)
+            parsed = response_json(decoded)
             if isinstance(parsed, dict):
                 return parsed
         except Exception:
@@ -443,6 +445,7 @@ class KieAdapter(LLMAdapter):
         client = self._OpenAI(api_key=self._api_key, base_url=base_url)
         try:
             resp = client.chat.completions.create(**params)
+            self._record_response(resp)
             dumped: Optional[Dict[str, Any]] = None
             if hasattr(resp, "model_dump"):
                 try:
@@ -521,6 +524,7 @@ class KieAdapter(LLMAdapter):
                 if not parsed:
                     log_trace(f"{self.name()} non-JSON success body: {raw.decode('utf-8', errors='replace')}")
                     raise LLMUnknownError("Kie response is not valid JSON")
+                self._record_response(parsed)
                 self._raise_if_kie_envelope_error(parsed, debug=debug)
                 text = self._extract_text(parsed)
                 if text:
@@ -565,6 +569,8 @@ class KieAdapter(LLMAdapter):
         debug: bool = False,
         label: Optional[str] = None,
     ) -> str:
+        self.last_usage = None
+        self._request_usages = []
         # Prefer raw HTTP first: simpler behavior, exact response visibility, and avoids
         # double-billing when the SDK path returns an empty but otherwise successful response.
         try:

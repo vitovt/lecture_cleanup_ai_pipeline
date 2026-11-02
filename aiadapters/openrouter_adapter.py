@@ -2,13 +2,12 @@
 from copy import deepcopy
 import json
 
-from .accounting import TokenUsage
 from .base import LLMUnknownError
 from .openai_compatible_adapter import OpenAICompatibleChatAdapter
 
 
 class OpenRouterAdapter(OpenAICompatibleChatAdapter):
-    supports_usage = True
+    usage_currency = 'USD'
 
     def __init__(self, *, model=None, temperature=None, top_p=None,
                  api_base_url=None, timeout_seconds=None, provider_routing=None,
@@ -45,27 +44,9 @@ class OpenRouterAdapter(OpenAICompatibleChatAdapter):
 
     def _record_response(self, response):
         self.last_usage = None
+        super()._record_response(response)
         error = response.get('error')
         if isinstance(error, dict):
             code = error.get('code')
             self._raise_mapped_error(self._extract_error_message(response) or 'OpenRouter request failed',
                                      status=code if type(code) is int else None, debug=False)
-        usage = response.get('usage')
-        if not isinstance(usage, dict):
-            return
-
-        def count(source, key):
-            value = source.get(key) if isinstance(source, dict) else None
-            return value if type(value) is int and value >= 0 else None
-
-        counts = [count(usage, key) for key in ('prompt_tokens', 'completion_tokens', 'total_tokens')]
-        if any(value is None for value in counts) or counts[2] != counts[0] + counts[1]:
-            return
-        cached = count(usage.get('prompt_tokens_details'), 'cached_tokens')
-        reasoning = count(usage.get('completion_tokens_details'), 'reasoning_tokens')
-        if cached is not None and cached > counts[0]:
-            cached = None
-        if reasoning is not None and reasoning > counts[1]:
-            reasoning = None
-        self.last_usage = TokenUsage(*counts, cached,
-            counts[0] - cached if cached is not None else None, reasoning)

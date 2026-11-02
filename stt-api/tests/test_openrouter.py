@@ -15,6 +15,7 @@ from stt_api.config import read_yaml, resolve_profile
 from stt_api.errors import InputError, ProviderError, ProviderRequestError, RetryExhaustedError
 from stt_api.media import AudioPart, PreparedAudio
 from stt_api.providers.openrouter import OpenRouterProvider
+from accounting.usage import usage_session
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -34,7 +35,7 @@ class OpenRouterSttTests(unittest.TestCase):
         self.output = {'text': 'Hello world', 'language': 'en',
             'words': [{'word': 'Hello', 'start': 0.0, 'end': 0.4, 'speaker': 'speaker_0'},
                       {'word': 'world', 'start': 0.5, 'end': 1.0, 'speaker_label': 'speaker_1'}],
-            'usage': {'input_tokens': 10, 'output_tokens': 2, 'total_tokens': 12, 'seconds': 1}}
+            'usage': {'input_tokens': 10, 'output_tokens': 2, 'total_tokens': 12, 'seconds': 1, 'cost': 0.000508}}
 
     def provider(self, **options):
         values = dict(attempts=2, initial_delay=1, multiplier=2, max_delay=10,
@@ -72,7 +73,7 @@ class OpenRouterSttTests(unittest.TestCase):
         self.assertEqual(payload['provider'], {'data_collection': 'deny'})
         self.assertEqual(result['words'][0]['text'], 'Hello')
         self.assertEqual(result['words'][1]['speaker'], 'speaker_1')
-        self.assertEqual(result['usage'], self.output['usage'])
+        self.assertEqual(result['usage'], {**self.output['usage'], 'cost': '0.000508'})
         send.assert_called_once()
 
     def test_multilingual_plain_text_omits_single_language_and_timing_options(self):
@@ -151,7 +152,7 @@ class OpenRouterSttTests(unittest.TestCase):
         metadata = json.loads((self.root / 'out/lecture.metadata.json').read_text())
         self.assertEqual(metadata['profile'], 'router')
         raw = json.loads((self.root / 'out/lecture.raw.json').read_text())
-        self.assertEqual(raw['parts'][0]['usage'], self.output['usage'])
+        self.assertEqual(raw['parts'][0]['usage'], {**self.output['usage'], 'cost': '0.000508'})
         changed = dict(settings, model='different/model')
         self.assertNotEqual(fingerprint(self.audio, settings), fingerprint(self.audio, changed))
 
@@ -183,3 +184,22 @@ class OpenRouterSttTests(unittest.TestCase):
         with patch('stt_api.providers.openrouter.request.urlopen', return_value=response(body)):
             with self.assertRaisesRegex(ProviderRequestError, 'speaker labels'):
                 self.transcribe(self.provider(), diarization=True)
+
+    def test_request_cost_retries_and_cached_parts_use_shared_totals(self):
+        config = read_yaml(ROOT / 'config.default.yaml')
+        config['provider'] = 'openrouter'
+        config['processing']['retry'].update(initial_delay_seconds=0, jitter_seconds=0)
+        args, settings = self.settings(config)
+        totals = []
+        with patch.dict(os.environ, {'OPENROUTER_API_KEY': 'test'}), \
+             patch('stt_api.cli.prepare_audio', side_effect=lambda *a, **kw: PreparedAudio([AudioPart(self.audio, 0, 1, 0, 1)], 1)), \
+             patch('stt_api.providers.openrouter.request.urlopen', side_effect=[URLError('failure'), response(self.output)]) as send, \
+             usage_session(emit=totals.append), redirect_stdout(StringIO()):
+            cli.transcribe(config, args, settings)
+            cli.transcribe(config, args, settings)
+        self.assertEqual(send.call_count, 2)
+        self.assertEqual(len(totals), 1)
+        self.assertIn('requests=2', totals[0])
+        self.assertIn('total_tokens=12', totals[0])
+        self.assertIn('cost=0.000508 currency=USD', totals[0])
+        self.assertIn('cost_requests=1', totals[0])

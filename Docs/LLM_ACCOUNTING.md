@@ -1,13 +1,41 @@
-# LLM token usage and account balance
+# Request usage, costs and account balances
 
-OpenAI and DeepSeek report token usage after each cleanup chunk request and
-summary request, including each retry. DeepSeek additionally reports its account
-balance before and after the LLM processing session. The same reporting applies
-to `StartMe.sh add-summary`. Other cleanup LLM adapters expose explicit
-`status=unsupported` usage stubs. Manual account checks also support STT
-subscription quotas through the shared `accounting/` service; automatic STT
-checks are not enabled. No accounting files are written, and this feature does
-not calculate money spent.
+All cleanup adapters and the STT component use the shared `accounting.usage`
+normalizer, formatter and accumulator. Available metrics are printed after API
+requests as `LLM_USAGE` or `STT_USAGE`. Only valid returned values are shown:
+unsupported or missing fields are omitted, and a request without statistics
+produces no usage line. Reported zero tokens or zero cost remain visible.
+
+The shared parser supports Chat Completions, Responses, Gemini metadata and
+compatible envelopes, both dictionaries and SDK objects. New integrations pass
+responses to this mechanism instead of adding provider-specific console output.
+OpenRouter declares USD as its cost currency; other APIs must report a currency
+or declare one in their integration before monetary fields are shown.
+
+`cost` is the charge reported by the API, handled as `Decimal`, with a
+`currency` field. Raw HTTP JSON preserves monetary decimal digits. No prices are
+hardcoded, no token-to-price estimates are made, and no management key or extra
+API request is needed. Tokens and money are independent: either can be shown
+without the other. Cache and reasoning breakdowns are subsets of input/output
+and are never added to total tokens again. Upstream/BYOK cost estimates are not
+substituted for the charge reported to this account.
+
+`USAGE_TOTAL` summarizes the processing session by scope/provider/model. A
+combined row (`scope=all`) is emitted when several groups contributed. Different
+currencies are never added together: a multi-currency total has separate money
+rows. Missing responses still count as attempts, so a known subtotal is marked
+`partial=true`, with `<metric>_requests` showing how many attempts supplied that
+metric. No metrics means no total row. Retries and rejected summary responses
+are counted separately; reused STT checkpoints add no new requests or costs.
+Totals are finalized on normal completion or exceptions. Quiet/error logging
+suppresses accounting output. No separate persistent accounting database is
+created; STT's existing raw diagnostics still preserve original response usage.
+
+Account checks remain separate. DeepSeek reports account balance before/after
+LLM sessions; unsupported automatic balance reporting is silent. The explicit
+`balance` CLI still reports capability/error statuses, including STT subscription
+allowances, without generation or transcription. A balance change may include
+other jobs and is not used to estimate the cost of this job.
 
 ### OpenAI per-request tokens
 
@@ -23,8 +51,8 @@ Admin keys, account queries, prices, or currency estimates.
 
 Cached tokens are included in input tokens, and reasoning tokens are included in
 output tokens; neither is added to the total again. Missing or invalid optional
-details are `unknown`; missing or inconsistent core counts make the request's
-usage `status=unknown`. Successful zero counts remain zero. Every new attempt
+details are omitted; missing or inconsistent core counts are not displayed.
+Successful zero counts remain zero. Every new attempt
 clears the previous response's counters, including direct adapter calls.
 See the official [Responses API usage schema](https://developers.openai.com/api/reference/resources/responses/methods/retrieve).
 
@@ -147,14 +175,12 @@ LLM_USAGE provider=deepseek model=deepseek-v4-pro stage=cleanup label=chunk%201%
 LLM_BALANCE provider=deepseek phase=check status=ok currency=USD total=8.123456 granted=0.000000 topped_up=8.123456 available=true
 ```
 
-- `LLM_USAGE`: `stage=cleanup|summary`; cleanup identifies `part` and `parts`,
-  summary identifies `summary=short|long|both`, and both identify `attempt` and
-  `attempts`. Non-applicable context fields are `none`.
-- `status=ok` means the API returned valid core token counts; `unknown` means
-  usage was missing, invalid, or unavailable after a failed request;
-  `unsupported` means the adapter has not implemented accounting yet. Unknown
-  counts are the literal `unknown`, never zero. Optional breakdowns may be
-  `unknown` even when the core counts are valid.
+- `LLM_USAGE`: `stage=cleanup|summary`; `STT_USAGE`: `stage=transcription`.
+  Context identifies chunk/part and attempt numbers when available. A combined
+  summary uses `summary=both`.
+- `status=ok` means at least one valid metric is present. Missing/unsupported
+  metrics are omitted, including money for APIs without reported charges.
+  There are no automatic `unknown` or `unsupported` usage placeholders.
 - `outcome=ok|error` describes the generation call, before downstream output
   validation. A rejected summary response still consumed tokens and has its own
   usage record. Retried requests produce additional records, not replacements.
@@ -162,7 +188,8 @@ LLM_BALANCE provider=deepseek phase=check status=ok currency=USD total=8.123456 
   of `output_tokens`; do not add either breakdown to `total_tokens` again.
 - Both summaries normally share one API request (`summary=both`); its usage is
   reported once, since separate per-summary counts are unavailable.
-- `LLM_BALANCE`: `phase=before|after|check`, `status=ok|error|unsupported`.
+- `LLM_BALANCE`: `phase=before|after|check`, `status=ok|error`; explicit account
+  queries may also return `unsupported`.
   Successful queries emit one record per currency with exact decimal amounts
   (`total`, `granted`, `topped_up`) and `available=true|false`. Failed queries
   emit a `reason` code and omit amounts. Monitoring failures do not stop cleanup;
@@ -172,7 +199,7 @@ LLM_BALANCE provider=deepseek phase=check status=ok currency=USD total=8.123456 
 Filtering examples (assuming normal console output was saved to `run.log`):
 
 ```bash
-# Only balance records, including failures and unsupported providers.
+# Balance records (manual checks also report unsupported providers).
 grep -E '(^| )LLM_BALANCE ' run.log
 
 # One total-token value per cleanup attempt with valid usage.
@@ -198,9 +225,14 @@ affect them. Missing usage after a timeout can also mean a billed request was no
 counted locally. Token sums are therefore only complete when every request has
 valid usage. Balances in different currencies must be kept separate.
 
-Adapter extension points are `supports_usage`, `_record_response()` and
-`last_usage: TokenUsage`, plus `supports_balance` and
-`get_balance() -> BalanceSnapshot`. Defaults in `LLMAdapter` are unsupported.
+LLM integrations call the base `_record_response(response)` hook after each
+reply. It sets `last_usage: TokenUsage` and preserves statistics for multiple
+transport replies within one generation attempt. There is no usage capability
+flag or per-model pricing registry. STT integrations call
+`request_with_usage(call, scope=..., provider=..., model=..., emit=...)` inside
+their existing retry loop. The same shared reporter handles output and totals;
+cache hits bypass the transport and therefore bypass accounting. Balance
+extensions still use `supports_balance` and `get_balance()` independently.
 
 ## Adding an account provider
 
@@ -217,12 +249,27 @@ Adapter extension points are `supports_usage`, `_record_response()` and
 The shared DeepSeek fetcher is used both by this service and
 `DeepSeekAdapter.get_balance()`, preserving existing pipeline before/after
 records. The legacy `Balance` and `BalanceSnapshot` imports from
-`aiadapters.accounting` remain compatibility exports. Usage-token reporting is
-unchanged. Future automatic STT monitoring can call the same account service;
+`aiadapters.accounting` remain compatibility exports alongside `TokenUsage`.
+Request accounting uses the common implementation described above. Future
+automatic STT monitoring can call the same account service;
 no separate STT balance command is necessary.
 
 OpenRouter Chat Completions also emits `LLM_USAGE` from the response `usage`
 object: `prompt_tokens`, `completion_tokens`, `total_tokens`, and optional cached
 and reasoning details. Reasoning is included in output tokens and cache hits in
-input tokens. Missing or malformed statistics remain unknown. No extra usage
+input tokens. Missing or malformed statistics are omitted. No extra usage
 requests are made. See [OpenRouter usage accounting](https://openrouter.ai/docs/cookbook/administration/usage-accounting).
+
+
+Example request and session total (illustrative amounts):
+
+```text
+LLM_USAGE scope=cleanup provider=openrouter model=vendor%2Fmodel stage=cleanup status=ok outcome=ok input_tokens=100 output_tokens=30 total_tokens=130 cost=0.0042 currency=USD
+USAGE_TOTAL scope=cleanup provider=openrouter model=vendor%2Fmodel requests=2 input_tokens=200 output_tokens=60 total_tokens=260 cost=0.0084 currency=USD
+```
+
+STT OpenRouter uses the same monetary and token reporting through the dedicated
+transcription response's `usage` object. Its raw/checkpoint JSON retains cost
+as a decimal string. See [OpenRouter transcription usage](https://openrouter.ai/docs/api/api-reference/stt/create-transcription).
+Gemini metadata is normalized using the documented input, candidate, thinking,
+and tool-use counts; see [Gemini usage metadata](https://ai.google.dev/api/generate-content).

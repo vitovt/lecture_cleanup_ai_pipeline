@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 from .accounting import BalanceSnapshot, TokenUsage
+from accounting.usage import normalize_usage
 
 
 class LLMError(Exception):
@@ -46,17 +47,19 @@ class LLMAdapter(ABC):
         self._temperature = temperature
         self._top_p = top_p
         self.last_usage: Optional[TokenUsage] = None
+        self._request_usages = []
 
-    supports_usage = False
+    usage_currency = None
     supports_balance = False
 
     def get_balance(self) -> Optional[BalanceSnapshot]:
         """Return a BalanceSnapshot, or None when balance reporting is unsupported."""
         return None
 
-    def _record_response(self, response: Dict) -> None:
-        """Optional provider hook for normalizing usage before extracting text."""
-        return None
+    def _record_response(self, response: Any) -> None:
+        """Record common API usage without adapter-specific accounting rules."""
+        self.last_usage = normalize_usage(response, currency=self.usage_currency)
+        self._request_usages.append(self.last_usage)
 
     @property
     def model(self) -> Optional[str]:

@@ -78,7 +78,8 @@ parameters and prices depend on the selected model/endpoint. See the official
 and [model catalogue](https://openrouter.ai/models).
 
 The existing chunking, retries, summaries and `LLM_USAGE` reporting apply.
-Input/output/total and optional cached/reasoning tokens come from each response;
+Input/output/total, optional cached/reasoning tokens and reported USD charges
+come from each response;
 no separate usage requests or estimated prices are introduced. `balance` lists
 OpenRouter as unsupported for account snapshots; this integration adds text
 requests and per-request usage only.
@@ -150,8 +151,8 @@ profiles:
 This uses the dedicated `/audio/transcriptions` endpoint, not a chat model
 prompted to transcribe. Long audio uses the existing splitting, overlap,
 checkpoint/resume and timestamp formatter. Model, endpoint and provider options
-are included in checkpoint fingerprints. Response `usage` and the original
-payload are preserved in the existing `.raw.json` output; cached results reuse
+are included in checkpoint fingerprints. Response `usage` is printed through
+shared request accounting; usage and the original payload are preserved in the existing `.raw.json` output; cached results reuse
 that original usage, they do not represent another paid request. Metadata
 records the selected profile.
 

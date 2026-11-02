@@ -1,4 +1,4 @@
-"""Account values: money and subscription quotas are distinct quantities."""
+"""Provider-reported account and request accounting values."""
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from decimal import Decimal
@@ -46,3 +46,16 @@ class AccountSnapshot:
 
 def utc_now():
     return datetime.now(timezone.utc).isoformat()
+
+
+@dataclass(frozen=True)
+class TokenUsage:
+    """Optional response metrics; money is only a provider-reported amount."""
+    input_tokens: Optional[int] = None
+    output_tokens: Optional[int] = None
+    total_tokens: Optional[int] = None
+    cache_hit_tokens: Optional[int] = None
+    cache_miss_tokens: Optional[int] = None
+    reasoning_tokens: Optional[int] = None
+    cost: Optional[Decimal] = None
+    currency: Optional[str] = None

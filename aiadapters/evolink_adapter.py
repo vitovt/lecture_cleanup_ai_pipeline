@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from accounting.usage import response_json
+
 from scripts.logging_helper import log_trace
 
 import json
@@ -65,7 +67,7 @@ class EvoLinkAdapter(LLMAdapter):
     @staticmethod
     def _json_loads_bytes(data: bytes) -> Optional[Dict[str, Any]]:
         try:
-            parsed = json.loads(data.decode("utf-8", errors="replace"))
+            parsed = response_json(data.decode("utf-8", errors="replace"))
             if isinstance(parsed, dict):
                 return parsed
         except Exception:
@@ -303,6 +305,8 @@ class EvoLinkAdapter(LLMAdapter):
         debug: bool = False,
         label: Optional[str] = None,
     ) -> str:
+        self.last_usage = None
+        self._request_usages = []
         model_name = self._resolve_model(model)
         endpoint = self._endpoint(model_name)
         payload = self._build_payload(messages, model=model_name, temperature=temperature, top_p=top_p)
@@ -335,6 +339,7 @@ class EvoLinkAdapter(LLMAdapter):
                 if not parsed:
                     log_trace(f"{self.name()} non-JSON success body: {raw.decode('utf-8', errors='replace')}")
                     raise LLMUnknownError("EvoLink response is not valid JSON")
+                self._record_response(parsed)
                 self._raise_if_app_error(parsed, debug=debug)
                 text = self._extract_text(parsed)
                 if text:

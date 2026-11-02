@@ -12,6 +12,8 @@ import random
 import time
 from urllib import error, request
 
+from accounting.usage import request_with_usage, response_json
+
 from ..errors import ConfigError, InputError, ProviderError, ProviderRequestError, RetryExhaustedError
 
 LOG = logging.getLogger('stt-api')
@@ -100,11 +102,14 @@ class OpenRouterProvider:
                 req = request.Request(self.endpoint, data=data, method='POST', headers={
                     'Authorization': f'Bearer {self.api_key}', 'Content-Type': 'application/json',
                     'Accept': 'application/json', 'User-Agent': 'lecture-cleanup-pipeline/1.0'})
-                with request.urlopen(req, timeout=self.request_timeout) as response:
-                    try:
-                        parsed = json.loads(response.read())
-                    except (ValueError, UnicodeError) as exc:
-                        raise ProviderRequestError('OpenRouter returned invalid transcription JSON') from exc
+                def send():
+                    with request.urlopen(req, timeout=self.request_timeout) as response:
+                        try:
+                            return response_json(response.read())
+                        except (ValueError, UnicodeError) as exc:
+                            raise ProviderRequestError('OpenRouter returned invalid transcription JSON') from exc
+                parsed = request_with_usage(send, scope='stt', provider='openrouter', model=model,
+                    attempt=attempt + 1, attempts=self.attempts, currency='USD', emit=LOG.info, visible=LOG.isEnabledFor(logging.INFO))
                 if isinstance(parsed, dict) and isinstance(parsed.get('error'), dict):
                     code = parsed['error'].get('code')
                     if type(code) is int:

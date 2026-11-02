@@ -1,4 +1,5 @@
 import json
+from decimal import Decimal
 import os
 from pathlib import Path
 import tempfile
@@ -40,7 +41,7 @@ class OpenRouterTests(unittest.TestCase):
             adapter = create_llm_adapter(cfg, provider_override=None, project_root=Path(directory))
         self.assertEqual(generation_options(cfg)['model'], 'vendor/special')
         body = {'choices': [{'message': {'content': 'Cleaned lecture'}}], 'usage': {
-            'prompt_tokens': 100, 'completion_tokens': 30, 'total_tokens': 130,
+            'prompt_tokens': 100, 'completion_tokens': 30, 'total_tokens': 130, 'cost': 0.0042,
             'prompt_tokens_details': {'cached_tokens': 40},
             'completion_tokens_details': {'reasoning_tokens': 20}}}
         with patch('aiadapters.openai_compatible_adapter.urllib_request.urlopen',
@@ -58,6 +59,8 @@ class OpenRouterTests(unittest.TestCase):
         self.assertEqual(payload['max_tokens'], 5000)
         for key in ('temperature', 'top_p', 'reasoning_effort', 'thinking'):
             self.assertNotIn(key, payload)
+        self.assertEqual(adapter.last_usage.cost, Decimal('0.0042'))
+        self.assertEqual(adapter.last_usage.currency, 'USD')
         self.assertEqual(adapter.last_usage.total_tokens, 130)
         self.assertEqual(adapter.last_usage.cache_miss_tokens, 60)
         self.assertEqual(adapter.last_usage.reasoning_tokens, 20)

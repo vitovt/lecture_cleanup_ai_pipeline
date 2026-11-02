@@ -11,6 +11,8 @@ import traceback
 from pathlib import Path
 from typing import Any
 
+from accounting.usage import usage_context, usage_session
+
 from .checkpoints import CheckpointStore, fingerprint
 from .config import get_path, load_config, load_env_file, set_path
 from .errors import ConfigError, InputError, SttError
@@ -389,16 +391,17 @@ def transcribe(config: dict[str, Any], args: argparse.Namespace, settings: dict[
                 LOG.info("Transcribing part %d/%d", index + 1, len(prepared.parts))
                 started = time.monotonic()
                 LOG.log(5, "Transcription settings: %s", checkpoint_settings)
-                result = provider.transcribe(
-                    part.path,
-                    model=settings["model"],
-                    language_codes=settings["language_codes"],
-                    vocabulary=settings["vocabulary"],
-                    mode=settings["mode"],
-                    timestamps=settings["timestamps"],
-                    diarization=settings["diarization"],
-                    **({"num_speakers": settings["num_speakers"]} if settings.get("num_speakers") is not None else {}),
-                )
+                with usage_context(part=index + 1, parts=len(prepared.parts)):
+                    result = provider.transcribe(
+                        part.path,
+                        model=settings["model"],
+                        language_codes=settings["language_codes"],
+                        vocabulary=settings["vocabulary"],
+                        mode=settings["mode"],
+                        timestamps=settings["timestamps"],
+                        diarization=settings["diarization"],
+                        **({"num_speakers": settings["num_speakers"]} if settings.get("num_speakers") is not None else {}),
+                    )
                 LOG.debug("Part %d completed in %.2fs; words=%d, text characters=%d", index + 1, time.monotonic() - started, len(result.get("words") or []), len(result.get("text") or ""))
                 LOG.log(5, "Provider response: %s", result)
                 store.write(key, result)
@@ -502,7 +505,8 @@ def main(argv: list[str] | None = None) -> int:
                 )
             )
             return 0
-        return transcribe(config, args, settings)
+        with usage_session(emit=LOG.info):
+            return transcribe(config, args, settings)
     except SttError as exc:
         if level != 'quiet':
             print(f"[ERROR] {exc.__class__.__name__}: {exc}", file=sys.stderr)

@@ -6,6 +6,8 @@ import time
 from pathlib import Path
 from typing import Any, Callable
 
+from accounting.usage import request_with_usage
+
 from ..errors import ProviderError, ProviderRequestError, RetryExhaustedError
 
 
@@ -102,10 +104,13 @@ class ElevenLabsProvider:
         for attempt in range(self.attempts):
             try:
                 with path.open("rb") as audio_file:
-                    response = self.client.speech_to_text.convert(
+                    response = request_with_usage(lambda: self.client.speech_to_text.convert(
                         file=audio_file,
                         **request,
-                    )
+                    ), scope='stt', provider='elevenlabs', model=model,
+                        attempt=attempt + 1, attempts=self.attempts,
+                        emit=logging.getLogger('stt-api').info,
+                        visible=logging.getLogger('stt-api').isEnabledFor(logging.INFO))
                 return {
                     "text": str(_value(response, "text", "") or "").strip(),
                     "words": _response_words(response, timestamps=timestamps),

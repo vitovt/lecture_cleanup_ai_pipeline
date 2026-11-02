@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from accounting.usage import response_json
+
 from scripts.logging_helper import log_trace
 
 import http.client as http_client
@@ -125,7 +127,7 @@ class OpenAICompatibleChatAdapter(LLMAdapter):
     @staticmethod
     def _json_loads_bytes(data: bytes) -> Optional[Dict[str, Any]]:
         try:
-            parsed = json.loads(data.decode("utf-8", errors="replace"))
+            parsed = response_json(data.decode("utf-8", errors="replace"))
             if isinstance(parsed, dict):
                 return parsed
         except Exception:
@@ -327,6 +329,7 @@ class OpenAICompatibleChatAdapter(LLMAdapter):
         label: Optional[str] = None,
     ) -> str:
         self.last_usage = None
+        self._request_usages = []
         payload = self._build_payload(messages, model=model, temperature=temperature, top_p=top_p)
         endpoint = self._endpoint()
 
