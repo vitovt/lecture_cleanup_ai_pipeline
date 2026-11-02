@@ -11,6 +11,7 @@ language: ru            # two-letter ISO-639-1 code; e.g. ru, uk, en, de, pl, es
 
 # LLM settings (provider-aware). Configure provider and per-provider settings here.
 llm:
+  dummy: {model: dummy}
   provider: gemini      # openai | gemini | kie | evolink | groq | deepseek | dummy | ...
   # Kie.ai usage example:
   # - set `provider: kie`
