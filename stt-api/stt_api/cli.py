@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import math
 import os
 import sys
 import time
@@ -16,7 +17,7 @@ from .errors import ConfigError, InputError, SttError
 from .formatter import format_events, merge_plain_text, words_to_events
 from .languages import normalize_languages
 from .media import prepare_audio, probe_duration
-from .providers import ElevenLabsProvider, GeminiProvider
+from .providers import ElevenLabsProvider, GeminiProvider, OpenRouterProvider
 from .vocabulary import merge_vocabulary, validate_elevenlabs_keyterms
 
 
@@ -38,7 +39,7 @@ def configure_logging(level: str) -> None:
 
 def _add_provider_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
-        "--provider", choices=("gemini", "elevenlabs"), help="STT provider override."
+        "--provider", choices=("gemini", "elevenlabs", "openrouter"), help="STT provider override."
     )
     parser.add_argument("--config", help="YAML override; defaults to stt-api/config.yaml.")
     parser.add_argument("--profile", help="Select profiles.NAME from STT config for this run.")
@@ -126,9 +127,9 @@ def _effective_settings(
     config: dict[str, Any], args: argparse.Namespace, config_base: Path
 ) -> dict[str, Any]:
     provider = str(get_path(config, "provider", "")).strip()
-    if provider not in {"gemini", "elevenlabs"}:
+    if provider not in {"gemini", "elevenlabs", "openrouter"}:
         raise ConfigError(
-            f"unsupported provider '{provider}'; available: gemini, elevenlabs"
+            f"unsupported provider '{provider}'; available: gemini, elevenlabs, openrouter"
         )
     model = str(get_path(config, f"providers.{provider}.model", "")).strip()
     if not model:
@@ -166,6 +167,11 @@ def _effective_settings(
             raise InputError("num-speakers requires ElevenLabs provider diarization")
         if isinstance(num_speakers, bool) or not isinstance(num_speakers, int) or not 1 <= num_speakers <= 32:
             raise InputError("num-speakers must be an integer from 1 to 32")
+    if provider == "openrouter":
+        if mode != "verbatim":
+            raise InputError("OpenRouter STT does not expose a generic smart mode; use verbatim")
+        if any(len(term) > 100 for term in vocabulary):
+            raise InputError("OpenRouter keyterms must contain at most 100 characters each")
     conflicts: list[str] = []
     if provider == "gemini":
         if vocabulary and timestamps:
@@ -191,16 +197,16 @@ def _effective_settings(
         overlap = float(get_path(config, "media.chunking.overlap_seconds", 5))
     else:
         max_seconds = float(
-            get_path(config, "providers.elevenlabs.chunking.max_seconds", 32400)
+            get_path(config, f"providers.{provider}.chunking.max_seconds", 900 if provider == "openrouter" else 32400)
         )
         overlap = float(
-            get_path(config, "providers.elevenlabs.chunking.overlap_seconds", 5)
+            get_path(config, f"providers.{provider}.chunking.overlap_seconds", 5)
         )
-    if overlap < 0 or overlap >= max_seconds:
+    if not math.isfinite(overlap) or not math.isfinite(max_seconds) or overlap < 0 or overlap >= max_seconds:
         raise ConfigError("chunk overlap must be non-negative and shorter than the chunk")
     if max_seconds <= 0:
         raise ConfigError("media chunk duration must be positive")
-    return {
+    settings = {
         "provider": provider,
         "model": model,
         "language_codes": languages,
@@ -213,19 +219,42 @@ def _effective_settings(
         "overlap": overlap,
         "provider_language_code": (
             languages[0].split("-", 1)[0].lower()
-            if provider == "elevenlabs" and len(languages) == 1
+            if provider != "gemini" and len(languages) == 1
             else "auto"
-            if provider == "elevenlabs"
+            if provider != "gemini"
             else ",".join(languages) or "auto"
         ),
     }
+    if provider == "openrouter":
+        options = get_path(config, "providers.openrouter.provider_options")
+        if options is not None and not isinstance(options, dict):
+            raise ConfigError("providers.openrouter.provider_options must be a mapping or null")
+        try:
+            json.dumps(options, allow_nan=False)
+        except (TypeError, ValueError) as exc:
+            raise ConfigError("OpenRouter provider_options must contain JSON values") from exc
+        base_url = (get_path(config, "providers.openrouter.api_base_url") or
+                    os.environ.get("OPENROUTER_API_BASE_URL") or "https://openrouter.ai/api/v1")
+        if not isinstance(base_url, str) or not base_url.strip():
+            raise ConfigError("providers.openrouter.api_base_url must be a nonempty URL")
+        max_bytes = get_path(config, "providers.openrouter.request.max_audio_bytes", 25 * 1024 * 1024)
+        if type(max_bytes) is not int or max_bytes < 1:
+            raise ConfigError("providers.openrouter.request.max_audio_bytes must be a positive integer")
+        timeout = float(get_path(config, "providers.openrouter.request.timeout_seconds", 900))
+        if not math.isfinite(timeout) or timeout <= 0:
+            raise ConfigError("providers.openrouter.request.timeout_seconds must be positive and finite")
+        # All request-shaping options belong in the checkpoint fingerprint.
+        settings.update(provider_options=options, api_base_url=base_url.strip().rstrip('/'),
+                        max_audio_bytes=max_bytes)
+    return settings
 
 
 def _provider(
     config: dict[str, Any], settings: dict[str, Any]
-) -> GeminiProvider | ElevenLabsProvider:
+) -> GeminiProvider | ElevenLabsProvider | OpenRouterProvider:
     provider_name = settings["provider"]
-    default_env = "GEMINI_API_KEY" if provider_name == "gemini" else "ELEVENLABS_API_KEY"
+    default_env = {"gemini": "GEMINI_API_KEY", "elevenlabs": "ELEVENLABS_API_KEY",
+                   "openrouter": "OPENROUTER_API_KEY"}[provider_name]
     env_name = str(
         get_path(config, f"providers.{provider_name}.api_key_env", default_env)
     )
@@ -257,6 +286,9 @@ def _provider(
     }
     if provider_name == "gemini":
         return GeminiProvider(api_key, **common)
+    if provider_name == "openrouter":
+        return OpenRouterProvider(api_key, api_base_url=settings["api_base_url"],
+            provider_options=settings["provider_options"], max_audio_bytes=settings["max_audio_bytes"], **common)
     return ElevenLabsProvider(
         api_key,
         tag_audio_events=bool(
@@ -267,7 +299,8 @@ def _provider(
 
 
 def _validate_credentials(config: dict[str, Any], provider: str) -> None:
-    default_env = "GEMINI_API_KEY" if provider == "gemini" else "ELEVENLABS_API_KEY"
+    default_env = {"gemini": "GEMINI_API_KEY", "elevenlabs": "ELEVENLABS_API_KEY",
+                   "openrouter": "OPENROUTER_API_KEY"}[provider]
     env_name = str(get_path(config, f"providers.{provider}.api_key_env", default_env))
     if not os.environ.get(env_name, "").strip():
         raise ConfigError(
@@ -406,6 +439,7 @@ def transcribe(config: dict[str, Any], args: argparse.Namespace, settings: dict[
     metadata = {
         "provider": settings["provider"],
         "model": settings["model"],
+        "profile": config.get("active_profile"),
         "language_codes": settings["language_codes"],
         "provider_language_code": settings["provider_language_code"],
         "detected_language": (

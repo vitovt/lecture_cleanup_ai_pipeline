@@ -254,3 +254,20 @@ From the project entry point, run `./StartMe.sh profiles --scope stt`,
 `./StartMe.sh stt-api validate --profile NAME`, or
 `./StartMe.sh stt-api transcribe --profile NAME --input-file audio.mp3`.
 See [examples and precedence](../Docs/PROFILES.md#stt-profiles).
+
+### OpenRouter
+
+OpenRouter is available through the existing provider-neutral CLI:
+
+```bash
+./stt_api.sh validate --provider openrouter
+./stt_api.sh transcribe --provider openrouter --input-file lecture.mp3 --output-dir ../input/transcripts
+```
+
+Set `OPENROUTER_API_KEY` in this directory's `.env`. For repeated model changes,
+use [STT profiles](../Docs/PROFILES.md#openrouter-speech-to-text). The adapter uses
+OpenRouter's dedicated transcription endpoint with existing chunking, retries,
+checkpoints and TXT/events/raw/metadata outputs. Raw output preserves API usage.
+Word timestamps, diarization and keyterms depend on the chosen model; missing
+requested timestamps fail explicitly. Generic smart mode and speaker counts
+are unavailable. Text generation and STT use their respective `.env` files.

@@ -120,3 +120,56 @@ the selected profile. `--provider` alone bypasses the default STT profile. STT
 presets do not affect existing provider-specific workflow scripts, which select
 their provider explicitly; use the provider-neutral `stt-api` entry for profiles.
 The resulting TXT can be passed to `StartMe.sh cleanup --llm-profile NAME`.
+
+## OpenRouter speech-to-text
+
+Put `OPENROUTER_API_KEY` in `stt-api/.env`. Add a profile there independently of
+cleanup profiles:
+
+```yaml
+# stt-api/config.yaml
+default_profile: router-whisper
+profiles:
+  router-whisper:
+    provider: openrouter
+    model: openai/whisper-large-v3
+  router-plain:
+    provider: openrouter
+    model: openai/whisper-large-v3
+    transcription:
+      timestamps: {enabled: false}
+```
+
+```bash
+./StartMe.sh stt-api validate --profile router-whisper
+./StartMe.sh stt-api transcribe --profile router-whisper --input-file audio.mp3 --preflight
+./StartMe.sh stt-api transcribe --profile router-whisper --input-file audio.mp3 --output-dir input/transcripts
+./StartMe.sh cleanup --input input/transcripts/audio.txt --lang uk --llm-profile router-fast
+```
+
+This uses the dedicated `/audio/transcriptions` endpoint, not a chat model
+prompted to transcribe. Long audio uses the existing splitting, overlap,
+checkpoint/resume and timestamp formatter. Model, endpoint and provider options
+are included in checkpoint fingerprints. Response `usage` and the original
+payload are preserved in the existing `.raw.json` output; cached results reuse
+that original usage, they do not represent another paid request. Metadata
+records the selected profile.
+
+Word timestamps request `verbose_json` with word granularity. A model that
+returns text without requested timestamps fails explicitly; choose a compatible
+model or disable timestamps. Diarization and keyterms are forwarded when
+requested, but support varies by model. `smart` and `--num-speakers` are not
+supported for this adapter. A single language is sent as an ISO language hint;
+multiple languages leave detection to the model.
+
+`providers.openrouter.provider_options` maps to the STT endpoint's native
+`provider` object (data policy and provider-specific passthrough). Its schema is
+different from text `provider_routing`; Chat Completions routing fields should
+not be assumed to work here. Consult the official
+[transcription endpoint reference](https://openrouter.ai/docs/api/api-reference/stt/create-transcription).
+
+The default 900-second chunks and 25 MiB audio cap are conservative client
+settings, not an assertion of universal provider limits. Adjust
+`chunking.max_seconds` and `request.max_audio_bytes` in a profile for the chosen
+model. Files over the configured byte cap fail locally before upload. No new
+SDK dependencies or automatic account-balance requests are added.

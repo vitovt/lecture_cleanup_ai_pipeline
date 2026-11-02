@@ -107,7 +107,7 @@ delegates detailed help or execution to the corresponding project script.
 Typical flow:
   1. Choose the source: transcript, YouTube subtitles, YouTube audio, or local media.
   2. Choose a transcription provider when audio must be transcribed: Gemini,
-     Groq, ElevenLabs, or SpeechCore (deprecated).
+     Groq, ElevenLabs, OpenRouter (stt-api), or SpeechCore (deprecated).
   3. Run detailed help: $PROGRAM help MODE
   4. Run the mode:         $PROGRAM MODE [arguments]
 
@@ -231,7 +231,7 @@ Setup and maintenance
     Example: $PROGRAM setup-main
 
   setup-stt
-    Create/update stt-api/.venv for Gemini and ElevenLabs transcription.
+    Create/update stt-api/.venv for Gemini, ElevenLabs and OpenRouter transcription.
     Example: $PROGRAM setup-stt
 
   setup-groq

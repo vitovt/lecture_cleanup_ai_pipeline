@@ -495,3 +495,9 @@ Use `llm.profiles` in `config.yaml` to save provider/model presets and
 `llm.default_profile` to select the usual one. Override a single invocation with
 `--llm-profile NAME` (cleanup workflows and `add-summary`), and list presets with
 `./StartMe.sh profiles`. See [profile configuration](Docs/PROFILES.md).
+
+OpenRouter text generation supports model IDs, provider routing and native
+reasoning settings in each profile. Add `OPENROUTER_API_KEY` to the root `.env`.
+For speech-to-text, configure the key and profiles in `stt-api/` and use
+`./StartMe.sh stt-api transcribe --profile NAME --input-file audio.mp3`.
+See [OpenRouter text and STT examples](Docs/PROFILES.md).

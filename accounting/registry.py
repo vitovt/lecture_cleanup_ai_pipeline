@@ -47,3 +47,5 @@ register(AccountSpec('stt', 'gemini', 'stt-api', 'providers.gemini', 'GEMINI_API
 register(AccountSpec('stt', 'elevenlabs', 'stt-api', 'providers.elevenlabs', 'ELEVENLABS_API_KEY',
                      default_api_base_url='https://api.elevenlabs.io',
                      checker='accounting.providers.elevenlabs:check_account', subscription_quota=True))
+
+register(AccountSpec('stt', 'openrouter', 'stt-api', 'providers.openrouter', 'OPENROUTER_API_KEY'))

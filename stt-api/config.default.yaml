@@ -35,6 +35,40 @@ profiles: {}
 #       timestamps: {enabled: false}
 
 providers:
+  openrouter:
+    # Dedicated speech-to-text endpoint (not audio in a text-generation prompt).
+    # Put OPENROUTER_API_KEY in stt-api/.env; root .env is not read here.
+    # https://openrouter.ai/docs/api/api-reference/stt/create-transcription
+    model: openai/whisper-large-v3
+    api_key_env: OPENROUTER_API_KEY
+    api_base_url: null   # OPENROUTER_API_BASE_URL or https://openrouter.ai/api/v1
+    request:
+      timeout_seconds: 900
+      # Client-side byte cap before base64 encoding, not a universal API limit.
+      # Adjust this and chunk duration to your selected model/provider limits.
+      max_audio_bytes: 26214400
+    chunking:
+      max_seconds: 900
+      overlap_seconds: 5
+    # Native STT `provider` object: data policy and provider passthrough options.
+    # This is NOT the Chat Completions routing schema (order/only/fallbacks).
+    provider_options: null
+    # provider_options: {data_collection: deny}
+    # STT profile examples for stt-api/config.yaml:
+    # default_profile: router-whisper
+    # profiles:
+    #   router-whisper:
+    #     provider: openrouter
+    #     model: openai/whisper-large-v3
+    #   router-plain:
+    #     provider: openrouter
+    #     model: openai/whisper-large-v3
+    #     transcription:
+    #       timestamps: {enabled: false}
+    # For any other model, use its exact STT catalogue ID and supported options.
+    # Word timestamps/diarization/keyterms depend on the model. No generic smart
+    # mode or num-speakers option is sent; unsupported features fail explicitly.
+
   gemini:
     # Official Gemini model slug for uploaded audio transcription.
     model: gemini-3.5-transcribe
