@@ -119,11 +119,16 @@ See the commented local-server and optional reasoning examples in
 ### LLM token usage and account balance
 
 DeepSeek prints token usage for each cleanup chunk and summary request, plus
-balance before and after processing. Other LLM providers report `unsupported`.
+balance before and after processing. Other LLM providers report `unsupported`. The same balance command can query
+STT account allowance: ElevenLabs reports subscription characters as a partial
+result, rather than a monetary or Scribe-specific balance.
 
 ```bash
 ./StartMe.sh balance                      # Effective cleanup provider
 ./StartMe.sh balance --provider deepseek
+./StartMe.sh balance --scope stt --provider elevenlabs
+./StartMe.sh balance --list
+./StartMe.sh balance --all --format json
 ```
 
 See [LLM accounting](Docs/LLM_ACCOUNTING.md) for output fields, `grep`/`awk`

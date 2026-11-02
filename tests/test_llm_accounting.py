@@ -175,21 +175,24 @@ class AccountingTests(unittest.TestCase):
         self.assertEqual(record.call_args.kwargs["status"], "unsupported")
 
     def test_balance_cli_default_override_and_failure_exit_codes(self):
-        cfg = {"llm": {"provider": "deepseek"}}
-        with patch.object(balance, "load_effective_config", return_value=(cfg, True)), \
-             patch.object(balance, "create_llm_adapter", return_value=self.adapter) as create, \
-             patch.object(balance, "report_balance", return_value="ok") as report:
-            self.assertEqual(balance.main([]), 0)
-            create.assert_called_once()
-            self.assertEqual(create.call_args.kwargs["provider_override"], "deepseek")
-            report.assert_called_once_with(self.adapter, "check", emit=print)
-            create.reset_mock()
+        from accounting.models import AccountSnapshot
+        snapshot = AccountSnapshot('cleanup', 'deepseek', 'ok', 'now',
+                                   balances=(Balance('USD', Decimal('1.25'), Decimal('0'), Decimal('1.25')),))
+        with patch.object(balance, "default_provider", return_value="deepseek"), \
+             patch.object(balance, "check_account", return_value=snapshot) as check:
+            with contextlib.redirect_stdout(io.StringIO()) as output:
+                self.assertEqual(balance.main([]), 0)
+            check.assert_called_once_with(balance.ROOT, "cleanup", "deepseek")
+            self.assertEqual(fields(output.getvalue())["total"], "1.25")
+            check.reset_mock()
+            check.return_value = AccountSnapshot('cleanup', 'gemini', 'unsupported', 'now')
             with contextlib.redirect_stdout(io.StringIO()) as output:
                 self.assertEqual(balance.main(["--provider", "gemini"]), 0)
+            check.assert_called_once_with(balance.ROOT, "cleanup", "gemini")
             self.assertEqual(fields(output.getvalue())["status"], "unsupported")
-            create.assert_not_called()
-            report.return_value = "error"
-            self.assertEqual(balance.main([]), 1)
+            check.return_value = AccountSnapshot('cleanup', 'deepseek', 'error', 'now')
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(balance.main([]), 1)
 
     def test_launcher_help_and_strict_options_work_outside_repo(self):
         for args, expected in ((["balance", "--help"], 0),

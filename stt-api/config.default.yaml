@@ -153,3 +153,10 @@ logging:
   # quiet | error | info | debug | trace. Debug excludes transcript payloads;
   # trace includes request settings and responses, never credentials/audio bytes.
   level: info
+
+# Shared account checker: ./StartMe.sh balance --scope stt --provider elevenlabs
+# Uses this directory's .env and providers.<name>.api_key_env; no STT SDK needed.
+# ElevenLabs reports subscription character allowance, not a USD/Scribe balance.
+# Optional endpoint override: providers.elevenlabs.api_base_url (origin, without /v1).
+accounting:
+  timeout_seconds: 10   # >0 and <=60; independent of transcription.request timeouts

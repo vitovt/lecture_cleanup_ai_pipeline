@@ -28,10 +28,16 @@ Use `balance` to query the effective cleanup LLM provider, or select one explici
 ```bash
 ./StartMe.sh balance
 ./StartMe.sh balance --provider deepseek
+./StartMe.sh balance --scope stt --provider elevenlabs
+./StartMe.sh balance --list
+./StartMe.sh balance --all --format json
 ./StartMe.sh help balance
 ```
 
-DeepSeek is supported; other cleanup LLM providers report `unsupported`.
+DeepSeek exposes cleanup currency balances; ElevenLabs exposes STT subscription
+allowance as a partial account result. Other registered providers report
+`unsupported`. STT Groq credentials resolve from `groq-api/`; ElevenLabs and
+Gemini resolve from `stt-api/`.
 See [LLM_ACCOUNTING.md](LLM_ACCOUNTING.md) for the output format and filtering examples.
 
 Use `add-summary` to add or regenerate short/long summaries of existing Markdown:

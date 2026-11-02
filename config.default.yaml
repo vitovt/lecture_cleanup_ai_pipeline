@@ -396,3 +396,7 @@ logging:
 # Soon it will be deprecated option for testing multiline pipeline more preciese.
 multitrack:
   stop_after_merge: false
+
+# Read-only account checks (StartMe.sh balance). Separate from generation timeout.
+accounting:
+  timeout_seconds: 10   # >0 and <=60; checks never generate text or transcribe audio

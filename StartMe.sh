@@ -243,9 +243,10 @@ Setup and maintenance
     Example: $PROGRAM update-main --check
 
 Utilities
-  balance [--provider PROVIDER]
-    Show the configured cleanup LLM balance (DeepSeek supported).
-    Example: $PROGRAM balance --provider deepseek
+  balance [--scope cleanup|stt] [--provider PROVIDER]
+    Check account money/quotas: DeepSeek (cleanup), ElevenLabs (STT).
+    Use --list for capabilities, --all for configured accounts, --format json for JSON.
+    Example: $PROGRAM balance --scope stt --provider elevenlabs
 
   add-summary
     Add or regenerate short/long summaries from an existing Markdown source.

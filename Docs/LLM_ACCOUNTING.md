@@ -3,7 +3,8 @@
 DeepSeek reports token usage after each cleanup chunk request and summary request,
 plus its account balance before and after the LLM processing session. The same
 reporting applies to `StartMe.sh add-summary`. Other cleanup LLM adapters expose
-explicit `status=unsupported` stubs. Audio transcription providers are not included.
+explicit `status=unsupported` stubs. Manual account checks also support STT subscription quotas through the shared
+`accounting/` service; automatic STT checks are not enabled.
 No accounting files are written, and this feature does not calculate money spent.
 
 Check the effective cleanup provider or select one explicitly:
@@ -14,11 +15,95 @@ Check the effective cleanup provider or select one explicitly:
 ./StartMe.sh help balance
 ```
 
-The command uses the same merged configuration and root `.env` as cleanup,
+The default command uses the same merged configuration and root `.env` as cleanup,
 regardless of the current working directory. It makes no generation request.
-Exit codes: `0` for a successful query or an unsupported provider, `1` for a
-configuration/authentication/network/response failure, `2` for invalid CLI options.
-Unsupported providers require no credentials or optional SDKs for this command.
+The CLI also checks STT accounts through the same entry point:
+
+```bash
+./StartMe.sh balance --scope stt                     # stt-api's configured provider
+./StartMe.sh balance --scope stt --provider elevenlabs
+./StartMe.sh balance --scope stt --provider groq      # explicit unsupported result
+./StartMe.sh balance --list                          # capabilities/configuration; no HTTP
+./StartMe.sh balance --all                           # all registered accounts in both scopes
+./StartMe.sh balance --scope stt --all --format json  # only STT accounts
+```
+
+For a single check, omitted `--scope` means `cleanup`. The cleanup default comes
+from root `llm.provider`; the STT default comes from `stt-api`'s `provider`.
+`--provider` selects a provider within that scope. Invalid provider/scope pairs
+are CLI errors. Without `--scope`, `--all` and `--list` cover both scopes.
+`--provider` cannot be combined with `--all` or `--list`.
+
+| Scope/provider | Config and credentials | Available checks |
+|---|---|---|
+| cleanup/deepseek | root config and `.env` | Currency balances |
+| cleanup/other | root config and `.env` | Explicit unsupported result |
+| stt/elevenlabs | `stt-api/config…` and `stt-api/.env` | Subscription character allowance |
+| stt/gemini | `stt-api/config…` and `stt-api/.env` | Unsupported |
+| stt/groq | `groq-api/config…` and `groq-api/.env` | Unsupported |
+| stt/speechcore | Deprecated integration | Unsupported |
+
+Credential resolution is isolated per account and never modifies `os.environ`.
+Exported process variables override the selected `.env`; keys from a different
+scope's `.env` are never used as fallback. STT's `providers.<name>.api_key_env`
+and Groq's `api.api_key_env` overrides are respected. Scope denotes the source of
+credentials, not a distinct billing account. Two configured keys may belong to
+the same account; their balances are never summed or automatically deduplicated.
+An `accounting.timeout_seconds` setting in the selected config controls account
+requests (default 10 seconds, greater than 0 and at most 60). No STT SDK is needed;
+`balance.sh` uses the main environment. Checks perform GETs only, never uploads,
+generation, transcription, or rate-limit probing.
+
+### ElevenLabs
+
+The adapter reads `ELEVENLABS_API_KEY` from `stt-api/.env` unless `api_key_env`
+selects another variable. It calls
+[`GET /v1/user/subscription`](https://elevenlabs.io/docs/api-reference/user/subscription/get)
+with the `xi-api-key` header. The origin defaults to `https://api.elevenlabs.io`;
+`providers.elevenlabs.api_base_url` overrides `ELEVENLABS_API_BASE_URL`, which
+otherwise overrides that default. Set an origin without `/v1`.
+
+The endpoint's `character_count` and `character_limit` become a
+`subscription_characters` quota with `unit=characters`. Remaining allowance is
+`max(limit-used, 0)`; overage is separately `max(used-limit, 0)`. Reset time is the
+reported `next_character_count_reset_unix`, converted to UTC, or unknown when
+absent. Tier and subscription status are included when reported.
+
+This is account subscription allowance, not a dedicated Scribe quota or a money
+balance. The result is `partial` with `reason=monetary_balance_unavailable`;
+`balances` remains empty and `available` is unknown. Invoice amounts, overage
+costs and allowance extensions are not reinterpreted as available money. No
+conversion from characters to USD or remaining audio hours is attempted.
+
+### Output and exit codes
+
+`--format text` (default) emits key=value records. Cleanup retains `LLM_BALANCE`
+and its existing currency/amount fields; STT uses `ACCOUNT_BALANCE` followed by
+`ACCOUNT_QUOTA` records. New CLI records include scope and UTC check time.
+`--list` emits `ACCOUNT_PROVIDER` with configuration state and capabilities.
+Its `configured` value means a credential exists, not that it was validated.
+Groq's `rate_limits=response_headers` describes the provider's mechanism; this
+feature does not collect or cache rate-limit headers.
+
+`--format json` always returns an array, including single checks. Monetary
+amounts are decimal strings to preserve precision; counts are integers;
+unknown optional values are JSON null, not fabricated zeros. Missing balances
+and quotas are empty arrays. List mode returns capability objects instead.
+
+Check statuses: `ok`, `partial`, `unsupported`, `not_configured`, `error`.
+Error reasons are stable safe codes, such as `authentication_failed`,
+`permission_denied`, `rate_limited`, `connection_failed`, `http_error`,
+`invalid_response`, `invalid_configuration`, `component_not_installed`, and
+`missing_credentials`.
+Bodies, key values and raw exception messages are never printed.
+
+Exit codes: `0` for successful/partial/unsupported results; `1` for errors or a
+single requested account missing credentials; `2` for invalid CLI options.
+`--all` includes unconfigured entries but does not fail merely because a key is
+missing or an optional component is not installed. It continues after provider errors and exits `1` if any actual check
+or configuration fails. Unsupported single checks require neither credentials
+nor optional SDKs. `--list` makes no HTTP requests and exits `1` on configuration
+errors, but not on missing credentials.
 
 Accounting records contain whitespace-separated `key=value` fields. Pipeline
 records have the usual `[INFO]` prefix and follow the selected log level;
@@ -86,3 +171,22 @@ valid usage. Balances in different currencies must be kept separate.
 Adapter extension points are `supports_usage`, `_record_response()` and
 `last_usage: TokenUsage`, plus `supports_balance` and
 `get_balance() -> BalanceSnapshot`. Defaults in `LLMAdapter` are unsupported.
+
+## Adding an account provider
+
+1. Add a small `accounting/providers/<name>.py` checker accepting
+   `AccountSettings` and returning normalized `AccountSnapshot` field overrides.
+   It owns only the provider GET and response parsing. Use `AccountError` safe
+   reason codes and `accounting.http.get_json` with the configured timeout.
+2. Register its scope, provider name, configuration directory/section, key
+   variable, capabilities and checker import path in `accounting/registry.py`.
+   Reuse the same checker for multiple credential sources when applicable.
+3. Add offline response/credential-isolation tests. No CLI provider branch or
+   generation/transcription SDK is required.
+
+The shared DeepSeek fetcher is used both by this service and
+`DeepSeekAdapter.get_balance()`, preserving existing pipeline before/after
+records. The legacy `Balance` and `BalanceSnapshot` imports from
+`aiadapters.accounting` remain compatibility exports. Usage-token reporting is
+unchanged. Future automatic STT monitoring can call the same account service;
+no separate STT balance command is necessary.

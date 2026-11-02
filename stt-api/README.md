@@ -227,3 +227,18 @@ timings/counts and runtime stack traces. Full response payloads are TRACE-only.
 With `--metadata-output`, metadata is saved without an extra console JSON dump.
 Without it, stdout JSON remains the standalone result. Explicit validation and
 preflight output are machine-readable results, independent of diagnostic levels.
+
+## Account allowance checks
+
+Use the main entry point without uploading or transcribing audio:
+
+```bash
+../StartMe.sh balance --scope stt --provider elevenlabs
+../StartMe.sh balance --scope stt --list
+```
+
+The root account service reads this directory's config and `.env`, including
+`providers.elevenlabs.api_key_env`. ElevenLabs reports subscription character
+allowance and reset time, not a USD or Scribe-specific remaining balance;
+`status=partial` makes that distinction explicit. The command needs the main
+virtualenv, not the ElevenLabs SDK. See [accounting documentation](../Docs/LLM_ACCOUNTING.md).
