@@ -1,11 +1,41 @@
 # LLM token usage and account balance
 
-DeepSeek reports token usage after each cleanup chunk request and summary request,
-plus its account balance before and after the LLM processing session. The same
-reporting applies to `StartMe.sh add-summary`. Other cleanup LLM adapters expose
-explicit `status=unsupported` stubs. Manual account checks also support STT subscription quotas through the shared
-`accounting/` service; automatic STT checks are not enabled.
-No accounting files are written, and this feature does not calculate money spent.
+OpenAI and DeepSeek report token usage after each cleanup chunk request and
+summary request, including each retry. DeepSeek additionally reports its account
+balance before and after the LLM processing session. The same reporting applies
+to `StartMe.sh add-summary`. Other cleanup LLM adapters expose explicit
+`status=unsupported` usage stubs. Manual account checks also support STT
+subscription quotas through the shared `accounting/` service; automatic STT
+checks are not enabled. No accounting files are written, and this feature does
+not calculate money spent.
+
+### OpenAI per-request tokens
+
+The existing OpenAI adapter reads `usage` from each Responses API response and
+emits `LLM_USAGE` through the existing cleanup/summary reporting path. It uses
+the same `OPENAI_API_KEY` as generation. There are no additional API calls,
+Admin keys, account queries, prices, or currency estimates.
+
+- `input_tokens`, `output_tokens`, `total_tokens`: provider-reported core counts.
+- `cache_hit_tokens`: `usage.input_tokens_details.cached_tokens`, when reported.
+- `cache_miss_tokens`: input tokens minus cached input tokens, when known.
+- `reasoning_tokens`: `usage.output_tokens_details.reasoning_tokens`, when reported.
+
+Cached tokens are included in input tokens, and reasoning tokens are included in
+output tokens; neither is added to the total again. Missing or invalid optional
+details are `unknown`; missing or inconsistent core counts make the request's
+usage `status=unknown`. Successful zero counts remain zero. Every new attempt
+clears the previous response's counters, including direct adapter calls.
+See the official [Responses API usage schema](https://developers.openai.com/api/reference/resources/responses/methods/retrieve).
+
+For example, a chunk can emit:
+
+```text
+LLM_USAGE provider=openai model=your-model stage=cleanup label=chunk%201%2F2 status=ok outcome=ok part=1 parts=2 attempt=1 attempts=2 summary=none input_tokens=100 output_tokens=30 total_tokens=130 cache_hit_tokens=40 cache_miss_tokens=60 reasoning_tokens=20
+```
+
+`balance --provider openai` remains `unsupported`: per-request token usage is
+reported during processing, not retrieved from the account balance command.
 
 Check the effective cleanup provider or select one explicitly:
 

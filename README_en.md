@@ -118,10 +118,13 @@ See the commented local-server and optional reasoning examples in
 
 ### LLM token usage and account balance
 
-DeepSeek prints token usage for each cleanup chunk and summary request, plus
-balance before and after processing. Other LLM providers report `unsupported`. The same balance command can query
-STT account allowance: ElevenLabs reports subscription characters as a partial
-result, rather than a monetary or Scribe-specific balance.
+OpenAI and DeepSeek print token usage for each cleanup chunk and summary request,
+including retries. OpenAI reads the response's `usage` using the normal API key;
+no Admin key or extra request is needed. DeepSeek also reports balance before
+and after processing. OpenAI account balance remains `unsupported`.
+The same balance command can query STT account allowance: ElevenLabs reports
+subscription characters as a partial result, rather than a monetary or
+Scribe-specific balance.
 
 ```bash
 ./StartMe.sh balance                      # Effective cleanup provider
