@@ -343,6 +343,39 @@ def rebalance_two_chunk_small_tail(
     }
     return rebalanced, info
 
+def align_chunk_sentence_boundaries(chunks: List[Dict], chunk_chars: int,
+                                    overlap_chars: int = 500,
+                                    search_chars: int = 1000) -> List[Dict]:
+    """Move a short unfinished tail to the next chunk when it fits.
+
+    Only move whole existing units, preserving text, order and source indices.
+    Sentence punctuation is a heuristic: if absent nearby, keep the old boundary.
+    Rebuild overlap separately so it cannot duplicate newly moved content.
+    """
+    groups = [_new_units(chunk) for chunk in chunks]
+    sentence_end = re.compile(r'[.!?…]["\'»”’)*_]*$')
+    for index in range(len(groups) - 1):
+        left, right = groups[index], groups[index + 1]
+        if not left or not right or sentence_end.search(left[-1]["text"].rstrip()):
+            continue
+        for boundary in range(len(left) - 1, 0, -1):
+            tail = left[boundary:]
+            if _units_text_len(tail) > search_chars:
+                break
+            if not sentence_end.search(left[boundary - 1]["text"].rstrip()):
+                continue
+            if _units_text_len(tail + right) <= chunk_chars:
+                groups[index] = left[:boundary]
+                groups[index + 1] = tail + right
+            break
+    result = []
+    for index, units in enumerate(groups):
+        room = max(0, chunk_chars - _units_text_len(units) - 1)
+        overlap = _compute_overlap_units(groups[index - 1], min(overlap_chars, room)) if index else []
+        result.append(_make_chunk(units, overlap))
+    return result
+
+
 def chunk_text_line_preserving(lines: List[str], chunk_chars: int = 6500, overlap_chars: int = 500) -> List[Dict]:
     """
     Build chunks preserving whole lines. Never split inside a line unless the line

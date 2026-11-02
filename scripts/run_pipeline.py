@@ -37,6 +37,7 @@ from scripts.utils import (
     similarity_ratio,
     parse_timestamped_txt_lines,
     chunk_text_line_preserving,
+    align_chunk_sentence_boundaries,
     dedup_overlapping_boundary,
     strip_edit_comments,
     extract_merged_terms_map,
@@ -767,6 +768,8 @@ def main() -> int:
                 "rebalanced to "
                 f"{rebalance_info['new_first_chars']}/{rebalance_info['new_second_chars']} chars."
             )
+
+    chunks = align_chunk_sentence_boundaries(chunks, chunk_chars, overlap_chars)
 
     # For timestamped TXT, set chunk 'start' based on first new line's timestamp
     if fmt == "txt" and has_line_timestamps:
