@@ -279,3 +279,11 @@ for returned metrics (tokens and reported cost/currency), followed by
 no token prices are maintained. Retries are separate attempts, while reused
 checkpoints do not emit new usage or add charges. Quiet/error logging suppresses
 these records. See [accounting contracts](../Docs/LLM_ACCOUNTING.md).
+
+
+OpenRouter account balance is available through the same root account service:
+`./StartMe.sh balance --scope stt --provider openrouter`. Set
+`OPENROUTER_MANAGEMENT_API_KEY` in `stt-api/.env`. The management credential is
+separate from `OPENROUTER_API_KEY` / `providers.openrouter.api_key_env` and uses
+the same shared checker as cleanup. The reported USD balance is remaining
+account credits; `--list`, `--all`, and `--format json` also support it.

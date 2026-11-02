@@ -1,5 +1,5 @@
 """Provider-reported account and request accounting values."""
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Optional, Tuple
@@ -9,8 +9,14 @@ from typing import Optional, Tuple
 class Balance:
     currency: str
     total: Decimal
-    granted: Decimal
-    topped_up: Decimal
+    granted: Optional[Decimal] = None
+    topped_up: Optional[Decimal] = None
+
+
+def balance_fields(balance):
+    """Only emit balance components actually supplied by the provider."""
+    return {key: format(value, 'f') if isinstance(value, Decimal) else value
+            for key, value in asdict(balance).items() if value is not None}
 
 
 @dataclass(frozen=True)

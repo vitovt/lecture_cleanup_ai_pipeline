@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from accounting.models import AccountSnapshot, utc_now
+from accounting.models import AccountSnapshot, balance_fields, utc_now
 from accounting.registry import REGISTRY
 from accounting.service import check_account, default_provider, inspect_account
 from scripts.llm_accounting import record
@@ -32,9 +32,7 @@ def emit_snapshot(snapshot):
         fields['subscription_status'] = snapshot.subscription_status
     if snapshot.balances:
         for balance in snapshot.balances:
-            record(event, emit=print, **fields, currency=balance.currency,
-                   total=format(balance.total, 'f'), granted=format(balance.granted, 'f'),
-                   topped_up=format(balance.topped_up, 'f'))
+            record(event, emit=print, **fields, **balance_fields(balance))
     else:
         record(event, emit=print, **fields)
     for quota in snapshot.quotas:

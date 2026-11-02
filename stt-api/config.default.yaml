@@ -41,6 +41,9 @@ providers:
     # https://openrouter.ai/docs/api/api-reference/stt/create-transcription
     model: openai/whisper-large-v3
     api_key_env: OPENROUTER_API_KEY
+    # Manual balances use the management key in stt-api/.env, not api_key_env.
+    # ./StartMe.sh balance --scope stt --provider openrouter
+    management_api_key_env: OPENROUTER_MANAGEMENT_API_KEY
     api_base_url: null   # OPENROUTER_API_BASE_URL or https://openrouter.ai/api/v1
     request:
       timeout_seconds: 900
@@ -211,6 +214,7 @@ logging:
   level: info
 
 # Shared account checker: ./StartMe.sh balance --scope stt --provider elevenlabs
+# OpenRouter: --scope stt --provider openrouter; reads OPENROUTER_MANAGEMENT_API_KEY.
 # Uses this directory's .env and providers.<name>.api_key_env; no STT SDK needed.
 # ElevenLabs reports subscription character allowance, not a USD/Scribe balance.
 # Optional endpoint override: providers.elevenlabs.api_base_url (origin, without /v1).

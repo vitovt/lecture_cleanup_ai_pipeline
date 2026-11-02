@@ -131,10 +131,15 @@ Scribe-specific balance.
 ```bash
 ./StartMe.sh balance                      # Effective cleanup provider
 ./StartMe.sh balance --provider deepseek
+./StartMe.sh balance --provider openrouter
+./StartMe.sh balance --scope stt --provider openrouter
 ./StartMe.sh balance --scope stt --provider elevenlabs
 ./StartMe.sh balance --list
 ./StartMe.sh balance --all --format json
 ```
+
+OpenRouter balances use `OPENROUTER_MANAGEMENT_API_KEY` in the selected scope's
+`.env` (root or `stt-api/`), independently of the ordinary generation key.
 
 See [LLM accounting](Docs/LLM_ACCOUNTING.md) for output fields, `grep`/`awk`
 examples, limitations, and adapter extension points.

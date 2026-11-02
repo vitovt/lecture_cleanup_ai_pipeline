@@ -252,7 +252,7 @@ Utilities
     Example: $PROGRAM profiles
 
   balance [--scope cleanup|stt] [--provider PROVIDER]
-    Check account money/quotas: DeepSeek (cleanup), ElevenLabs (STT).
+    Check account money/quotas: DeepSeek, OpenRouter, ElevenLabs.
     Use --list for capabilities, --all for configured accounts, --format json for JSON.
     Example: $PROGRAM balance --scope stt --provider elevenlabs
 

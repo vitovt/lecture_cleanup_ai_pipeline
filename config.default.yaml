@@ -91,6 +91,9 @@ llm:
       attempts: 3        # 1 = no retry, 2..N = number of attempts per request
       pause_seconds: 60.0 # extra pause added to provider-suggested retry delay; if none, used alone
   openrouter:
+    # Manual balance checks use a separate key from this scope's .env.
+    # ./StartMe.sh balance --provider openrouter
+    management_api_key_env: OPENROUTER_MANAGEMENT_API_KEY
     # Separate OpenRouter account/key; put OPENROUTER_API_KEY in the root .env.
     # Exact model IDs: https://openrouter.ai/models (vendor/model, not a provider).
     # Uses the existing Chat Completions transport; usage feeds LLM_USAGE logs.
@@ -454,5 +457,6 @@ multitrack:
   stop_after_merge: false
 
 # Read-only account checks (StartMe.sh balance). Separate from generation timeout.
+# OpenRouter uses OPENROUTER_MANAGEMENT_API_KEY in this scope's .env.
 accounting:
   timeout_seconds: 10   # >0 and <=60; checks never generate text or transcribe audio

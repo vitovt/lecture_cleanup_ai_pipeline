@@ -15,6 +15,7 @@ class AccountSpec:
     money_balance: bool = False
     subscription_quota: bool = False
     rate_limits: str = 'unsupported'
+    key_env_option: str = 'api_key_env'
 
 
 REGISTRY = {}
@@ -32,7 +33,7 @@ for provider, key in (
     ('gemini', 'GOOGLE_API_KEY'), ('groq', 'GROQ_API_KEY'),
     ('kie', 'KIE_API_KEY'), ('evolink', 'EVOLINK_API_KEY'),
     ('openai_compatible', 'OPENAI_COMPATIBLE_API_KEY'),
-    ('openrouter', 'OPENROUTER_API_KEY'), ('dummy', None),
+    ('dummy', None),
 ):
     register(AccountSpec('cleanup', provider, '.', f'llm.{provider}', key,
                          default_api_base_url='https://api.deepseek.com' if provider == 'deepseek' else '',
@@ -48,4 +49,11 @@ register(AccountSpec('stt', 'elevenlabs', 'stt-api', 'providers.elevenlabs', 'EL
                      default_api_base_url='https://api.elevenlabs.io',
                      checker='accounting.providers.elevenlabs:check_account', subscription_quota=True))
 
-register(AccountSpec('stt', 'openrouter', 'stt-api', 'providers.openrouter', 'OPENROUTER_API_KEY'))
+for scope, directory, section in (
+    ('cleanup', '.', 'llm.openrouter'),
+    ('stt', 'stt-api', 'providers.openrouter'),
+):
+    register(AccountSpec(scope, 'openrouter', directory, section,
+        'OPENROUTER_MANAGEMENT_API_KEY', default_api_base_url='https://openrouter.ai/api/v1',
+        checker='accounting.providers.openrouter:check_account', money_balance=True,
+        key_env_option='management_api_key_env'))

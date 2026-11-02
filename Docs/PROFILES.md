@@ -80,9 +80,10 @@ and [model catalogue](https://openrouter.ai/models).
 The existing chunking, retries, summaries and `LLM_USAGE` reporting apply.
 Input/output/total, optional cached/reasoning tokens and reported USD charges
 come from each response;
-no separate usage requests or estimated prices are introduced. `balance` lists
-OpenRouter as unsupported for account snapshots; this integration adds text
-requests and per-request usage only.
+no separate usage requests or estimated prices are introduced. Manual account
+balances use `StartMe.sh balance --provider openrouter` with a separate
+`OPENROUTER_MANAGEMENT_API_KEY` in the root `.env`; see
+[account balance configuration](LLM_ACCOUNTING.md#openrouter).
 
 ## STT profiles
 

@@ -95,7 +95,9 @@ are CLI errors. Without `--scope`, `--all` and `--list` cover both scopes.
 | Scope/provider | Config and credentials | Available checks |
 |---|---|---|
 | cleanup/deepseek | root config and `.env` | Currency balances |
+| cleanup/openrouter | root config and `.env`, management key | Remaining USD credits |
 | cleanup/other | root config and `.env` | Explicit unsupported result |
+| stt/openrouter | `stt-api/config…` and `stt-api/.env`, management key | Remaining USD credits |
 | stt/elevenlabs | `stt-api/config…` and `stt-api/.env` | Subscription character allowance |
 | stt/gemini | `stt-api/config…` and `stt-api/.env` | Unsupported |
 | stt/groq | `groq-api/config…` and `groq-api/.env` | Unsupported |
@@ -111,6 +113,38 @@ An `accounting.timeout_seconds` setting in the selected config controls account
 requests (default 10 seconds, greater than 0 and at most 60). No STT SDK is needed;
 `balance.sh` uses the main environment. Checks perform GETs only, never uploads,
 generation, transcription, or rate-limit probing.
+
+### OpenRouter
+
+Both scopes reuse one checker, `accounting/providers/openrouter.py`:
+
+```bash
+./StartMe.sh balance --provider openrouter
+./StartMe.sh balance --scope stt --provider openrouter
+```
+
+Set `OPENROUTER_MANAGEMENT_API_KEY` in the corresponding scope's `.env`.
+Cleanup reads the root `.env`; STT reads `stt-api/.env`. A process-exported
+management variable takes precedence. The ordinary `OPENROUTER_API_KEY` and
+STT's generation `api_key_env` are never used as fallback. Optional custom
+management variable names are configured through
+`llm.openrouter.management_api_key_env` or
+`providers.openrouter.management_api_key_env`, respectively.
+
+The checker performs one authenticated
+[`GET /api/v1/credits`](https://openrouter.ai/docs/api/api-reference/credits/get-remaining-credits)
+and returns `total_credits - total_usage` as the remaining USD balance.
+The configured `api_base_url`, then `OPENROUTER_API_BASE_URL`, override the
+default `https://openrouter.ai/api/v1`; the checker appends `/credits`.
+Amounts are parsed as `Decimal`. A zero or negative remaining balance is
+preserved and sets `available=false`. OpenRouter does not provide remaining
+`granted`/`topped_up` components: text omits them; JSON leaves them null.
+
+Both registrations support `--list`, `--all`, `--format json`, existing timeouts
+and safe account error codes. They describe balances for their credential
+sources; two scopes may use the same account and must not be summed. No new
+command, alias, SDK, automatic balance request or per-request usage change is
+introduced. Generation and transcription keep using their ordinary API keys.
 
 ### ElevenLabs
 
@@ -191,7 +225,7 @@ LLM_BALANCE provider=deepseek phase=check status=ok currency=USD total=8.123456 
 - `LLM_BALANCE`: `phase=before|after|check`, `status=ok|error`; explicit account
   queries may also return `unsupported`.
   Successful queries emit one record per currency with exact decimal amounts
-  (`total`, `granted`, `topped_up`) and `available=true|false`. Failed queries
+  (`total`, plus `granted`/`topped_up` when provided) and `available=true|false`. Failed queries
   emit a `reason` code and omit amounts. Monitoring failures do not stop cleanup;
   the final balance is attempted even if processing raises an error or is
   interrupted normally. Forced process termination cannot guarantee final output.

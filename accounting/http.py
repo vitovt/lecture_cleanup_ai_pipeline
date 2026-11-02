@@ -1,5 +1,6 @@
 """Small read-only JSON transport; errors never include credentials or bodies."""
 import json
+from decimal import Decimal
 import math
 from urllib import error as urllib_error, request as urllib_request
 
@@ -36,7 +37,7 @@ def get_json(url, headers, timeout=10):
     except Exception:
         raise AccountError('connection_failed') from None
     try:
-        result = json.loads(data)
+        result = json.loads(data, parse_float=Decimal)
         if not isinstance(result, dict):
             raise ValueError
         return result

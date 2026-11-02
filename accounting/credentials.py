@@ -48,7 +48,7 @@ def resolve_settings(root, spec):
     cfg, _ = load_effective_config(directory)
     options = section(cfg, spec.config_section)
     env = read_environment(directory / '.env')
-    key_name = options.get('api_key_env', spec.key_env)
+    key_name = options.get(spec.key_env_option, spec.key_env)
     if not isinstance(key_name, str) or not key_name:
         raise AccountError('invalid_configuration')
     key = env.get(key_name, '').strip()

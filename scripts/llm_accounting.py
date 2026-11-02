@@ -3,6 +3,7 @@
 from contextlib import contextmanager
 import logging
 
+from accounting.models import balance_fields
 from accounting.usage import format_record, report_usage, usage_session
 from scripts.logging_helper import log_info
 
@@ -24,8 +25,7 @@ def report_balance(adapter, phase, *, emit=log_info):
         snapshot = adapter.get_balance()
         for balance in snapshot.balances:
             record("LLM_BALANCE", emit=emit, provider=provider, phase=phase, status="ok",
-                   currency=balance.currency, total=format(balance.total, "f"),
-                   granted=format(balance.granted, "f"), topped_up=format(balance.topped_up, "f"),
+                   **balance_fields(balance),
                    available=str(snapshot.available).lower())
         return "ok"
     except Exception:
