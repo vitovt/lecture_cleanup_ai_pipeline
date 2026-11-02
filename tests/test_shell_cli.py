@@ -43,6 +43,7 @@ FORWARDED_CLEANUP_OPTIONS = {
     "--txt-chunk-chars",
     "--txt-overlap-chars",
     "--llm-provider",
+    "--llm-profile",
     "--request-delay",
     "--retry-attempts",
     "--short-summary",

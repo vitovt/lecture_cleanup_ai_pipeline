@@ -11,6 +11,25 @@ language: ru            # two-letter ISO-639-1 code; e.g. ru, uk, en, de, pl, es
 
 # LLM settings (provider-aware). Configure provider and per-provider settings here.
 llm:
+  # Optional named presets, merged over llm.<provider> after both YAML files.
+  # CLI --llm-profile NAME selects one for this run; --llm-provider bypasses the
+  # default profile. An explicit profile + a conflicting provider is an error.
+  # CLI generation overrides (retry count/delay, add-summary --model) win last.
+  # No profile inheritance/chains. Lists replace; mappings merge recursively.
+  # See Docs/PROFILES.md; list your presets with ./StartMe.sh profiles.
+  default_profile: null   # null preserves llm.provider and existing behavior
+  profiles: {}
+  # Example local config.yaml:
+  # llm:
+  #   default_profile: quick
+  #   profiles:
+  #     quick:
+  #       provider: groq
+  #       model: openai/gpt-oss-120b
+  #       reasoning_effort: low
+  #     offline:
+  #       provider: dummy
+  #       model: dummy
   dummy: {model: dummy}
   provider: gemini      # openai | gemini | kie | evolink | groq | deepseek | openai_compatible | dummy | ...
   # Kie.ai usage example:

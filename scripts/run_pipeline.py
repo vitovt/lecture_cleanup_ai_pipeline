@@ -336,7 +336,8 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Console verbosity; overrides config logging.level",
     )
-    ap.add_argument("--llm-provider", default=None, help="Override LLM provider: openai|gemini|kie|evolink|groq|deepseek|openai_compatible|dummy|...")
+    ap.add_argument("--llm-provider", default=None, help="Override LLM provider (bypasses default profile), including openrouter")
+    ap.add_argument("--llm-profile", default=None, help="Select llm.profiles.NAME for this run; list with StartMe.sh profiles")
     ap.add_argument("--request-delay", type=float, default=None, help="Delay in seconds between LLM requests (0 = no delay)")
     ap.add_argument("--retry-attempts", type=int, default=None, help="Retry failed LLM requests up to N times (1 = no retry)")
     short_summary_group = ap.add_mutually_exclusive_group()
@@ -516,7 +517,8 @@ def main() -> int:
 
     base = Path(__file__).parent.parent
     try:
-        cfg, has_local_cfg = load_effective_config(base)
+        cfg, has_local_cfg = load_effective_config(base, llm_profile=args.llm_profile,
+                                                  provider_override=args.llm_provider)
     except Exception as exc:
         log_error(f"Failed to load config.default.yaml: {exc}")
         sys.exit(2)
@@ -534,6 +536,8 @@ def main() -> int:
     debug = (level in ("debug", "trace"))
     trace = (level == "trace")
     set_log_level(level)
+    if cfg["llm"].get("active_profile"):
+        log_info(f"LLM profile: {cfg['llm']['active_profile']}")
     if debug:
         log_debug(f"Debug mode: {level}")
 

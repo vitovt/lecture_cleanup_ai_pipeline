@@ -488,3 +488,10 @@ Typical workflows:
 This project is provided under the **MIT [LICENSE](LICENSE)** and distributed **WITHOUT ANY WARRANTY OF ANY KIND**.
 
 Shared output destinations and artifact ownership: [Docs/ARTIFACTS.md](Docs/ARTIFACTS.md).
+
+### Model profiles
+
+Use `llm.profiles` in `config.yaml` to save provider/model presets and
+`llm.default_profile` to select the usual one. Override a single invocation with
+`--llm-profile NAME` (cleanup workflows and `add-summary`), and list presets with
+`./StartMe.sh profiles`. See [profile configuration](Docs/PROFILES.md).

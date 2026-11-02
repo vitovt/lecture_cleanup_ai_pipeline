@@ -70,6 +70,7 @@ def parser():
     inspection.add_argument("--diff", action="store_true", help="generate summaries and print diffs without writing or backing up files")
     result.add_argument("--config", type=Path, help="use this local YAML override instead of the project's config.yaml")
     result.add_argument("--llm-provider", help="override LLM provider")
+    result.add_argument("--llm-profile", help="select llm.profiles.NAME for this run")
     result.add_argument("--model", help="override the selected provider's model")
     result.add_argument("--request-delay", type=float, help="delay before each LLM request in seconds")
     result.add_argument("--retry-attempts", type=int, help="total attempts per request, including validation failures")
@@ -83,7 +84,8 @@ def parser():
 def run(args):
     if args.config is not None and not args.config.is_file():
         raise SummaryError("invalid_config", f"Config file does not exist: {args.config}")
-    cfg, _ = load_effective_config(PROJECT_ROOT, local_name=str(args.config.resolve()) if args.config else "config.yaml")
+    cfg, _ = load_effective_config(PROJECT_ROOT, local_name=str(args.config.resolve()) if args.config else "config.yaml",
+                                   llm_profile=args.llm_profile, provider_override=args.llm_provider)
     cfg, policy = regeneration_config(cfg, args)
     level = args.log_level or ("trace" if args.trace else "debug" if args.debug else cfg.get("logging", {}).get("level", "info"))
     set_log_level(level)

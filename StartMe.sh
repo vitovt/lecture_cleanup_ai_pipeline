@@ -243,6 +243,10 @@ Setup and maintenance
     Example: $PROGRAM update-main --check
 
 Utilities
+  profiles [--scope cleanup|stt]
+    List model profiles and the configured default without API requests.
+    Example: $PROGRAM profiles
+
   balance [--scope cleanup|stt] [--provider PROVIDER]
     Check account money/quotas: DeepSeek (cleanup), ElevenLabs (STT).
     Use --list for capabilities, --all for configured accounts, --format json for JSON.
@@ -300,6 +304,7 @@ resolve_mode() {
     local mode="$1"
     HELP_KIND="delegate"
     case "$mode" in
+        profiles) TARGET="$SCRIPT_DIR/profiles.sh" ;;
         cleanup) TARGET="$SCRIPT_DIR/lecture_cleanup.sh" ;;
         cleanup-list) TARGET="$SCRIPT_DIR/bulk_cleanup.sh" ;;
         youtube-subtitles) TARGET="$SCRIPT_DIR/auto_process_youtube.sh" ;;

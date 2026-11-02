@@ -33,7 +33,7 @@ lecture_cleanup_add_flag_option() {
 lecture_cleanup_parse_option() {
     LECTURE_CLEANUP_OPTION_SHIFT=0
     case "$1" in
-        --translate-to|--qc-report|--glossary|--txt-chunk-chars|--txt-overlap-chars|--llm-provider|--request-delay|--retry-attempts|--short-summary-output|--long-summary-output|--short-summary-file-suffix|--long-summary-file-suffix|--short-summary-lang|--long-summary-lang|--chunks|--use-context-overlap|--log-level)
+        --translate-to|--qc-report|--glossary|--txt-chunk-chars|--txt-overlap-chars|--llm-provider|--llm-profile|--request-delay|--retry-attempts|--short-summary-output|--long-summary-output|--short-summary-file-suffix|--long-summary-file-suffix|--short-summary-lang|--long-summary-lang|--chunks|--use-context-overlap|--log-level)
             lecture_cleanup_add_value_option "$1" "${2:-}" || return $?
             LECTURE_CLEANUP_OPTION_SHIFT=2
             ;;
@@ -64,6 +64,7 @@ Forwarded lecture cleanup options:
   --txt-chunk-chars N           Override TXT chunk size
   --txt-overlap-chars N         Override TXT overlap size
   --llm-provider NAME           Override the cleanup LLM provider
+  --llm-profile NAME            Select a cleanup model/settings profile for this run
   --request-delay SECONDS       Delay between cleanup LLM requests
   --retry-attempts N            Maximum cleanup request attempts
   --short-summary               Enable short-summary generation
