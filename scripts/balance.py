@@ -13,7 +13,7 @@ from scripts.config_loader import load_effective_config
 from scripts.llm_accounting import record, report_balance
 
 
-PROVIDERS = ("deepseek", "openai", "gemini", "groq", "kie", "evolink", "dummy")
+PROVIDERS = ("deepseek", "openai", "gemini", "groq", "kie", "evolink", "openai_compatible", "dummy")
 
 
 def main(argv=None):

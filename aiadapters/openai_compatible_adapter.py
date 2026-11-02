@@ -388,3 +388,37 @@ class OpenAICompatibleChatAdapter(LLMAdapter):
         except Exception as e:
             self._raise_mapped_error(str(e), status=None, debug=debug)
             raise  # pragma: no cover
+
+
+class ConfigurableOpenAICompatibleAdapter(OpenAICompatibleChatAdapter):
+    """User-configured Chat Completions endpoint with independent credentials."""
+
+    def __init__(
+        self, *, model: Optional[str] = None, api_base_url: Optional[str] = None,
+        temperature: Optional[float] = None, top_p: Optional[float] = None,
+        reasoning_effort: Optional[str] = None, reasoning_format: Optional[str] = None,
+        thinking: Optional[str] = None, timeout_seconds: Optional[float] = None,
+    ) -> None:
+        base_url = (api_base_url or "").strip() or os.environ.get(
+            "OPENAI_COMPATIBLE_API_BASE_URL", ""
+        ).strip()
+        if not base_url:
+            raise LLMUnknownError(
+                "Set llm.openai_compatible.api_base_url or OPENAI_COMPATIBLE_API_BASE_URL"
+            )
+        if not model or not model.strip():
+            raise LLMUnknownError("Set llm.openai_compatible.model")
+        super().__init__(
+            provider_name="openai_compatible",
+            api_key_env_var="OPENAI_COMPATIBLE_API_KEY",
+            default_model=model,
+            default_api_base_url=base_url,
+            api_base_url=base_url,
+            model=model,
+            temperature=temperature,
+            top_p=top_p,
+            reasoning_effort=reasoning_effort,
+            reasoning_format=reasoning_format,
+            thinking=thinking,
+            timeout_seconds=timeout_seconds,
+        )

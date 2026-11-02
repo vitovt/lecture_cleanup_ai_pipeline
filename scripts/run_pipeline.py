@@ -336,7 +336,7 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Console verbosity; overrides config logging.level",
     )
-    ap.add_argument("--llm-provider", default=None, help="Override LLM provider: openai|gemini|kie|evolink|groq|deepseek|dummy|...")
+    ap.add_argument("--llm-provider", default=None, help="Override LLM provider: openai|gemini|kie|evolink|groq|deepseek|openai_compatible|dummy|...")
     ap.add_argument("--request-delay", type=float, default=None, help="Delay in seconds between LLM requests (0 = no delay)")
     ap.add_argument("--retry-attempts", type=int, default=None, help="Retry failed LLM requests up to N times (1 = no retry)")
     short_summary_group = ap.add_mutually_exclusive_group()

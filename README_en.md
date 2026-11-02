@@ -91,7 +91,7 @@ It’s recommended to run via provided `.sh` wrappers — they activate `.venv` 
 ### Choosing LLM provider (adapters)
 
 - Configure the provider in `config.yaml` (local overrides) under `llm.provider` (default comes from `config.default.yaml`).
-- Override via CLI using `--llm-provider openai|gemini|kie|evolink|groq|deepseek|dummy`.
+- Override via CLI using `--llm-provider openai|gemini|kie|evolink|groq|deepseek|openai_compatible|dummy`.
 - Place provider API keys in `.env` at project root:
   - OpenAI: `OPENAI_API_KEY=...`
   - Gemini: `GOOGLE_API_KEY=...`
@@ -99,8 +99,22 @@ It’s recommended to run via provided `.sh` wrappers — they activate `.venv` 
   - EvoLink: `EVOLINK_API_KEY=...`
   - Groq: `GROQ_API_KEY=...`
   - DeepSeek: `DEEPSEEK_API_KEY=...`
+  - Generic OpenAI-compatible: `OPENAI_COMPATIBLE_API_KEY=...`
 
 The core pipeline is provider-agnostic and talks to a unified adapter interface. To add a new provider, copy `aiadapters/dummy_adapter.py` as a template, implement `LLMAdapter.generate`, and register it in `aiadapters/factory.py`.
+
+### Generic OpenAI-compatible cleanup provider
+
+Set `llm.provider: openai_compatible` and `llm.openai_compatible.model` in
+`config.yaml`. Put `OPENAI_COMPATIBLE_API_KEY` and
+`OPENAI_COMPATIBLE_API_BASE_URL` in the root `.env`. A nonempty
+`llm.openai_compatible.api_base_url` overrides the environment URL.
+The adapter appends `/chat/completions` to this base; include `/v1` when required
+by your server. It supports non-streaming Chat Completions text responses.
+Leave `temperature` and `top_p` null if unsupported by the selected model.
+See the commented local-server and optional reasoning examples in
+`config.default.yaml`. This provider works for cleanup and summary generation.
+
 
 ### LLM token usage and account balance
 
@@ -392,7 +406,7 @@ General
 * `llm.gemini.retry.pause_seconds`: extra pause for Gemini (added to provider-suggested delay; else used alone)
 
 LLM
-- `llm.provider`: `openai`, `gemini`, `kie`, `evolink`, `groq`, `deepseek`, `dummy`, or custom
+- `llm.provider`: `openai`, `gemini`, `kie`, `evolink`, `groq`, `deepseek`, `openai_compatible`, `dummy`, or custom
 - `llm.openai.model`: model name (e.g., `gpt-5-mini`)
 - `llm.openai.temperature`: float
 - `llm.openai.top_p`: float or null

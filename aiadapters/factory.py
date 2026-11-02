@@ -44,7 +44,7 @@ def _effective_provider_and_config(cfg: Dict, provider_override: Optional[str]) 
 
     Assumes validated config with:
       llm:
-        provider: openai|gemini|kie|evolink|groq|deepseek|...
+        provider: openai|gemini|kie|evolink|groq|deepseek|openai_compatible|...
         openai: { model, temperature, top_p, ... }
         gemini: { model, temperature, top_p, ... }
         kie: { model, temperature, top_p, ... }
@@ -111,6 +111,18 @@ def create_llm_adapter(cfg: Dict, *, provider_override: Optional[str], project_r
             reasoning_effort=p_cfg.get("reasoning_effort"),
             api_base_url=p_cfg.get("api_base_url"),
             timeout_seconds=p_cfg.get("timeout_seconds"),
+        )
+    elif provider == "openai_compatible":
+        from .openai_compatible_adapter import ConfigurableOpenAICompatibleAdapter
+        adapter = ConfigurableOpenAICompatibleAdapter(
+            model=model,
+            temperature=temperature,
+            top_p=top_p,
+            api_base_url=p_cfg.get("api_base_url"),
+            timeout_seconds=p_cfg.get("timeout_seconds"),
+            reasoning_effort=p_cfg.get("reasoning_effort"),
+            reasoning_format=p_cfg.get("reasoning_format"),
+            thinking=p_cfg.get("thinking"),
         )
     elif provider == "dummy":
         from .dummy_adapter import DummyAdapter

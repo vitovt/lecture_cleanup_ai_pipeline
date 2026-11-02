@@ -12,7 +12,7 @@ language: ru            # two-letter ISO-639-1 code; e.g. ru, uk, en, de, pl, es
 # LLM settings (provider-aware). Configure provider and per-provider settings here.
 llm:
   dummy: {model: dummy}
-  provider: gemini      # openai | gemini | kie | evolink | groq | deepseek | dummy | ...
+  provider: gemini      # openai | gemini | kie | evolink | groq | deepseek | openai_compatible | dummy | ...
   # Kie.ai usage example:
   # - set `provider: kie`
   # - put `KIE_API_KEY=...` into `.env`
@@ -71,6 +71,37 @@ llm:
     retry:
       attempts: 3        # 1 = no retry, 2..N = number of attempts per request
       pause_seconds: 60.0 # extra pause added to provider-suggested retry delay; if none, used alone
+  openai_compatible:
+    # Generic OpenAI-compatible Chat Completions endpoint (not Responses API).
+    # In config.yaml set llm.provider: openai_compatible and the exact model ID
+    # exposed by your server. No code changes are needed to switch model/server.
+    # Credentials belong in the root .env, independently of OPENAI_API_KEY:
+    # OPENAI_COMPATIBLE_API_KEY=your-provider-key
+    # OPENAI_COMPATIBLE_API_BASE_URL=https://your-server.example/v1
+    # Base URL precedence: nonempty api_base_url here > environment variable.
+    # Include /v1 if your server requires it; /chat/completions is appended.
+    model: your-model-id
+    api_base_url: null    # use OPENAI_COMPATIBLE_API_BASE_URL from .env
+    temperature: null    # omit unsupported parameters; use server defaults
+    top_p: null
+    timeout_seconds: 300
+    # Example config.yaml override for a locally hosted model:
+    # llm:
+    #   provider: openai_compatible
+    #   openai_compatible:
+    #     model: my-local-model
+    #     api_base_url: http://localhost:8000/v1
+    #     temperature: 0.3
+    # For a local server without authentication, set a nonempty placeholder key
+    # in .env (e.g. OPENAI_COMPATIBLE_API_KEY=local); a Bearer header is sent.
+    # Optional vendor/model-specific fields; enable only if your endpoint supports them:
+    # reasoning_effort: high
+    # reasoning_format: hidden
+    # thinking: enabled   # sends {"thinking": {"type": "enabled"}}
+    # This adapter does not remove sampling parameters in thinking mode.
+    retry:
+      attempts: 3
+      pause_seconds: 60.0
   groq:
     # Groq OpenAI-compatible Chat Completions API.
     # Default/reference docs: https://console.groq.com/docs/openai
