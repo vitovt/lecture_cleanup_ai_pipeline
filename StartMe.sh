@@ -107,7 +107,7 @@ delegates detailed help or execution to the corresponding project script.
 Typical flow:
   1. Choose the source: transcript, YouTube subtitles, YouTube audio, or local media.
   2. Choose a transcription provider when audio must be transcribed: Gemini,
-     Groq, or SpeechCore.
+     Groq, ElevenLabs, or SpeechCore (deprecated).
   3. Run detailed help: $PROGRAM help MODE
   4. Run the mode:         $PROGRAM MODE [arguments]
 
@@ -132,25 +132,6 @@ YouTube subtitles (no speech-to-text provider)
   youtube-manual
     Clean a subtitle TXT file already downloaded for a YouTube video.
     Example: $PROGRAM youtube-manual --input video.uk.txt --lang uk --url "VIDEO_URL"
-
-SpeechCore transcription and cleanup
-  youtube-speechcore
-    Download one YouTube video's audio, transcribe with SpeechCore, then clean it.
-    Language defaults to auto; use --lang CODE to override it.
-    Example: $PROGRAM youtube-speechcore "https://youtu.be/VIDEO_ID"
-
-  youtube-speechcore-list
-    Process selected videos from a playlist through SpeechCore.
-    Language defaults to auto and is forwarded to every selected video.
-    Example: $PROGRAM youtube-speechcore-list --videos 1-3 "PLAYLIST_URL"
-
-  local-speechcore
-    Transcribe and clean one local audio/video file through SpeechCore.
-    Example: $PROGRAM local-speechcore --lang uk ./meeting.mp4
-
-  local-speechcore-list
-    Process explicit local files or every supported file in the current directory.
-    Example: $PROGRAM local-speechcore-list --lang uk --all
 
 Groq transcription, optional pyannote speakers, and cleanup
   youtube-groq
@@ -206,6 +187,25 @@ ElevenLabs code-switching transcription and cleanup
   local-elevenlabs-list
     Preflight and process explicit local files or media in the current directory.
     Example: $PROGRAM local-elevenlabs-list --lang uk --additional-lang de --all
+
+SpeechCore transcription and cleanup (deprecated)
+  youtube-speechcore
+    Download one YouTube video's audio, transcribe with SpeechCore, then clean it.
+    Language defaults to auto; use --lang CODE to override it.
+    Example: $PROGRAM youtube-speechcore "https://youtu.be/VIDEO_ID"
+
+  youtube-speechcore-list
+    Process selected videos from a playlist through SpeechCore.
+    Language defaults to auto and is forwarded to every selected video.
+    Example: $PROGRAM youtube-speechcore-list --videos 1-3 "PLAYLIST_URL"
+
+  local-speechcore
+    Transcribe and clean one local audio/video file through SpeechCore.
+    Example: $PROGRAM local-speechcore --lang uk ./meeting.mp4
+
+  local-speechcore-list
+    Process explicit local files or every supported file in the current directory.
+    Example: $PROGRAM local-speechcore-list --lang uk --all
 
 Multitrack transcription and cleanup
   multitrack
