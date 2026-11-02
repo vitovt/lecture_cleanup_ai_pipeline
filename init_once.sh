@@ -34,3 +34,9 @@ python3 -m venv "$DIRECTORY"
 #shellcheck disable=SC1091
 source "$DIRECTORY/bin/activate"
 pip install pyyaml openai google-generativeai
+
+echo
+echo 'Root .venv is ready. Optional components have their own venvs; run as needed:'
+echo '  (cd stt-api && ./setup_venv.sh)               # Gemini / ElevenLabs STT'
+echo '  (cd groq-api && ./setup_venv.sh)              # Groq Whisper (separate repo, not included)'
+echo '  (cd pyannote-diarization && ./setup_venv.sh)  # local diarization (separate repo, not included)'
