@@ -75,7 +75,9 @@ heading. Only the rendered outer headings change: prompts, generated summary
 bodies, and configuration files are unaffected. Empty/whitespace-only values,
 line breaks, and reserved `LECTURE_CLEANUP_` document markers are rejected before
 generation. A missing value is a CLI error. The same options are available in
-`StartMe.sh cleanup`.
+`StartMe.sh cleanup` and every workflow wrapper that forwards cleanup options
+(including batch, YouTube, local media, and multitrack). Wrappers use the same
+space-separated syntax; place multitrack cleanup options before `--source`.
 
 With configured `lang: default`, generation requires an explicit language
 option. Neither frontmatter nor the global `language` setting chooses it.

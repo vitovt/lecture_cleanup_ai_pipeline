@@ -56,6 +56,8 @@ FORWARDED_CLEANUP_OPTIONS = {
     "--long-summary-file-suffix",
     "--short-summary-lang",
     "--long-summary-lang",
+    "--short-summary-heading",
+    "--long-summary-heading",
     "--long-summary-references",
     "--no-long-summary-references",
     "--chunks",
@@ -173,6 +175,10 @@ class ShellHelpTests(unittest.TestCase):
                         "en",
                         "--long-summary-lang",
                         "de",
+                        "--short-summary-heading",
+                        "#### 🔎 Short Summary",
+                        "--long-summary-heading",
+                        "# 📝 Long summary",
                         "--long-summary-references",
                     ],
                     cwd=PROJECT,
@@ -183,6 +189,19 @@ class ShellHelpTests(unittest.TestCase):
                 )
                 combined = result.stdout + result.stderr
                 self.assertNotIn("unknown option", combined.lower())
+
+    def test_heading_options_require_values_in_every_workflow(self):
+        for script in PUBLIC_SHELL_SCRIPTS:
+            for kind in ("short", "long"):
+                for tail in ([], [""]):
+                    option = f"--{kind}-summary-heading"
+                    with self.subTest(script=script, option=option, tail=tail):
+                        result = subprocess.run(
+                            [str(PROJECT / script), "--log-level", "info", option, *tail],
+                            cwd=PROJECT, capture_output=True, text=True,
+                        )
+                        self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+                        self.assertIn(f"{option} requires a value", result.stdout + result.stderr)
 
     def test_workflows_forward_collected_cleanup_options(self) -> None:
         for relative_path in PUBLIC_SHELL_SCRIPTS:
@@ -348,6 +367,55 @@ class ShellHelpTests(unittest.TestCase):
                 )
                 self.assertEqual(result.returncode, 2)
                 self.assertIn("Invalid --resume value", result.stderr)
+
+
+class SummaryHeadingForwardingTests(unittest.TestCase):
+    def test_shared_parser_preserves_literal_heading_arguments(self):
+        options = ["--short-summary-heading", "#### 🔎 'Short' $HOME `literal`  ",
+                   "--long-summary-heading", "# 📝 Long {summary} "]
+        result = subprocess.run(
+            ["bash", "-c", '''source "$1"
+shift
+while (( $# )); do
+    lecture_cleanup_parse_option "$1" "${2:-}" || exit $?
+    shift "$LECTURE_CLEANUP_OPTION_SHIFT"
+done
+printf '%s\\0' "${LECTURE_CLEANUP_FLAGS[@]}"
+''', "headings", str(PROJECT / "scripts/lecture_cleanup_shell_common.sh"), *options],
+            cwd=PROJECT, capture_output=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.decode().split("\0")[:-1], options)
+
+    def test_startme_batch_forwards_headings_to_each_cleanup(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "scripts").mkdir()
+            (root / "input").mkdir()
+            for name in ("StartMe.sh", "bulk_cleanup.sh", "scripts/lecture_cleanup_shell_common.sh",
+                         "scripts/artifact_paths.sh"):
+                shutil.copy2(PROJECT / name, root / name)
+            for name in ("one.txt", "two with spaces.txt"):
+                (root / "input" / name).write_text("Transcript\n", encoding="utf-8")
+            capture = root / "args.bin"
+            probe = root / "lecture_cleanup.sh"
+            probe.write_text('#!/usr/bin/env bash\nprintf "%s\\0" "$@" >> "$CAPTURE"\n', encoding="utf-8")
+            probe.chmod(0o755)
+            options = ["--short-summary-heading", "#### 🔎 'Short' $HOME `literal`  ",
+                       "--long-summary-heading", "# 📝 Long {summary} "]
+            result = subprocess.run(
+                [str(root / "StartMe.sh"), "cleanup-list", "--lang", "uk",
+                 "--log-level", "info", *options],
+                cwd=root, env={**os.environ, "CAPTURE": str(capture)},
+                input="y\n", text=True, capture_output=True,
+            )
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            calls = capture.read_bytes().decode().split("\0")[:-1]
+            self.assertEqual(calls.count("--input"), 2)
+            for index, token in enumerate(calls):
+                if token == "--short-summary-heading":
+                    self.assertEqual(calls[index:index + 4], options)
+            self.assertEqual(calls.count("--short-summary-heading"), 2)
 
 
 class YoutubeTimecodeContextTests(unittest.TestCase):

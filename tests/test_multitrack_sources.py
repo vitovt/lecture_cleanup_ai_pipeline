@@ -111,6 +111,15 @@ sources:
         self.assertEqual(plan['sources'][0]['lang'], 'fr')
         self.assertNotIn('translate_to', plan['sources'][0])
 
+    def test_summary_headings_are_global_literal_cleanup_options(self):
+        headings = ['--short-summary-heading', "#### 🔎 'Short' $HOME `literal`  ",
+                    '--long-summary-heading', '# 📝 Long {summary} ']
+        plan = resolve([*headings, '--source', 'a', '--file', 'a.wav'])
+        self.assertEqual(plan['cleanup_args'], headings)
+        self.assertNotIn('short_summary_heading', plan['sources'][0])
+        with self.assertRaisesRegex(ValueError, 'global-only'):
+            resolve(['--source', 'a', '--file', 'a.wav', *headings])
+
 
 class TxtTests(unittest.TestCase):
     def test_names_and_merge_offsets_preserve_overlap(self):

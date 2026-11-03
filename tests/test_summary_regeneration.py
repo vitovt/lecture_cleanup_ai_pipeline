@@ -514,7 +514,9 @@ class SummaryRegenerationTests(unittest.TestCase):
         local = self.root / "settings.yaml"
         local.write_text(yaml.safe_dump({"summary": {"short": {"enabled": True, "lang": "en"}, "long": {"enabled": False}}, "llm": {"provider": "invalid-provider"}}), encoding="utf-8")
         result = subprocess.run(
-            [str(PROJECT / "StartMe.sh"), "add-summary", self.source.name, "--config", str(local), "--dry-run"],
+            [str(PROJECT / "StartMe.sh"), "add-summary", self.source.name, "--config", str(local), "--dry-run",
+             "--short-summary-heading", "#### 🔎 'Short' $HOME `literal`  ",
+             "--long-summary-heading", "# 📝 Long {summary} "],
             cwd=self.root, capture_output=True, text=True, check=False,
         )
         self.assertEqual(result.returncode, 0, result.stderr)

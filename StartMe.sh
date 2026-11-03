@@ -111,6 +111,12 @@ Typical flow:
   3. Run detailed help: $PROGRAM help MODE
   4. Run the mode:         $PROGRAM MODE [arguments]
 
+Summary headings (cleanup, cleanup workflows, and add-summary):
+  --short-summary-heading TEXT / --long-summary-heading TEXT
+    Replace each entire heading, including Markdown level, for this run.
+    Quote the value, e.g. --short-summary-heading '## 🔎 Short Summary'.
+    CLI wins over config and summary_regeneration; enable summaries separately.
+
 Transcript cleanup
   cleanup
     Clean one existing TXT/SRT transcript with the configured LLM pipeline.

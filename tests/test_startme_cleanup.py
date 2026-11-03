@@ -105,6 +105,12 @@ class StartMeCleanupTests(unittest.TestCase):
         ]
         self.assertEqual(self.cleanup_args(*expected), expected)
 
+    def test_heading_values_are_forwarded_without_path_or_shell_expansion(self):
+        headings = ["--short-summary-heading", "#### 🔎 'Short' $HOME `literal`  ",
+                    "--long-summary-heading", "# 📝 Long {summary} "]
+        args = self.cleanup_args("--input", "lecture.txt", "--lang", "uk", *headings)
+        self.assertEqual(args[4:8], headings)
+
     def test_env_output_expands_home_and_cannot_override_dispatcher(self) -> None:
         (self.project / ".env").write_text(
             'CLEANUP_MDOUTDIR="$HOME/Desktop/obsidian"\n'
