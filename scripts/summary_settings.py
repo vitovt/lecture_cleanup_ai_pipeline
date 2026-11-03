@@ -80,6 +80,26 @@ def _text_value(value: object, path: str) -> str:
     return value.strip()
 
 
+def _cli_heading(value: object, option: str) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{option} must be a non-empty string")
+    if any(token in value for token in ("\r", "\n", "LECTURE_CLEANUP_")):
+        raise ValueError(
+            f"{option} must fit on one line without reserved document markers"
+        )
+    return value
+
+
+def add_summary_heading_arguments(parser) -> None:
+    """Expose the same literal heading overrides at both summary entry points."""
+    for kind in ("short", "long"):
+        parser.add_argument(
+            f"--{kind}-summary-heading", metavar="TEXT",
+            help=(f"Replace the entire {kind}-summary heading, including Markdown "
+                  "level (highest priority; does not enable the summary)"),
+        )
+
+
 def _output_value(value: object, path: str) -> str:
     output = _text_value(value, path).lower()
     if output not in SUMMARY_OUTPUTS:
@@ -123,6 +143,8 @@ def resolve_summary_settings(
     cli_short_lang: Optional[str] = None,
     cli_long_lang: Optional[str] = None,
     cli_long_references: Optional[bool] = None,
+    cli_short_heading: Optional[str] = None,
+    cli_long_heading: Optional[str] = None,
 ) -> SummarySettings:
     present_removed = [key for key in REMOVED_SUMMARY_KEYS if key in cfg]
     if present_removed:
@@ -265,7 +287,8 @@ def resolve_summary_settings(
     settings = SummarySettings(
         short=ShortSummarySettings(
             enabled=short_enabled,
-            heading=_text_value(
+            heading=_cli_heading(cli_short_heading, "--short-summary-heading")
+            if cli_short_heading is not None else _text_value(
                 short_cfg.get("heading", "## Summary (не авторський)"),
                 "summary.short.heading",
             ),
@@ -275,7 +298,8 @@ def resolve_summary_settings(
         ),
         long=LongSummarySettings(
             enabled=long_enabled,
-            heading=_text_value(
+            heading=_cli_heading(cli_long_heading, "--long-summary-heading")
+            if cli_long_heading is not None else _text_value(
                 long_cfg.get("heading", "## Long summary (не авторський)"),
                 "summary.long.heading",
             ),

@@ -128,7 +128,11 @@ def requested_settings(cfg, args, *, inspection=False):
         overrides["long"]["references"] = deep_merge(
             overrides["long"].get("references", {}), {"enabled": args.references},
         )
-    result = resolve_summary_settings(deep_merge(cfg, {"summary": overrides}), args.lang or "zz")
+    result = resolve_summary_settings(
+        deep_merge(cfg, {"summary": overrides}), args.lang or "zz",
+        cli_short_heading=args.short_summary_heading,
+        cli_long_heading=args.long_summary_heading,
+    )
     for kind in result.enabled_types():
         heading = getattr(result, kind).heading
         if any(token in heading for token in ("\n", "\r", "LECTURE_CLEANUP_")):

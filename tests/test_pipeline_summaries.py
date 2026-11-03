@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import copy
+import io
 import tempfile
 import unittest
 from pathlib import Path
@@ -22,6 +24,7 @@ from scripts.run_pipeline import (
     _write_separate_summaries,
     call_llm_combined_summaries,
     call_llm_summary,
+    build_parser,
     main,
 )
 from scripts.summary_settings import (
@@ -114,6 +117,38 @@ class RetryingPipelineAdapter:
 
 
 class SummarySettingsTests(unittest.TestCase):
+    def test_cli_headings_are_literal_independent_and_do_not_mutate_config(self):
+        cfg = {"summary": {"short": {"heading": "## Config short"},
+                           "long": {"heading": "## Config long"}}}
+        original = copy.deepcopy(cfg)
+        for kind in ("short", "long"):
+            heading = f"#### 🔎 {kind} 'quoted' $HOME `literal` {{text}}  "
+            with self.subTest(kind=kind):
+                settings = _resolve_summary_settings(
+                    cfg, "uk", **{f"cli_{kind}_heading": heading},
+                )
+                self.assertEqual(getattr(settings, kind).heading, heading)
+                other = "long" if kind == "short" else "short"
+                self.assertEqual(getattr(settings, other).heading, f"## Config {other}")
+                self.assertFalse(settings.enabled_types())
+                self.assertEqual(cfg, original)
+
+    def test_invalid_cli_headings_are_rejected_even_when_disabled(self):
+        for kind in ("short", "long"):
+            for value in ("", " \t ", "## One\n## Two", "## One\rTwo",
+                          "## LECTURE_CLEANUP_SHORT_SUMMARY_END", 123):
+                with self.subTest(kind=kind, value=value), self.assertRaisesRegex(
+                    ValueError, f"--{kind}-summary-heading",
+                ):
+                    _resolve_summary_settings({}, "uk", **{f"cli_{kind}_heading": value})
+
+    def test_heading_options_require_values(self):
+        for kind in ("short", "long"):
+            with self.subTest(kind=kind), patch("sys.stderr", new_callable=io.StringIO), self.assertRaises(SystemExit) as raised:
+                build_parser().parse_args(["--input", "lecture.txt", "--lang", "uk",
+                                           f"--{kind}-summary-heading"])
+            self.assertEqual(raised.exception.code, 2)
+
     def test_new_defaults_keep_summary_generation_disabled(self) -> None:
         self.assertEqual(
             _resolve_summary_settings({}, "uk"),
@@ -627,6 +662,10 @@ class SummaryOutputTests(unittest.TestCase):
                 "en",
                 "--long-summary-lang",
                 "fr",
+                "--short-summary-heading",
+                "#### 🔎 Short Summary",
+                "--long-summary-heading",
+                "# 📝 Long summary",
             ]
 
             with patch("scripts.run_pipeline.load_effective_config", return_value=(cfg, True)), patch(
@@ -646,6 +685,24 @@ class SummaryOutputTests(unittest.TestCase):
             self.assertNotIn("Short result", main_markdown)
             self.assertIn("Long result", (outdir / "lecture-longsummary.md").read_text(encoding="utf-8"))
             self.assertIn("Short result", (outdir / "lecture-summary.md").read_text(encoding="utf-8"))
+            self.assertIn("\n# 📝 Long summary\n\nLong result\n", (outdir / "lecture-longsummary.md").read_text(encoding="utf-8"))
+            self.assertIn("\n#### 🔎 Short Summary\n\nShort result\n", (outdir / "lecture-summary.md").read_text(encoding="utf-8"))
+            self.assertNotIn("🔎 Short Summary", str(adapter.calls))
+            self.assertNotIn("📝 Long summary", str(adapter.calls))
+
+    def test_pipeline_rejects_invalid_heading_before_creating_adapter(self):
+        cfg = yaml.safe_load((PROJECT / "config.default.yaml").read_text(encoding="utf-8"))
+        cfg["logging"]["level"] = "quiet"
+        for kind in ("short", "long"):
+            for value in ("", " \t ", "## One\n## Two", "## LECTURE_CLEANUP_META"):
+                with self.subTest(kind=kind, value=value), patch(
+                    "scripts.run_pipeline.load_effective_config", return_value=(cfg, True),
+                ), patch("scripts.run_pipeline.create_llm_adapter") as factory, patch(
+                    "sys.argv", ["run_pipeline.py", "--input", "lecture.txt", "--lang", "uk",
+                                 f"--{kind}-summary-heading", value],
+                ):
+                    self.assertEqual(main(), 2)
+                    factory.assert_not_called()
 
     def test_pipeline_short_only_uses_short_language(self) -> None:
         cfg = yaml.safe_load((PROJECT / "config.default.yaml").read_text(encoding="utf-8"))

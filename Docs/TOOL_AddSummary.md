@@ -9,6 +9,11 @@ output paths are relative to the invocation directory.
 ./StartMe.sh help add-summary
 ./StartMe.sh add-summary ./lecture.md --type both --lang uk --dry-run
 ./StartMe.sh add-summary ./lecture.md --type both --lang uk
+
+# Override each outer heading, including the Markdown level.
+./StartMe.sh add-summary ./lecture.md --type both --lang uk \
+  --short-summary-heading '## 🔎 Short Summary' \
+  --long-summary-heading '## 📝 Long summary'
 ```
 
 The direct entry points are `subtitle-utils/add_summary.sh` (uses the project
@@ -55,6 +60,22 @@ two-letter language codes; the type-specific option wins over `--lang`.
 Supplying a type-specific language for a disabled summary is an error: enable
 that type in configuration, select it with `--type`, or remove the language
 option.
+
+`--short-summary-heading TEXT` and `--long-summary-heading TEXT` replace the
+entire respective outer heading literally, including Markdown `#` characters,
+emoji, and spacing. Quote values containing spaces or shell characters. Each
+option overrides `summary_regeneration.<type>.heading` and
+`summary.<type>.heading` for this invocation only; omitted options retain the
+configured behavior. The heading options do not enable a summary or change
+the existing-summary conflict policy (`skip` remains the default).
+
+Headings apply to both appended and separate output, including replacements.
+A combined request still uses one LLM call, with each result receiving its own
+heading. Only the rendered outer headings change: prompts, generated summary
+bodies, and configuration files are unaffected. Empty/whitespace-only values,
+line breaks, and reserved `LECTURE_CLEANUP_` document markers are rejected before
+generation. A missing value is a CLI error. The same options are available in
+`StartMe.sh cleanup`.
 
 With configured `lang: default`, generation requires an explicit language
 option. Neither frontmatter nor the global `language` setting chooses it.

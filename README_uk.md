@@ -242,6 +242,7 @@ automatic multilingual detection. `--lang` і далі визначає cleanup-
 - `--retry-attempts <N>`: повторювати невдалі LLM-запити до N разів (1 = без повторів)
 - `--short-summary` / `--no-short-summary`: увімкнути або вимкнути короткий підсумок.
 - `--long-summary` / `--no-long-summary`: увімкнути або вимкнути довгий підсумок; якщо ввімкнено обидва типи, використовується один оптимізований LLM-запит.
+- `--short-summary-heading TEXT` / `--long-summary-heading TEXT`: буквально замінити весь заголовок відповідного підсумку разом із Markdown-рівнем, наприклад `'## 🔎 Short Summary'`. CLI має найвищий пріоритет; тип підсумку не вмикається автоматично. Також працює в `StartMe.sh add-summary`, включно з перевизначенням `summary_regeneration`.
 - `--short-summary-output {append,separate}` / `--long-summary-output {append,separate}`: незалежно додати кожен підсумок до основного Markdown або записати його в сусідній файл.
 - `--short-summary-file-suffix <СУФІКС>` / `--long-summary-file-suffix <СУФІКС>`: непорожні суфікси назв окремих файлів.
 - `--short-summary-lang <default|КОД>` / `--long-summary-lang <default|КОД>`: використати мову лекції для відповідного підсумку або перевизначити її дволітерним кодом ISO-639-1; відповідний підсумок має бути ввімкнений.
@@ -251,6 +252,12 @@ automatic multilingual detection. `--lang` і далі визначає cleanup-
 Приклади:
 
 ```bash
+# Власні заголовки, незалежно для кожного підсумку
+./StartMe.sh cleanup --input lecture.txt --lang uk \
+  --short-summary --long-summary \
+  --short-summary-heading '## 🔎 Short Summary' \
+  --long-summary-heading '## 📝 Long summary'
+
 # Базовий виклик (українська, TXT визначиться автоматично)
 ./lecture_cleanup.sh --input input/lec1.txt --lang uk
 

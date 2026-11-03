@@ -117,6 +117,78 @@ class SummaryRegenerationTests(unittest.TestCase):
         self.assertEqual(len({block.identifier for block in self.blocks()}), 2)
         self.assertEqual(next(self.root.glob("*-bak.md")).read_text(encoding="utf-8"), self.original)
 
+    def test_cli_headings_override_regeneration_for_combined_append_and_separate(self):
+        for mode in ("append", "separate"):
+            with self.subTest(mode=mode):
+                self.source.write_text(self.original, encoding="utf-8")
+                self.cfg["summary_regeneration"].update(
+                    short={"heading": "## Regenerated short"},
+                    long={"heading": "## Regenerated long"},
+                )
+                original_cfg = copy.deepcopy(self.cfg)
+                before_calls = len(self.adapter.calls)
+                status, _, errors, _ = self.invoke(
+                    "--type", "both", "--output", mode,
+                    "--short-summary-heading", "#### 🔎 Short Summary",
+                    "--long-summary-heading", "# 📝 Long summary",
+                )
+                self.assertEqual(status, 0, errors)
+                self.assertEqual(len(self.adapter.calls), before_calls + 1)
+                for kind, heading, body in (("short", "#### 🔎 Short Summary", "Short result"),
+                                            ("long", "# 📝 Long summary", "Long result")):
+                    path = self.source if mode == "append" else self.root / (
+                        self.source.stem + ("-summary.md" if kind == "short" else "-longsummary.md")
+                    )
+                    text = path.read_text(encoding="utf-8")
+                    self.assertIn(f"\n{heading}\n\n###", text)
+                    self.assertIn(body, text)
+                    self.assertNotIn(f"## Regenerated {kind}", text)
+                    self.assertNotIn(heading, str(self.adapter.calls[-1]))
+                self.assertEqual(self.cfg, original_cfg)
+                self.assertEqual(next(self.root.glob("*-bak.md")).read_text(encoding="utf-8"), self.original)
+
+    def test_single_heading_override_keeps_other_heading_and_summary_bodies(self):
+        self.cfg["summary_regeneration"].update(
+            short={"heading": "## Regenerated short"},
+            long={"heading": "## Regenerated long"},
+        )
+        status, _, errors, _ = self.invoke()
+        self.assertEqual(status, 0, errors)
+        original_prompts = copy.deepcopy(self.adapter.calls[0][0])
+        original_text = self.source.read_text(encoding="utf-8")
+        status, _, errors, _ = self.invoke(
+            "--on-existing", "replace", "--short-summary-heading", "#### Custom short  ",
+        )
+        self.assertEqual(status, 0, errors)
+        regenerated_prompts = self.adapter.calls[1][0]
+        self.assertEqual(regenerated_prompts[0], original_prompts[0])
+        self.assertEqual(regenerated_prompts[1]["content"].split("<<<\n")[0],
+                         original_prompts[1]["content"].split("<<<\n")[0])
+        result = self.source.read_text(encoding="utf-8")
+        self.assertIn("\n#### Custom short  \n", result)
+        self.assertIn("\n## Regenerated long\n", result)
+        for body in ("### Overview\n\nShort result", "### 0️⃣ Overview\n\nLong result"):
+            self.assertIn(body, original_text)
+            self.assertIn(body, result)
+
+    def test_invalid_cli_headings_fail_before_requests_or_writes(self):
+        for kind in ("short", "long"):
+            for heading in ("", " \t ", "## One\n## Two", "## One\rTwo",
+                            "## LECTURE_CLEANUP_SUMMARY_META"):
+                with self.subTest(kind=kind, heading=heading):
+                    status, _, errors, factory = self.invoke(f"--{kind}-summary-heading", heading)
+                    self.assertEqual(status, 2, errors)
+                    self.assertIn(f"--{kind}-summary-heading", errors)
+                    factory.assert_not_called()
+                    self.assertEqual(self.source.read_text(encoding="utf-8"), self.original)
+                    self.assertEqual(list(self.root.glob("*-bak.md")), [])
+
+    def test_heading_options_require_values(self):
+        for kind in ("short", "long"):
+            with self.subTest(kind=kind), redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as raised:
+                TOOL.parser().parse_args([str(self.source), f"--{kind}-summary-heading"])
+            self.assertEqual(raised.exception.code, 2)
+
     def test_default_skip_generates_only_missing_type(self):
         self.append_existing()
         status, _, errors, _ = self.invoke()

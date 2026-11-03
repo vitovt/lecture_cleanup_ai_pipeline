@@ -26,6 +26,7 @@ from scripts.logging_helper import (
     log_trace_block,
 )
 from scripts.summary_settings import (
+    add_summary_heading_arguments,
     SUMMARY_OUTPUTS,
     SummarySettings,
     resolve_summary_settings as _resolve_summary_settings,
@@ -399,6 +400,7 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Long-summary language: default or a two-letter ISO-639-1 code",
     )
+    add_summary_heading_arguments(ap)
     long_references_group = ap.add_mutually_exclusive_group()
     long_references_group.add_argument(
         "--long-summary-references",
@@ -587,6 +589,8 @@ def main() -> int:
             cli_short_lang=args.short_summary_lang,
             cli_long_lang=args.long_summary_lang,
             cli_long_references=args.long_summary_references,
+            cli_short_heading=args.short_summary_heading,
+            cli_long_heading=args.long_summary_heading,
         )
         _validate_summary_reference_dependencies(
             summary_settings,

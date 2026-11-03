@@ -260,6 +260,7 @@ Diese Parameter werden über die `.sh`-Skripte an `scripts/run_pipeline.py` übe
 * `--retry-attempts <N>` — fehlgeschlagene LLM-Anfragen bis zu N‑mal erneut versuchen (1 = kein Retry)
 * `--short-summary` / `--no-short-summary` — kurze Zusammenfassung aktivieren oder deaktivieren
 * `--long-summary` / `--no-long-summary` — lange Zusammenfassung aktivieren oder deaktivieren; beide Typen gemeinsam verwenden weiterhin nur eine optimierte LLM-Anfrage
+* `--short-summary-heading TEXT` / `--long-summary-heading TEXT` — die jeweilige vollständige Überschrift einschließlich Markdown-Ebene wörtlich ersetzen, z. B. `'## 🔎 Short Summary'`. CLI hat höchste Priorität und aktiviert keine Zusammenfassung. Auch für `StartMe.sh add-summary` verfügbar, mit Vorrang vor `summary_regeneration`.
 * `--short-summary-output {append,separate}` / `--long-summary-output {append,separate}` — jede Zusammenfassung unabhängig anhängen oder in eine benachbarte Datei schreiben
 * `--short-summary-file-suffix <SUFFIX>` / `--long-summary-file-suffix <SUFFIX>` — nicht leere Dateinamenssuffixe für separate Zusammenfassungen
 * `--short-summary-lang <default|CODE>` / `--long-summary-lang <default|CODE>` — für die jeweilige Zusammenfassung die Vorlesungssprache verwenden oder sie mit einem ISO-639-1-Code überschreiben; die entsprechende Zusammenfassung muss aktiviert sein

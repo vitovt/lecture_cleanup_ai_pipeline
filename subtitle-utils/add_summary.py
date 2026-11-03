@@ -21,6 +21,7 @@ from scripts.summary_regeneration import (
     prepare_references, print_diffs, render_updates, report_source, warning,
 )
 from scripts.summary_regeneration_config import regeneration_config, requested_settings
+from scripts.summary_settings import add_summary_heading_arguments
 from scripts.summary_storage import backup_paths, publish, snapshot
 
 
@@ -42,6 +43,7 @@ def parser():
     result.add_argument("--lang", help="explicit summary language for both selected types (ISO-639-1)")
     result.add_argument("--short-summary-lang", help="override short summary language")
     result.add_argument("--long-summary-lang", help="override long summary language")
+    add_summary_heading_arguments(result)
     result.add_argument("--output", choices=("append", "separate"), help="override the output mode for both types")
     result.add_argument("--outdir", help="external summary directory; relative to your working directory")
     result.add_argument("--on-existing", choices=("skip", "replace", "add", "error"), help="retain, replace, duplicate, or reject existing summaries")

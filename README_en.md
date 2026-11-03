@@ -335,6 +335,7 @@ These flags are passed to `scripts/run_pipeline.py` via the `.sh` wrappers.
 * `--retry-attempts <N>` — retry failed LLM requests up to N times (1 = no retry)
 * `--short-summary` / `--no-short-summary` — enable or disable the short summary
 * `--long-summary` / `--no-long-summary` — enable or disable the long summary; enabling both types still uses one optimized LLM request
+* `--short-summary-heading TEXT` / `--long-summary-heading TEXT` — replace the entire respective heading literally, including its Markdown level, e.g. `'## 🔎 Short Summary'`. CLI has highest priority and does not enable a summary. Also supported by `StartMe.sh add-summary`, overriding `summary_regeneration` settings.
 * `--short-summary-output {append,separate}` / `--long-summary-output {append,separate}` — independently append each summary or write it to a sibling file
 * `--short-summary-file-suffix <SUFFIX>` / `--long-summary-file-suffix <SUFFIX>` — non-empty filename suffixes for separate summaries
 * `--short-summary-lang <default|CODE>` / `--long-summary-lang <default|CODE>` — use the lecture language for each summary or override it with an ISO-639-1 code; the corresponding summary must be enabled
