@@ -1,5 +1,6 @@
 """Offline regression checks for chunk boundaries and overlap requests."""
 from pathlib import Path
+import logging
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -45,6 +46,12 @@ class SentenceBoundaryTests(unittest.TestCase):
 
 
 class OverlapRequestTests(unittest.TestCase):
+    def setUp(self):
+        # Pipeline runs configure both the application and SDK loggers.
+        for name in ('lecture_pipeline', 'httpx', 'httpcore', 'openai', 'google_genai'):
+            logger = logging.getLogger(name)
+            self.addCleanup(logger.setLevel, logger.level)
+
     def test_cleaned_raw_and_skipped_predecessor_context(self):
         for mode, selection, expected in (
             ('cleaned', None, 'Cleaned content.'),

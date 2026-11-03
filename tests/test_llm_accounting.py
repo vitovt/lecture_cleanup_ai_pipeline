@@ -1,6 +1,7 @@
 import contextlib
 import io
 import json
+import logging
 import os
 import subprocess
 import unittest
@@ -39,6 +40,9 @@ def fields(line):
 
 class AccountingTests(unittest.TestCase):
     def setUp(self):
+        logger = logging.getLogger('lecture_pipeline')
+        self.addCleanup(logger.setLevel, logger.level)
+        logger.setLevel(logging.INFO)
         with patch.dict(os.environ, {"DEEPSEEK_API_KEY": "secret"}):
             self.adapter = DeepSeekAdapter(model="test-model")
 
